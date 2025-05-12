@@ -10,12 +10,13 @@ type AuthService interface {
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
 	CheckCollegeAccess(identity *Identity, collegeID string) bool
 	HasRole(identity *Identity, role string) bool
-	CheckPermission(ctx context.Context, identity *Identity, subject, action, resource string) (bool, error)
+	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
 	AssignRole(ctx context.Context, identityID string, role string) error
 	RemoveRole(ctx context.Context, identityID string, role string) error
 	AddPermission(ctx context.Context, identityID, action, resource string) error
 	RemovePermission(ctx context.Context, identityID, action, resource string) error
 	GetPublicURL() string
+	ExtractStudentID(ctx context.Context)
 }
 
 type authService struct {
@@ -50,8 +51,8 @@ func (a *authService) HasRole(identity *Identity, role string) bool {
 	return a.Auth.HasRole(identity, role)
 }
 
-func (a *authService) CheckPermission(ctx context.Context, identity *Identity, subject, action, resource string) (bool, error) {
-	return a.AuthZ.CheckPermission(ctx, identity.ID, subject, action, resource)
+func (a *authService) CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error) {
+	return a.AuthZ.CheckPermission(ctx, identity.ID, action, resource)
 }
 
 func (a *authService) AssignRole(ctx context.Context, identityID string, role string) error {

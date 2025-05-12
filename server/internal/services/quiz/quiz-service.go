@@ -57,14 +57,16 @@ type quizService struct {
 	// For more complex business logic, you might inject other repositories or services:
 	courseRepo     repository.CourseRepository
 	enrollmentRepo repository.EnrollmentRepository
-	validate *validator.Validate
+	validate       *validator.Validate
 }
 
 // NewQuizService creates a new QuizService.
-func NewQuizService(quizRepo repository.QuizRepository) QuizService {
+func NewQuizService(quizRepo repository.QuizRepository, courseRepo repository.CourseRepository, enrollmentRepo repository.EnrollmentRepository) QuizService {
 	return &quizService{
-		quizRepo: quizRepo,
-		validate: validator.New(),
+		quizRepo:       quizRepo,
+		courseRepo:     courseRepo,
+		enrollmentRepo: enrollmentRepo,
+		validate:       validator.New(),
 	}
 }
 
@@ -96,7 +98,7 @@ func (s *quizService) DeleteQuiz(ctx context.Context, collegeID int, quizID int)
 	// Business logic: Consider if there are active attempts or if questions should be cascade deleted.
 	// For now, direct deletion. The repository handles deleting the quiz itself.
 	// If questions/options need to be deleted, fetch them first and delete them.
-	
+
 	return s.quizRepo.DeleteQuiz(ctx, collegeID, quizID)
 }
 
@@ -114,7 +116,7 @@ func (s *quizService) CreateQuestion(ctx context.Context, question *models.Quest
 	if err := s.validate.Struct(question); err != nil {
 		return fmt.Errorf("validation failed for question: %w", err)
 	}
-	
+
 	return s.quizRepo.CreateQuestion(ctx, question)
 }
 
@@ -175,8 +177,41 @@ func (s *quizService) CreateAnswerOption(ctx context.Context, option *models.Ans
 	if err := s.validate.Struct(option); err != nil {
 		return fmt.Errorf("validation failed for answer option: %w", err)
 	}
-	// Business logic: e.g., check if option.QuestionID exists.
-	return s.quizRepo.CreateAnswerOption(ctx, option)
+
+	if option.QuestionID == 0 {
+		// Logic for when option.QuestionID is 0, as per the original structure's intent.
+		// check if question id exists (specifically for ID 0)
+		modelsQuestion, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID) // option.QuestionID is 0 here
+		if err != nil {
+			// Corrected error formatting
+			return fmt.Errorf("unable to get question by ID %d: %w", option.QuestionID, err)
+		}
+		if modelsQuestion != nil {
+			// question with ID 0 exists (unusual, but following original logic path)
+			return s.quizRepo.CreateAnswerOption(ctx, option)
+		}
+		// If modelsQuestion is nil (for QuestionID 0) and there was no error,
+		// it means a question with ID 0 was not found. This path previously fell through.
+		// An answer option cannot be created for a non-existent question.
+		return fmt.Errorf("question with ID %d not found, cannot create answer option", option.QuestionID)
+	} else {
+		// This block handles the case where option.QuestionID is not 0.
+		// The original code structure implied this check was needed but not implemented,
+		// leading to a fallthrough and the "missing return" error.
+
+		// Business logic: check if option.QuestionID exists for non-zero IDs.
+		modelsQuestion, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID)
+		if err != nil {
+			return fmt.Errorf("unable to get question by ID %d: %w", option.QuestionID, err)
+		}
+		if modelsQuestion == nil {
+			// Question with the given non-zero ID was not found.
+			return fmt.Errorf("question with ID %d not found, cannot create answer option", option.QuestionID)
+		}
+		// Question exists, proceed to create the answer option.
+		return s.quizRepo.CreateAnswerOption(ctx, option)
+	}
+	// All logical paths above now have explicit return statements, addressing the "missing return" diagnostic.
 }
 
 func (s *quizService) GetAnswerOptionByID(ctx context.Context, optionID int) (*models.AnswerOption, error) {
@@ -220,14 +255,14 @@ func (s *quizService) StartQuizAttempt(ctx context.Context, attempt *models.Quiz
 	}
 
 	// Further business logic: check student enrollment, existing attempts, etc.
-	ok,err :=s.enrollmentRepo.IsStudentEnrolled(ctx,attempt.CollegeID,attempt.Course)
-	if ok{
-		
-		attempt.StartTime = time.Now()
-	attempt.Status = models.QuizAttemptStatusInProgress
-	return s.quizRepo.CreateQuizAttempt(ctx, attempt)
-}
+	ok, err := s.enrollmentRepo.IsStudentEnrolled(ctx, attempt.CollegeID, attempt.StudentID, attempt.CourseID)
+	if ok {
 
+		attempt.StartTime = time.Now()
+		attempt.Status = models.QuizAttemptStatusInProgress
+		return s.quizRepo.CreateQuizAttempt(ctx, attempt)
+	}
+	return err
 }
 func (s *quizService) GetQuizAttemptByID(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error) {
 	return s.quizRepo.GetQuizAttemptByID(ctx, collegeID, attemptID)
