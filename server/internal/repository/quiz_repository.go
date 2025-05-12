@@ -793,3 +793,26 @@ func (r *quizRepository) GetQuestionWithAnswerOptions(ctx context.Context, quest
 
 	return result, nil
 }
+
+func (r *quizRepository) GetQuestionWithCorrectAnswers(ctx context.Context, questionID int) (*models.QuestionWithCorrectAnswers, error) {
+	question, err := r.GetQuestionByID(ctx, questionID)
+	if err != nil {
+		return nil, fmt.Errorf("GetQuestionWithCorrect Answer", err)
+	}
+
+	options, err := r.FindAnswerOptionsByQuestion(ctx, questionID)
+	if err != nil {
+		return nil, fmt.Errorf("FindAnswerOptions By Question %w", err)
+	}
+	var correctOptions []*models.AnswerOption
+	for _, option := range options {
+		if option.IsCorrect {
+			correctOptions = append(correctOptions, option)
+		}
+	}
+	return &models.QuestionWithCorrectAnswers{
+		Question:       question,
+		CorrectOptions: correctOptions,
+	}, nil
+
+}

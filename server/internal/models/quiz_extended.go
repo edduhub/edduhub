@@ -25,3 +25,7 @@ type StudentPerformance struct {
 	HighestScore     int     `json:"highest_score"`
 	LowestScore      int     `json:"lowest_score"`
 }
+type QuestionWithCorrectAnswers struct {
+	Question       *Question       `json:"question"`
+	CorrectOptions []*AnswerOption `json:"correct_options"`
+}
