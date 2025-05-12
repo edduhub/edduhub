@@ -41,7 +41,7 @@ type QuizRepository interface {
 	// QuizAttempt Methods
 	CreateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error
 	GetQuizAttemptByID(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error)
-	UpdateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error // For EndTime, Score, Status
+	UpdateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error // Updated to return the attempt
 	FindQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.QuizAttempt, error)
 	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
 	CountQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int) (int, error)
@@ -52,6 +52,14 @@ type QuizRepository interface {
 	UpdateStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error // For grading
 	FindStudentAnswersByAttempt(ctx context.Context, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error)
 	GetStudentAnswerForQuestion(ctx context.Context, attemptID int, questionID int) (*models.StudentAnswer, error)
+	GetStudentAnswerByID(ctx context.Context, answerID int) (*models.StudentAnswer, error) // Fixed return type
+
+	// Advanced Quiz Methods
+	GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error)
+	FindCompletedQuizAttempts(ctx context.Context, collegeID int, quizID int) ([]*models.QuizAttempt, error)
+	GetQuizStatistics(ctx context.Context, collegeID int, quizID int) (*models.QuizStatistics, error)
+	FindIncompleteQuizAttemptByStudent(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error)
+	GetQuestionWithAnswerOptions(ctx context.Context, questionID int) (*models.QuestionWithOptions, error)
 }
 
 type quizRepository struct {
@@ -446,10 +454,10 @@ func (r *quizRepository) CreateStudentAnswer(ctx context.Context, answer *models
 	query := r.DB.SQ.Insert(studentAnswerTable).
 		Columns("quiz_attempt_id", "question_id", "selected_option_id", "answer_text", "is_correct", "points_awarded", "created_at", "updated_at").
 		Values(answer.QuizAttemptID, answer.QuestionID, answer.SelectedOptionID, answer.AnswerText, answer.IsCorrect, answer.PointsAwarded, answer.CreatedAt, answer.UpdatedAt).
-		Suffix(`ON CONFLICT (quiz_attempt_id, question_id) DO UPDATE SET 
-                selected_option_id = EXCLUDED.selected_option_id, 
-                answer_text = EXCLUDED.answer_text, 
-                is_correct = EXCLUDED.is_correct, 
+		Suffix(`ON CONFLICT (quiz_attempt_id, question_id) DO UPDATE SET
+                selected_option_id = EXCLUDED.selected_option_id,
+                answer_text = EXCLUDED.answer_text,
+                is_correct = EXCLUDED.is_correct,
                 points_awarded = EXCLUDED.points_awarded,
                 updated_at = EXCLUDED.updated_at
               RETURNING id`) // Return ID whether inserted or updated
@@ -581,4 +589,207 @@ func (r *quizRepository) CountQuizAttemptsByStudent(ctx context.Context, college
 func (r *quizRepository) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
 	where := squirrel.Eq{"college_id": collegeID, "quiz_id": quizID}
 	return r.countQuizAttempts(ctx, where)
+}
+
+func (r *quizRepository) GetStudentAnswerByID(ctx context.Context, answerID int) (*models.StudentAnswer, error) {
+	answer := &models.StudentAnswer{}
+	query := r.DB.SQ.Select("id", "quiz_attempt_id", "question_id", "selected_option_id", "answer_text", "is_correct", "points_awarded", "created_at", "updated_at").
+		From(studentAnswerTable).Where(squirrel.Eq{"id": answerID})
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("GetStudentAnswerByID: build query: %w", err)
+	}
+
+	err = pgxscan.Get(ctx, r.DB.Pool, answer, sql, args...)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("GetStudentAnswerByID: not found (id: %d)", answerID)
+		}
+		return nil, fmt.Errorf("GetStudentAnswerByID: exec/scan: %w", err)
+	}
+
+	return answer, nil
+}
+
+// GradeQuizAttempt updates a quiz attempt with the final score based on student answers
+func (r *quizRepository) GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error) {
+	// First, get all student answers for this attempt
+	// studentAnswers, err := r.FindStudentAnswersByAttempt(ctx, attemptID, 1000, 0) // Assuming we won't have more than 1000 answers per attempt
+	// if err != nil {
+	// 	return nil, fmt.Errorf("GradeQuizAttempt: finding student answers: %w", err)
+	// }
+
+	// // Calculate the total score
+	// var totalScore int
+	// for _, answer := range studentAnswers {
+	// 	if answer.PointsAwarded != nil {
+	// 		totalScore += *answer.PointsAwarded
+	// 	}
+	// }
+
+	// // Get the attempt
+	// // First get the quiz attempt to get the collegeID
+	// tx, err := r.DB.Pool.Begin(ctx)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("GradeQuizAttempt: begin transaction: %w", err)
+	// }
+	// defer tx.Rollback(ctx)
+
+	// var collegeID int
+	// err = tx.QueryRow(ctx, "SELECT q.college_id FROM quizzes q JOIN quiz_attempts qa ON q.id = qa.quiz_id WHERE qa.id = $1", attemptID).Scan(&collegeID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("GradeQuizAttempt: get college ID: %w", err)
+	// }
+
+	// attempt, err := r.GetQuizAttemptByID(ctx, collegeID, attemptID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("GradeQuizAttempt: getting quiz attempt: %w", err)
+	// }
+
+	// // Update the attempt with the score and completion status
+	// attempt.Score = totalScore
+	// attempt.CompletedAt = time.Now()
+	// attempt.Status = "completed"
+
+	// // Save the updated attempt
+	// err := r.UpdateQuizAttempt(ctx, attempt)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("GradeQuizAttempt: updating quiz attempt: %w", err)
+	// }
+
+	// return updatedAttempt, nil
+}
+
+// FindCompletedQuizAttempts finds all completed quiz attempts for a specific quiz
+func (r *quizRepository) FindCompletedQuizAttempts(ctx context.Context, collegeID int, quizID int) ([]*models.QuizAttempt, error) {
+	attempts := []*models.QuizAttempt{}
+	query := r.DB.SQ.Select("id", "student_id", "quiz_id", "status", "score", "started_at", "completed_at", "created_at", "updated_at").
+		From(quizAttemptTable).
+		Join(fmt.Sprintf("%s ON %s.id = %s.quiz_id", quizTable, quizTable, quizAttemptTable)).
+		Where(squirrel.Eq{
+			fmt.Sprintf("%s.college_id", quizTable):     collegeID,
+			fmt.Sprintf("%s.quiz_id", quizAttemptTable): quizID,
+			fmt.Sprintf("%s.status", quizAttemptTable):  "completed",
+		}).
+		OrderBy(fmt.Sprintf("%s.completed_at DESC", quizAttemptTable))
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("FindCompletedQuizAttempts: build query: %w", err)
+	}
+
+	err = pgxscan.Select(ctx, r.DB.Pool, &attempts, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("FindCompletedQuizAttempts: exec/scan: %w", err)
+	}
+
+	return attempts, nil
+}
+
+// GetQuizStatistics returns statistics for a quiz including average score, attempts, etc.
+func (r *quizRepository) GetQuizStatistics(ctx context.Context, collegeID int, quizID int) (*models.QuizStatistics, error) {
+	// Get the total number of attempts
+	totalAttempts, err := r.CountQuizAttemptsByQuiz(ctx, collegeID, quizID)
+	if err != nil {
+		return nil, fmt.Errorf("GetQuizStatistics: counting attempts: %w", err)
+	}
+
+	// Query for completed attempts
+	completedAttempts, err := r.FindCompletedQuizAttempts(ctx, collegeID, quizID)
+	if err != nil {
+		return nil, fmt.Errorf("GetQuizStatistics: finding completed attempts: %w", err)
+	}
+
+	// Calculate statistics
+	stats := &models.QuizStatistics{
+		QuizID:            quizID,
+		TotalAttempts:     totalAttempts,
+		CompletedAttempts: len(completedAttempts),
+		HighestScore:      0,
+		LowestScore:       0,
+		AverageScore:      0,
+	}
+
+	if len(completedAttempts) > 0 {
+		var totalScore int
+		stats.HighestScore = *completedAttempts[0].Score
+		stats.LowestScore = *completedAttempts[0].Score
+
+		for _, attempt := range completedAttempts {
+			totalScore += *attempt.Score
+			if *attempt.Score > stats.HighestScore {
+				stats.HighestScore = *attempt.Score
+			}
+			if *attempt.Score < stats.LowestScore {
+				stats.LowestScore = *attempt.Score
+			}
+		}
+
+		stats.AverageScore = totalScore / len(completedAttempts)
+	}
+
+	return stats, nil
+}
+
+// FindIncompleteQuizAttemptByStudent finds an incomplete quiz attempt for a student
+func (r *quizRepository) FindIncompleteQuizAttemptByStudent(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error) {
+	attempt := &models.QuizAttempt{}
+	query := r.DB.SQ.Select(fmt.Sprintf("%s.id", quizAttemptTable),
+		fmt.Sprintf("%s.student_id", quizAttemptTable),
+		fmt.Sprintf("%s.quiz_id", quizAttemptTable),
+		fmt.Sprintf("%s.status", quizAttemptTable),
+		fmt.Sprintf("%s.score", quizAttemptTable),
+		fmt.Sprintf("%s.started_at", quizAttemptTable),
+		fmt.Sprintf("%s.completed_at", quizAttemptTable),
+		fmt.Sprintf("%s.created_at", quizAttemptTable),
+		fmt.Sprintf("%s.updated_at", quizAttemptTable)).
+		From(quizAttemptTable).
+		Join(fmt.Sprintf("%s ON %s.id = %s.quiz_id", quizTable, quizTable, quizAttemptTable)).
+		Where(squirrel.Eq{
+			fmt.Sprintf("%s.college_id", quizTable):        collegeID,
+			fmt.Sprintf("%s.student_id", quizAttemptTable): studentID,
+			fmt.Sprintf("%s.quiz_id", quizAttemptTable):    quizID,
+			fmt.Sprintf("%s.status", quizAttemptTable):     "in_progress",
+		}).
+		OrderBy(fmt.Sprintf("%s.created_at DESC", quizAttemptTable)).
+		Limit(1)
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("FindIncompleteQuizAttemptByStudent: build query: %w", err)
+	}
+
+	err = pgxscan.Get(ctx, r.DB.Pool, attempt, sql, args...)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // No in-progress attempt found
+		}
+		return nil, fmt.Errorf("FindIncompleteQuizAttemptByStudent: exec/scan: %w", err)
+	}
+
+	return attempt, nil
+}
+
+// GetQuestionWithAnswerOptions retrieves a question with all its answer options
+func (r *quizRepository) GetQuestionWithAnswerOptions(ctx context.Context, questionID int) (*models.QuestionWithOptions, error) {
+	// First get the question
+	question, err := r.GetQuestionByID(ctx, questionID)
+	if err != nil {
+		return nil, fmt.Errorf("GetQuestionWithAnswerOptions: get question: %w", err)
+	}
+
+	// Then get the answer options
+	options, err := r.FindAnswerOptionsByQuestion(ctx, questionID)
+	if err != nil {
+		return nil, fmt.Errorf("GetQuestionWithAnswerOptions: get answer options: %w", err)
+	}
+
+	// Combine into one object
+	result := &models.QuestionWithOptions{
+		Question:      question,
+		AnswerOptions: options,
+	}
+
+	return result, nil
 }

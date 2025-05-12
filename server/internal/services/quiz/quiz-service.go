@@ -77,7 +77,13 @@ func (s *quizService) CreateQuiz(ctx context.Context, quiz *models.Quiz) error {
 		return fmt.Errorf("validation failed for quiz: %w", err)
 	}
 	// Business logic: e.g., check if quiz.CourseID exists via courseRepo if injected.
-	return s.quizRepo.CreateQuiz(ctx, quiz)
+	// check course exists or not
+	course, err := s.courseRepo.FindCourseByID(ctx, quiz.CollegeID, quiz.CourseID)
+	if course != nil {
+		return s.quizRepo.CreateQuiz(ctx, quiz)
+	}
+	return err
+
 }
 
 func (s *quizService) GetQuizByID(ctx context.Context, collegeID int, quizID int) (*models.Quiz, error) {
@@ -177,41 +183,12 @@ func (s *quizService) CreateAnswerOption(ctx context.Context, option *models.Ans
 	if err := s.validate.Struct(option); err != nil {
 		return fmt.Errorf("validation failed for answer option: %w", err)
 	}
-
-	if option.QuestionID == 0 {
-		// Logic for when option.QuestionID is 0, as per the original structure's intent.
-		// check if question id exists (specifically for ID 0)
-		modelsQuestion, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID) // option.QuestionID is 0 here
-		if err != nil {
-			// Corrected error formatting
-			return fmt.Errorf("unable to get question by ID %d: %w", option.QuestionID, err)
-		}
-		if modelsQuestion != nil {
-			// question with ID 0 exists (unusual, but following original logic path)
-			return s.quizRepo.CreateAnswerOption(ctx, option)
-		}
-		// If modelsQuestion is nil (for QuestionID 0) and there was no error,
-		// it means a question with ID 0 was not found. This path previously fell through.
-		// An answer option cannot be created for a non-existent question.
-		return fmt.Errorf("question with ID %d not found, cannot create answer option", option.QuestionID)
-	} else {
-		// This block handles the case where option.QuestionID is not 0.
-		// The original code structure implied this check was needed but not implemented,
-		// leading to a fallthrough and the "missing return" error.
-
-		// Business logic: check if option.QuestionID exists for non-zero IDs.
-		modelsQuestion, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID)
-		if err != nil {
-			return fmt.Errorf("unable to get question by ID %d: %w", option.QuestionID, err)
-		}
-		if modelsQuestion == nil {
-			// Question with the given non-zero ID was not found.
-			return fmt.Errorf("question with ID %d not found, cannot create answer option", option.QuestionID)
-		}
-		// Question exists, proceed to create the answer option.
-		return s.quizRepo.CreateAnswerOption(ctx, option)
+	questionID, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID)
+	if err != nil {
+		return fmt.Errorf("invalid questionID", questionID)
 	}
-	// All logical paths above now have explicit return statements, addressing the "missing return" diagnostic.
+	return s.quizRepo.CreateAnswerOption(ctx, option)
+
 }
 
 func (s *quizService) GetAnswerOptionByID(ctx context.Context, optionID int) (*models.AnswerOption, error) {
@@ -229,10 +206,21 @@ func (s *quizService) UpdateAnswerOption(ctx context.Context, option *models.Ans
 }
 
 func (s *quizService) DeleteAnswerOption(ctx context.Context, optionID int) error {
+	// check if answer actually exists or not
+	_, err := s.quizRepo.GetAnswerOptionByID(ctx, optionID)
+	if err != nil {
+		return fmt.Errorf("error getting option ID", err)
+	}
 	return s.quizRepo.DeleteAnswerOption(ctx, optionID)
+
 }
 
 func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) {
+	// check if question id exists or not
+	_, err := s.quizRepo.GetQuestionByID(ctx, questionID)
+	if err != nil {
+		return nil, err
+	}
 	return s.quizRepo.FindAnswerOptionsByQuestion(ctx, questionID)
 }
 
@@ -256,6 +244,7 @@ func (s *quizService) StartQuizAttempt(ctx context.Context, attempt *models.Quiz
 
 	// Further business logic: check student enrollment, existing attempts, etc.
 	ok, err := s.enrollmentRepo.IsStudentEnrolled(ctx, attempt.CollegeID, attempt.StudentID, attempt.CourseID)
+
 	if ok {
 
 		attempt.StartTime = time.Now()
@@ -287,7 +276,8 @@ func (s *quizService) SubmitQuizAttempt(ctx context.Context, collegeID int, atte
 	if err := s.quizRepo.UpdateQuizAttempt(ctx, attempt); err != nil {
 		return nil, fmt.Errorf("failed to update quiz attempt ID %d on submission: %w", attemptID, err)
 	}
-	// Optional: Trigger auto-grading here.
+	// use autograding here
+	//
 	return attempt, nil
 }
 
@@ -345,24 +335,23 @@ func (s *quizService) SubmitStudentAnswer(ctx context.Context, answer *models.St
 func (s *quizService) GradeStudentAnswer(ctx context.Context, answerID int, isCorrect *bool, pointsAwarded *int) (*models.StudentAnswer, error) {
 	// For full functionality, this requires GetStudentAnswerByID in the QuizRepository.
 	// Assuming such a method exists or will be added:
-	/*
-		sa, err := s.quizRepo.GetStudentAnswerByID(ctx, answerID) // Assumed method
-		if err != nil {
-			return nil, fmt.Errorf("could not retrieve student answer %d for grading: %w", answerID, err)
-		}
-		if sa == nil {
-			return nil, fmt.Errorf("student answer with ID %d not found for grading", answerID)
-		}
 
-		sa.IsCorrect = isCorrect
-		sa.PointsAwarded = pointsAwarded
+	sa, err := s.quizRepo.GetStudentAnswerByID(ctx, answerID) // Assumed method
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve student answer %d for grading: %w", answerID, err)
+	}
+	if sa == nil {
+		return nil, fmt.Errorf("student answer with ID %d not found for grading", answerID)
+	}
 
-		if err := s.quizRepo.UpdateStudentAnswer(ctx, sa); err != nil {
-			return nil, fmt.Errorf("failed to update grade for student answer ID %d: %w", answerID, err)
-		}
-		return sa, nil
-	*/
-	return nil, fmt.Errorf("GradeStudentAnswer requires GetStudentAnswerByID in QuizRepository, which is not currently specified in the provided context")
+	sa.IsCorrect = isCorrect
+	sa.PointsAwarded = pointsAwarded
+
+	if err := s.quizRepo.UpdateStudentAnswer(ctx, sa); err != nil {
+		return nil, fmt.Errorf("failed to update grade for student answer ID %d: %w", answerID, err)
+	}
+	return sa, nil
+
 }
 
 func (s *quizService) FindStudentAnswersByAttempt(ctx context.Context, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
