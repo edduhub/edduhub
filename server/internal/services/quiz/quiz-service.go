@@ -96,6 +96,7 @@ func (s *quizService) DeleteQuiz(ctx context.Context, collegeID int, quizID int)
 	// Business logic: Consider if there are active attempts or if questions should be cascade deleted.
 	// For now, direct deletion. The repository handles deleting the quiz itself.
 	// If questions/options need to be deleted, fetch them first and delete them.
+	
 	return s.quizRepo.DeleteQuiz(ctx, collegeID, quizID)
 }
 
