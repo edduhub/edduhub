@@ -185,8 +185,6 @@ func (r *quizRepository) CountQuizzesByCourse(ctx context.Context, collegeID int
 	return count, nil
 }
 
-// --- Question Methods ---
-
 func (r *quizRepository) CreateQuestion(ctx context.Context, question *models.Question) error {
 	now := time.Now()
 	question.CreatedAt = now
