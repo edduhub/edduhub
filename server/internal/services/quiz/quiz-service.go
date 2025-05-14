@@ -125,8 +125,8 @@ func (s *quizService) CreateQuestion(ctx context.Context, question *models.Quest
 	return s.quizRepo.CreateQuestion(ctx, question)
 }
 
-func (s *quizService) GetQuestionByID(ctx context.Context, questionID int) (*models.Question, error) {
-	return s.quizRepo.GetQuestionByID(ctx, questionID)
+func (s *quizService) GetQuestionByID(ctx context.Context, collegeID,questionID int) (*models.Question, error) {
+	return s.quizRepo.GetQuestionByID(ctx,collegeID, questionID)
 }
 
 func (s *quizService) UpdateQuestion(ctx context.Context, question *models.Question) error {
@@ -178,11 +178,11 @@ func (s *quizService) CountQuestionsByQuiz(ctx context.Context, quizID int) (int
 
 // --- AnswerOption Methods ---
 
-func (s *quizService) CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error {
+func (s *quizService) CreateAnswerOption(ctx context.Context, collegeID int,option *models.AnswerOption) error {
 	if err := s.validate.Struct(option); err != nil {
 		return fmt.Errorf("validation failed for answer option: %w", err)
 	}
-	questionID, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID)
+	questionID, err := s.quizRepo.GetQuestionByID(ctx, collegeID,option.QuestionID)
 	if err != nil {
 		return fmt.Errorf("invalid questionID", questionID)
 	}
@@ -214,13 +214,13 @@ func (s *quizService) DeleteAnswerOption(ctx context.Context, optionID int) erro
 
 }
 
-func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) {
+func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, collegeID, questionID int) ([]*models.AnswerOption, error) {
 	// check if question id exists or not
-	_, err := s.quizRepo.GetQuestionByID(ctx, questionID)
+	_, err := s.quizRepo.GetQuestionByID(ctx, collegeID, questionID)
 	if err != nil {
 		return nil, err
 	}
-	return s.quizRepo.FindAnswerOptionsByQuestion(ctx, questionID)
+	return s.quizRepo.FindAnswerOptionsByQuestion(ctx, collegeID, questionID)
 }
 
 // --- QuizAttempt Methods ---
@@ -354,11 +354,11 @@ func (s *quizService) SubmitStudentAnswer(ctx context.Context, answer *models.St
 	return s.quizRepo.CreateStudentAnswer(ctx, answer)
 }
 
-func (s *quizService) GradeStudentAnswer(ctx context.Context, answerID int, isCorrect *bool, pointsAwarded *int) (*models.StudentAnswer, error) {
+func (s *quizService) GradeStudentAnswer(ctx context.Context, collegeID, answerID int, isCorrect *bool, pointsAwarded *int) (*models.StudentAnswer, error) {
 	// For full functionality, this requires GetStudentAnswerByID in the QuizRepository.
 	// Assuming such a method exists or will be added:
 
-	sa, err := s.quizRepo.GetStudentAnswerByID(ctx, answerID) // Assumed method
+	sa, err := s.quizRepo.GetStudentAnswerByID(ctx, collegeID, answerID) // Assumed method
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve student answer %d for grading: %w", answerID, err)
 	}
@@ -380,6 +380,6 @@ func (s *quizService) FindStudentAnswersByAttempt(ctx context.Context, attemptID
 	return s.quizRepo.FindStudentAnswersByAttempt(ctx, attemptID, limit, offset)
 }
 
-func (s *quizService) GetStudentAnswerForQuestion(ctx context.Context, attemptID int, questionID int) (*models.StudentAnswer, error) {
-	return s.quizRepo.GetStudentAnswerForQuestion(ctx, attemptID, questionID)
+func (s *quizService) GetStudentAnswerForQuestion(ctx context.Context, collegeID int, attemptID int, questionID int) (*models.StudentAnswer, error) {
+	return s.quizRepo.GetStudentAnswerForQuestion(ctx, collegeID, attemptID, questionID)
 }
