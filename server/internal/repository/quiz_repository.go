@@ -25,18 +25,18 @@ type QuizRepository interface {
 
 	// Question Methods
 	CreateQuestion(ctx context.Context, question *models.Question) error
-	GetQuestionByID(ctx context.Context, collegeID, questionID int) (*models.Question, error) // Assuming question ID is globally unique or scoped by quiz later
+	GetQuestionByID(ctx context.Context, collegeID int, questionID int) (*models.Question, error)
 	UpdateQuestion(ctx context.Context, collegeID int, question *models.Question) error
-	DeleteQuestion(ctx context.Context, collegeID, questionID int) error
+	DeleteQuestion(ctx context.Context, collegeID int, questionID int) error
 	FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.Question, error)
 	CountQuestionsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
 
 	// AnswerOption Methods
-	CreateAnswerOption(ctx context.Context, collegeID int, option *models.AnswerOption) error
-	GetAnswerOptionByID(ctx context.Context, collegeID, optionID int) (*models.AnswerOption, error)
+	CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error
+	GetAnswerOptionByID(ctx context.Context, collegeID int, optionID int) (*models.AnswerOption, error)
 	UpdateAnswerOption(ctx context.Context, collegeID int, option *models.AnswerOption) error
-	DeleteAnswerOption(ctx context.Context, collegeID, optionID int) error
-	FindAnswerOptionsByQuestion(ctx context.Context, collegeID, questionID int) ([]*models.AnswerOption, error) // No pagination usually needed here
+	DeleteAnswerOption(ctx context.Context, collegeID int, optionID int) error
+	FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) // No pagination usually needed here
 
 	// QuizAttempt Methods
 	CreateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error
@@ -46,17 +46,17 @@ type QuizRepository interface {
 
 	// StudentAnswer Methods
 	CreateStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error
-	UpdateStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error // For grading
-	FindStudentAnswersByAttempt(ctx context.Context, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error)
-	GetStudentAnswer(ctx context.Context, collegeID, attemptID int, questionID int) (*models.StudentAnswer, error)
-	GetStudentAnswerByID(ctx context.Context, collegeID, answerID int) (*models.StudentAnswer, error) // Fixed return type
+	UpdateStudentAnswer(ctx context.Context, collegeID int, answer *models.StudentAnswer) error // For grading, add collegeID
+	FindStudentAnswersByAttempt(ctx context.Context, collegeID int, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error)
+	GetStudentAnswerForQuestion(ctx context.Context, collegeID int, attemptID int, questionID int) (*models.StudentAnswer, error)
+	GetStudentAnswerByID(ctx context.Context, collegeID int, answerID int) (*models.StudentAnswer, error) // Fixed return type
 
 	// Advanced Quiz Methods
 	GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error)
 	FindCompletedQuizAttempts(ctx context.Context, collegeID int, quizID int) ([]*models.QuizAttempt, error)
 	GetQuizStatistics(ctx context.Context, collegeID int, quizID int) (*models.QuizStatistics, error)
 	FindIncompleteQuizAttemptByStudent(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error)
-	GetQuestionWithAnswerOptions(ctx context.Context, collegeID int, questionID int) (*models.QuestionWithOptions, error)
+	GetQuestionWithAnswerOptions(ctx context.Context, questionID int) (*models.QuestionWithOptions, error)
 }
 
 type quizRepository struct {
@@ -201,10 +201,13 @@ func (r *quizRepository) CreateQuestion(ctx context.Context, question *models.Qu
 	return nil
 }
 
-func (r *quizRepository) GetQuestionByID(ctx context.Context, collegeID, questionID int) (*models.Question, error) {
+func (r *quizRepository) GetQuestionByID(ctx context.Context, collegeID int, questionID int) (*models.Question, error) {
 	question := &models.Question{}
-	query := r.DB.SQ.Select("id", "quiz_id", "text", "type", "points", "created_at", "updated_at").
-		From(questionTable).Where(squirrel.Eq{"id": questionID})
+	// Join with quizzes table to filter by college_id
+	query := r.DB.SQ.Select("q.id", "q.quiz_id", "q.text", "q.type", "q.points", "q.created_at", "q.updated_at").
+		From(questionTable + " AS q").
+		Join(quizTable + " AS qz ON q.quiz_id = qz.id").
+		Where(squirrel.Eq{"q.id": questionID, "qz.college_id": collegeID})
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("GetQuestionByID: build query: %w", err)
@@ -212,10 +215,13 @@ func (r *quizRepository) GetQuestionByID(ctx context.Context, collegeID, questio
 	err = pgxscan.Get(ctx, r.DB.Pool, question, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("GetQuestionByID: not found (id: %d)", questionID)
+			// Return a more specific error indicating it wasn't found *for this college*
+			return nil, fmt.Errorf("GetQuestionByID: not found (id: %d for college %d)", questionID, collegeID)
 		}
 		return nil, fmt.Errorf("GetQuestionByID: exec/scan: %w", err)
 	}
+	// Ensure the QuizID is populated if needed by the service layer
+	// question.QuizID = ... // This would require selecting q.quiz_id
 	return question, nil
 }
 
@@ -223,7 +229,10 @@ func (r *quizRepository) UpdateQuestion(ctx context.Context, collegeID int, ques
 	question.UpdatedAt = time.Now()
 	query := r.DB.SQ.Update(questionTable).
 		Set("text", question.Text).Set("type", question.Type).Set("points", question.Points).
-		Set("updated_at", question.UpdatedAt).Where(squirrel.Eq{"id": question.ID})
+		Set("updated_at", question.UpdatedAt).
+		Where(squirrel.Eq{"id": question.ID}).
+		// Ensure the question belongs to the correct college by joining or subquery
+		Where(fmt.Sprintf("quiz_id IN (SELECT id FROM %s WHERE college_id = ?)", quizTable), collegeID)
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return fmt.Errorf("UpdateQuestion: build query: %w", err)
@@ -233,24 +242,28 @@ func (r *quizRepository) UpdateQuestion(ctx context.Context, collegeID int, ques
 		return fmt.Errorf("UpdateQuestion: exec: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("UpdateQuestion: not found or no changes (id: %d)", question.ID)
+		return fmt.Errorf("UpdateQuestion: not found or no changes (id: %d for college %d)", question.ID, collegeID)
 	}
 	return nil
 }
 
+// Corrected DeleteQuestion implementation
 func (r *quizRepository) DeleteQuestion(ctx context.Context, collegeID int, questionID int) error {
-	// Note: Consider cascading deletes for options/student answers
-	query := r.DB.SQ.Delete(questionTable).Where(squirrel.Eq{"id": questionID})
+	// Ensure the question belongs to the given college by checking its quiz
+	query := r.DB.SQ.Delete(questionTable).
+		Where(squirrel.Eq{"id": questionID}).
+		Where(fmt.Sprintf("quiz_id IN (SELECT id FROM %s WHERE college_id = ?)", quizTable), collegeID)
+
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return fmt.Errorf("DeleteQuestion: build query: %w", err)
 	}
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("DeleteQuestion: exec: %w", err)
+		return fmt.Errorf("DeleteQuestion: exec for college %d: %w", collegeID, err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("DeleteQuestion: not found (id: %d)", questionID)
+		return fmt.Errorf("DeleteQuestion: not found (id: %d for college %d)", questionID, collegeID)
 	}
 	return nil
 }
@@ -273,7 +286,10 @@ func (r *quizRepository) FindQuestionsByQuiz(ctx context.Context, collegeID int,
 
 func (r *quizRepository) CountQuestionsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
 	var count int
-	query := r.DB.SQ.Select("COUNT(*)").From(questionTable).Where(squirrel.Eq{"college_id": collegeID, "quiz_id": quizID})
+	// Join with quizzes table to filter by college_id
+	query := r.DB.SQ.Select("COUNT(q.id)").
+		From(questionTable + " AS q").
+		Join(quizTable + " AS qz ON q.quiz_id = qz.id").Where(squirrel.Eq{"q.quiz_id": quizID, "qz.college_id": collegeID})
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return 0, fmt.Errorf("CountQuestionsByQuiz: build query: %w", err)
@@ -285,11 +301,9 @@ func (r *quizRepository) CountQuestionsByQuiz(ctx context.Context, collegeID int
 	return count, nil
 }
 
-// need to implement considering collegeID :
-
 // --- AnswerOption Methods --- (Simplified - add Get/Update/Delete similarly if needed) ---
 
-func (r *quizRepository) CreateAnswerOption(ctx context.Context, collegeID int, option *models.AnswerOption) error {
+func (r *quizRepository) CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error {
 	now := time.Now()
 	option.CreatedAt = now
 	option.UpdatedAt = now
@@ -308,7 +322,7 @@ func (r *quizRepository) CreateAnswerOption(ctx context.Context, collegeID int, 
 	return nil
 }
 
-func (r *quizRepository) FindAnswerOptionsByQuestion(ctx context.Context, collegeID int, questionID int) ([]*models.AnswerOption, error) {
+func (r *quizRepository) FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) {
 	options := []*models.AnswerOption{}
 	query := r.DB.SQ.Select("id", "question_id", "text", "is_correct", "created_at", "updated_at").
 		From(answerOptionTable).Where(squirrel.Eq{"question_id": questionID}).OrderBy("created_at ASC")
@@ -325,8 +339,11 @@ func (r *quizRepository) FindAnswerOptionsByQuestion(ctx context.Context, colleg
 
 func (r *quizRepository) GetAnswerOptionByID(ctx context.Context, collegeID int, optionID int) (*models.AnswerOption, error) {
 	option := &models.AnswerOption{}
-	query := r.DB.SQ.Select("id", "question_id", "text", "is_correct", "created_at", "updated_at").
-		From(answerOptionTable).Where(squirrel.Eq{"id": optionID})
+	// Join through questions and quizzes to filter by college_id
+	query := r.DB.SQ.Select("ao.id", "ao.question_id", "ao.text", "ao.is_correct", "ao.created_at", "ao.updated_at").
+		From(answerOptionTable + " AS ao").
+		Join(questionTable + " AS q ON ao.question_id = q.id").
+		Join(quizTable + " AS qz ON q.quiz_id = qz.id").Where(squirrel.Eq{"ao.id": optionID, "qz.college_id": collegeID})
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("GetAnswerOptionByID: build query: %w", err)
@@ -334,10 +351,13 @@ func (r *quizRepository) GetAnswerOptionByID(ctx context.Context, collegeID int,
 	err = pgxscan.Get(ctx, r.DB.Pool, option, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("GetAnswerOptionByID: not found (id: %d)", optionID)
+			return nil, fmt.Errorf("GetAnswerOptionByID: not found (id: %d for college %d)", optionID, collegeID)
 		}
 		return nil, fmt.Errorf("GetAnswerOptionByID: exec/scan: %w", err)
 	}
+	// Ensure QuestionID is populated
+	// option.QuestionID = ... // Needs to be selected in the query
+
 	return option, nil
 }
 
@@ -345,33 +365,42 @@ func (r *quizRepository) UpdateAnswerOption(ctx context.Context, collegeID int, 
 	option.UpdatedAt = time.Now()
 	query := r.DB.SQ.Update(answerOptionTable).
 		Set("text", option.Text).Set("is_correct", option.IsCorrect).
-		Set("updated_at", option.UpdatedAt).Where(squirrel.Eq{"id": option.ID})
+		Set("updated_at", option.UpdatedAt).
+		Where(squirrel.Eq{"id": option.ID}).
+		// Ensure the option belongs to the correct college by joining or subquery
+		Where(fmt.Sprintf("question_id IN (SELECT q.id FROM %s q JOIN %s qz ON q.quiz_id = qz.id WHERE qz.college_id = ?)", questionTable, quizTable), collegeID)
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return fmt.Errorf("UpdateAnswerOption: build query: %w", err)
 	}
+
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("UpdateAnswerOption: exec: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("UpdateAnswerOption: not found or no changes (id: %d)", option.ID)
+		return fmt.Errorf("UpdateAnswerOption: not found or no changes (id: %d for college %d)", option.ID, collegeID)
 	}
 	return nil
 }
 
+// Corrected DeleteAnswerOption implementation
 func (r *quizRepository) DeleteAnswerOption(ctx context.Context, collegeID int, optionID int) error {
-	query := r.DB.SQ.Delete(answerOptionTable).Where(squirrel.Eq{"id": optionID})
+	// Ensure the option belongs to the given college by checking its question and quiz
+	query := r.DB.SQ.Delete(answerOptionTable).
+		Where(squirrel.Eq{"id": optionID}).
+		Where(fmt.Sprintf("question_id IN (SELECT q.id FROM %s q JOIN %s qz ON q.quiz_id = qz.id WHERE qz.college_id = ?)", questionTable, quizTable), collegeID)
+
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return fmt.Errorf("DeleteAnswerOption: build query: %w", err)
 	}
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
 	if err != nil {
-		return fmt.Errorf("DeleteAnswerOption: exec: %w", err)
+		return fmt.Errorf("DeleteAnswerOption: exec for college %d: %w", collegeID, err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("DeleteAnswerOption: not found (id: %d)", optionID)
+		return fmt.Errorf("no options deleted")
 	}
 	return nil
 }
@@ -469,10 +498,8 @@ func (r *quizRepository) CreateStudentAnswer(ctx context.Context, answer *models
 	}
 	return nil
 }
-func (r *quizRepository) GetStudentAnswer(ctx context.Context, collegeID, attemptID int, questionID int) (*models.StudentAnswer, error) {
 
-}
-func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error {
+func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int,answer *models.StudentAnswer) error {
 	// Primarily used for grading
 	answer.UpdatedAt = time.Now()
 	query := r.DB.SQ.Update(studentAnswerTable).
@@ -497,11 +524,15 @@ func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, answer *models
 	return nil
 }
 
-func (r *quizRepository) FindStudentAnswersByAttempt(ctx context.Context, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
+func (r *quizRepository) FindStudentAnswersByAttempt(ctx context.Context, collegeID int, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
 	answers := []*models.StudentAnswer{}
+	// Join with quiz_attempts table to filter by college_id
 	query := r.DB.SQ.Select("id", "quiz_attempt_id", "question_id", "selected_option_id", "answer_text", "is_correct", "points_awarded", "created_at", "updated_at").
-		From(studentAnswerTable).Where(squirrel.Eq{"quiz_attempt_id": attemptID}).
+		From(studentAnswerTable + " AS sa").
+		Join(quizAttemptTable + " AS qa ON sa.quiz_attempt_id = qa.id").
+		Where(squirrel.Eq{"sa.quiz_attempt_id": attemptID, "qa.college_id": collegeID}).
 		OrderBy("question_id ASC").Limit(limit).Offset(offset) // Order by question
+
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("FindStudentAnswersByAttempt: build query: %w", err)
@@ -513,10 +544,13 @@ func (r *quizRepository) FindStudentAnswersByAttempt(ctx context.Context, attemp
 	return answers, nil
 }
 
-func (r *quizRepository) GetStudentAnswerForQuestion(ctx context.Context, collegeID int, questionID int) (*models.StudentAnswer, error) {
+func (r *quizRepository) GetStudentAnswerForQuestion(ctx context.Context, collegeID int, attemptID int, questionID int) (*models.StudentAnswer, error) {
 	answer := &models.StudentAnswer{}
+	// Join with quiz_attempts table to filter by college_id
 	query := r.DB.SQ.Select("id", "quiz_attempt_id", "question_id", "selected_option_id", "answer_text", "is_correct", "points_awarded", "created_at", "updated_at").
-		From(studentAnswerTable).Where(squirrel.Eq{"college_id": collegeID, "question_id": questionID})
+		From(studentAnswerTable + " AS sa").
+		Join(quizAttemptTable + " AS qa ON sa.quiz_attempt_id = qa.id").
+		Where(squirrel.Eq{"sa.quiz_attempt_id": attemptID, "sa.question_id": questionID, "qa.college_id": collegeID})
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("GetStudentAnswerForQuestion: build query: %w", err)
@@ -524,9 +558,30 @@ func (r *quizRepository) GetStudentAnswerForQuestion(ctx context.Context, colleg
 	err = pgxscan.Get(ctx, r.DB.Pool, answer, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("GetStudentAnswerForQuestion: not found (attempt: %d, question: %d)", collegeID, questionID)
+			return nil, fmt.Errorf("GetStudentAnswerForQuestion: not found (attempt: %d, question: %d for college %d)", attemptID, questionID, collegeID)
 		}
 		return nil, fmt.Errorf("GetStudentAnswerForQuestion: exec/scan: %w", err)
+	}
+	return answer, nil
+}
+
+func (r *quizRepository) GetStudentAnswerByID(ctx context.Context, collegeID int, answerID int) (*models.StudentAnswer, error) {
+	answer := &models.StudentAnswer{}
+	// Join with quiz_attempts table to filter by college_id
+	query := r.DB.SQ.Select("sa.id", "sa.quiz_attempt_id", "sa.question_id", "sa.selected_option_id", "sa.answer_text", "sa.is_correct", "sa.points_awarded", "sa.created_at", "sa.updated_at").
+		From(studentAnswerTable + " AS sa").
+		Join(quizAttemptTable + " AS qa ON sa.quiz_attempt_id = qa.id").
+		Where(squirrel.Eq{"sa.id": answerID, "qa.college_id": collegeID})
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("GetStudentAnswerByID: build query: %w", err)
+	}
+	err = pgxscan.Get(ctx, r.DB.Pool, answer, sql, args...)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("GetStudentAnswerByID: not found (id: %d for college %d)", answerID, collegeID)
+		}
+		return nil, fmt.Errorf("GetStudentAnswerByID: exec/scan: %w", err)
 	}
 	return answer, nil
 }
@@ -566,26 +621,14 @@ func (r *quizRepository) FindQuizAttemptsByQuiz(ctx context.Context, collegeID i
 	return attempts, nil
 }
 
-func (r *quizRepository) countQuizAttempts(ctx context.Context, whereClause squirrel.Sqlizer) (int, error) {
-	var count int
-	query := r.DB.SQ.Select("COUNT(*)").From(quizAttemptTable).Where(whereClause)
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("countQuizAttempts: build query: %w", err)
-	}
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("countQuizAttempts: exec/scan: %w", err)
-	}
-	return count, nil
+// func (r *quizRepository) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
+// 	where := squirrel.Eq{"college_id": collegeID, "quiz_id": quizID}
+// 	return r.countQuizAttempts(ctx, where)
 }
 
-func (r *quizRepository) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
-	where := squirrel.Eq{"college_id": collegeID, "quiz_id": quizID}
-	return r.countQuizAttempts(ctx, where)
-}
 
-func (r *quizRepository) GetStudentAnswerByID(ctx context.Context, collegeID,answerID int) (*models.StudentAnswer, error) {
+
+func (r *quizRepository) GetStudentAnswerByID(ctx context.Context, answerID int) (*models.StudentAnswer, error) {
 	answer := &models.StudentAnswer{}
 	query := r.DB.SQ.Select("id", "quiz_attempt_id", "question_id", "selected_option_id", "answer_text", "is_correct", "points_awarded", "created_at", "updated_at").
 		From(studentAnswerTable).Where(squirrel.Eq{"id": answerID})
@@ -606,50 +649,34 @@ func (r *quizRepository) GetStudentAnswerByID(ctx context.Context, collegeID,ans
 	return answer, nil
 }
 
+// Corrected UpdateStudentAnswer implementation
+func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int, answer *models.StudentAnswer) error {
+	answer.UpdatedAt = time.Now()
+	query := r.DB.SQ.Update(studentAnswerTable+" AS sa").
+		Set("is_correct", answer.IsCorrect).
+		Set("points_awarded", answer.PointsAwarded).
+		Set("updated_at", answer.UpdatedAt).
+		Join(quizAttemptTable + " AS qa ON sa.quiz_attempt_id = qa.id").
+		Where(squirrel.Eq{"sa.id": answer.ID, "qa.college_id": collegeID}) // Filter by answer ID and college ID
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("UpdateStudentAnswer: build query: %w", err)
+	}
+	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateStudentAnswer: exec for college %d: %w", collegeID, err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateStudentAnswer: not found or no changes (id: %d for college %d)", answer.ID, collegeID)
+	}
+	return nil
+}
+
 // GradeQuizAttempt updates a quiz attempt with the final score based on student answers
 func (r *quizRepository) GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error) {
 	// First, get all student answers for this attempt
-	studentAnswer, err := r.GetStudentAnswerForQuestion()
-
-	// // Calculate the total score
-	// var totalScore int
-	// for _, answer := range studentAnswers {
-	// 	if answer.PointsAwarded != nil {
-	// 		totalScore += *answer.PointsAwarded
-	// 	}
-	// }
-
-	// // Get the attempt
-	// // First get the quiz attempt to get the collegeID
-	// tx, err := r.DB.Pool.Begin(ctx)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("GradeQuizAttempt: begin transaction: %w", err)
-	// }
-	// defer tx.Rollback(ctx)
-
-	// var collegeID int
-	// err = tx.QueryRow(ctx, "SELECT q.college_id FROM quizzes q JOIN quiz_attempts qa ON q.id = qa.quiz_id WHERE qa.id = $1", attemptID).Scan(&collegeID)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("GradeQuizAttempt: get college ID: %w", err)
-	// }
-
-	// attempt, err := r.GetQuizAttemptByID(ctx, collegeID, attemptID)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("GradeQuizAttempt: getting quiz attempt: %w", err)
-	// }
-
-	// // Update the attempt with the score and completion status
-	// attempt.Score = totalScore
-	// attempt.CompletedAt = time.Now()
-	// attempt.Status = "completed"
-
-	// // Save the updated attempt
-	// err := r.UpdateQuizAttempt(ctx, attempt)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("GradeQuizAttempt: updating quiz attempt: %w", err)
-	// }
-
-	// return updatedAttempt, nil
+	
 }
 
 // FindCompletedQuizAttempts finds all completed quiz attempts for a specific quiz
@@ -763,15 +790,15 @@ func (r *quizRepository) FindIncompleteQuizAttemptByStudent(ctx context.Context,
 }
 
 // GetQuestionWithAnswerOptions retrieves a question with all its answer options
-func (r *quizRepository) GetQuestionWithAnswerOptions(ctx context.Context, collegeID int, questionID int) (*models.QuestionWithOptions, error) {
+func (r *quizRepository) GetQuestionWithAnswerOptions(ctx context.Context, questionID int) (*models.QuestionWithOptions, error) {
 	// First get the question
-	question, err := r.GetQuestionByID(ctx, collegeID, questionID)
+	question, err := r.GetQuestionByID(ctx, questionID)
 	if err != nil {
 		return nil, fmt.Errorf("GetQuestionWithAnswerOptions: get question: %w", err)
 	}
 
 	// Then get the answer options
-	options, err := r.FindAnswerOptionsByQuestion(ctx, collegeID, questionID)
+	options, err := r.FindAnswerOptionsByQuestion(ctx, questionID)
 	if err != nil {
 		return nil, fmt.Errorf("GetQuestionWithAnswerOptions: get answer options: %w", err)
 	}
@@ -785,13 +812,13 @@ func (r *quizRepository) GetQuestionWithAnswerOptions(ctx context.Context, colle
 	return result, nil
 }
 
-func (r *quizRepository) GetQuestionWithCorrectAnswers(ctx context.Context, collegeID int, questionID int) (*models.QuestionWithCorrectAnswers, error) {
-	question, err := r.GetQuestionByID(ctx, collegeID, questionID)
+func (r *quizRepository) GetQuestionWithCorrectAnswers(ctx context.Context, questionID int) (*models.QuestionWithCorrectAnswers, error) {
+	question, err := r.GetQuestionByID(ctx, questionID)
 	if err != nil {
 		return nil, fmt.Errorf("GetQuestionWithCorrect Answer", err)
 	}
 
-	options, err := r.FindAnswerOptionsByQuestion(ctx, collegeID, questionID)
+	options, err := r.FindAnswerOptionsByQuestion(ctx, questionID)
 	if err != nil {
 		return nil, fmt.Errorf("FindAnswerOptions By Question %w", err)
 	}
@@ -807,11 +834,6 @@ func (r *quizRepository) GetQuestionWithCorrectAnswers(ctx context.Context, coll
 	}, nil
 
 }
-
-// func (r *quizRepository) GetStudentAnswerForQuestion(ctx context.Context) {
-// 	// get student answers for question
-
-// }
 func (r *quizRepository) FindQuizAttemptByStudentAndQuiz(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error) {
 	attempt := &models.QuizAttempt{}
 	query := r.DB.SQ.Select("id", "student_id", "quiz_id", "college_id",
