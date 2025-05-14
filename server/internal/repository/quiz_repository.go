@@ -52,7 +52,7 @@ type QuizRepository interface {
 	GetStudentAnswerByID(ctx context.Context, collegeID int, answerID int) (*models.StudentAnswer, error) // Fixed return type
 
 	// Advanced Quiz Methods
-	GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error)
+	GradeQuizAttempt(ctx context.Context, collegeID, attemptID int) (*models.QuizAttempt, error)
 	FindCompletedQuizAttempts(ctx context.Context, collegeID int, quizID int) ([]*models.QuizAttempt, error)
 	GetQuizStatistics(ctx context.Context, collegeID int, quizID int) (*models.QuizStatistics, error)
 	FindIncompleteQuizAttemptByStudent(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error)
@@ -270,9 +270,11 @@ func (r *quizRepository) DeleteQuestion(ctx context.Context, collegeID int, ques
 
 func (r *quizRepository) FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.Question, error) {
 	questions := []*models.Question{}
-	query := r.DB.SQ.Select("id", "quiz_id", "text", "type", "points", "created_at", "updated_at").
-		From(questionTable).Where(squirrel.Eq{"college_id": collegeID, "quiz_id": quizID}).
-		OrderBy("created_at ASC").Limit(limit).Offset(offset) // Order might be based on question number if added
+	// Join with quizzes table to filter by college_id
+	query := r.DB.SQ.Select("q.id", "q.quiz_id", "q.text", "q.type", "q.points", "q.created_at", "q.updated_at").
+		From(questionTable + " AS q").
+		Join(quizTable + " AS qz ON q.quiz_id = qz.id").Where(squirrel.Eq{"q.quiz_id": quizID, "qz.college_id": collegeID}).
+		OrderBy("created_at ASC").Limit(limit).Offset(offset)
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("FindQuestionsByQuiz: build query: %w", err)
@@ -598,13 +600,22 @@ func (r *quizRepository) FindQuizAttemptsByQuiz(ctx context.Context, collegeID i
 
 // Corrected UpdateStudentAnswer implementation
 func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int, answer *models.StudentAnswer) error {
+	existingAnswer, err := r.GetStudentAnswerByID(ctx, collegeID, answer.ID)
+	if err != nil {
+		return fmt.Errorf("UpdateStudentAnswer Error : student answer update error %w", err)
+
+	}
+	if existingAnswer.QuizAttemptID != answer.QuizAttemptID {
+		return fmt.Errorf("UpdateStudentAnswer: attempt ID mismatch for answer ID %d", answer.ID)
+	}
+
 	answer.UpdatedAt = time.Now()
 	query := r.DB.SQ.Update(studentAnswerTable).
 		Set("is_correct", answer.IsCorrect).
 		Set("points_awarded", answer.PointsAwarded).
 		Set("updated_at", answer.UpdatedAt).
-		Where("id = ? AND quiz_attempt_id IN (SELECT id FROM "+quizAttemptTable+" WHERE college_id = ?)",
-			answer.ID, collegeID)
+		.Where(squirrel.Eq{"id": answer.ID})
+
 
 	sql, args, err := query.ToSql()
 	if err != nil {
@@ -620,9 +631,77 @@ func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int,
 	return nil
 }
 
+func (r *quizRepository) GetStudentAnswersForAttempt(ctx context.Context, collegeID int, attemptID int) ([]*models.QuestionWithStudentAnswer, error) {
+	query := r.DB.SQ.
+		Select(
+			"q.id AS question_id", "q.quiz_id", "q.text", "q.type", "q.points", "q.created_at", "q.updated_at",
+			"sa.id AS student_answer_id", "sa.quiz_attempt_id", "sa.question_id AS sa_question_id", "sa.selected_option_id", "sa.answer_text", "sa.is_correct", "sa.points_awarded", "sa.created_at", "sa.updated_at",
+		).
+		From(questionTable+" AS q").
+		LeftJoin(studentAnswerTable+" AS sa ON q.id = sa.question_id AND sa.quiz_attempt_id = ?", attemptID).
+		Join(quizTable + " AS qu ON q.quiz_id = qu.id").
+		Where(squirrel.Eq{"qu.college_id": collegeID}).
+		OrderBy("q.id")
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("GetStudentAnswersForAttempt: build query: %w", err)
+	}
+
+	rows, err := r.DB.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("GetStudentAnswersForAttempt: exec query: %w", err)
+	}
+	defer rows.Close()
+
+	questionMap := make(map[int]*models.QuestionWithStudentAnswer)
+
+	for rows.Next() {
+		var question models.Question
+		var studentAnswer models.StudentAnswer
+		var studentAnswerID *int // Use a pointer to handle NULL values
+
+		err := rows.Scan(
+			&question.ID, &question.QuizID, &question.Text, &question.Type, &question.Points, &question.CreatedAt, &question.UpdatedAt,
+			&studentAnswerID, &studentAnswer.QuizAttemptID, &studentAnswer.QuestionID, &studentAnswer.SelectedOptionID, &studentAnswer.AnswerText, &studentAnswer.IsCorrect, &studentAnswer.PointsAwarded, &studentAnswer.CreatedAt, &studentAnswer.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("GetStudentAnswersForAttempt: scan row: %w", err)
+		}
+
+		if _, ok := questionMap[question.ID]; !ok {
+			questionMap[question.ID] = &models.QuestionWithStudentAnswer{Question: &question}
+		}
+		if studentAnswerID != nil {
+			studentAnswer.ID = *studentAnswerID // Dereference the pointer if it's not nil
+			questionMap[question.ID].StudentAnswer = append(questionMap[question.ID].StudentAnswer, &studentAnswer)
+		}
+	}
+
+	var result []*models.QuestionWithStudentAnswer
+	for _, q := range questionMap {
+		result = append(result, q)
+	}
+	return result, nil
+}
+
 // GradeQuizAttempt updates a quiz attempt with the final score based on student answers
 func (r *quizRepository) GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error) {
 	// First, get all student answers for this attempt
+	attempt,err :=r.GetQuizAttemptByID(ctx,collegeID,attemptID)
+	if err !=nil{
+		return nil,fmt.Errorf("Failed to get attempt ID ",attemptID)
+	}
+questions,err :=r.FindQuestionsByQuiz(ctx,collegeID,attempt.QuizID,0,0)
+if err !=nil{
+	return nil,fmt.Errorf("GradeQuizAttempt: failed to fetch questions for quiz %d %w",attempt.QuizID,err)
+}
+totalScoreAchieved :=0 
+for _,question := range questions {
+	studentAnswer,saErr := r.GetStudentAnswerForQuestion(ctx,collegeID,attempt,ID,question.ID)
+	pointsForQuestion :=0 
+	
+}
 }
 
 // FindCompletedQuizAttempts finds all completed quiz attempts for a specific quiz

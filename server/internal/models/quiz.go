@@ -88,3 +88,7 @@ type QuestionWithCorrectAnswer struct {
 	Question       Question       `json:"question"`
 	CorrectAnswers []AnswerOption `json:"correct_answers"`
 }
+type QuestionWithStudentAnswer struct {
+	Question       *Question        `json:"question"`
+	StudentAnswer []*StudentAnswer `json:"student_answers"`
+}
