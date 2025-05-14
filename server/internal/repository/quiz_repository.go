@@ -44,8 +44,8 @@ type QuizRepository interface {
 	UpdateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error // Updated to return the attempt
 	FindQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.QuizAttempt, error)
 	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
-	CountQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int) (int, error)
 	CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
+	FindQuizAttemptByStudentAndQuiz(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error)
 
 	// StudentAnswer Methods
 	CreateStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error
@@ -579,11 +579,6 @@ func (r *quizRepository) countQuizAttempts(ctx context.Context, whereClause squi
 	return count, nil
 }
 
-func (r *quizRepository) CountQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int) (int, error) {
-	where := squirrel.Eq{"college_id": collegeID, "student_id": studentID}
-	return r.countQuizAttempts(ctx, where)
-}
-
 func (r *quizRepository) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
 	where := squirrel.Eq{"college_id": collegeID, "quiz_id": quizID}
 	return r.countQuizAttempts(ctx, where)
@@ -813,4 +808,31 @@ func (r *quizRepository) GetQuestionWithCorrectAnswers(ctx context.Context, ques
 		CorrectOptions: correctOptions,
 	}, nil
 
+}
+
+func (r *quizRepository) FindQuizAttemptByStudentAndQuiz(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error) {
+	attempt := &models.QuizAttempt{}
+	query := r.DB.SQ.Select("id", "student_id", "quiz_id", "college_id",
+		"start_time", "end_time", "score", "status").
+		From(quizAttemptTable).
+		Where(squirrel.Eq{
+			"college_id": collegeID,
+			"student_id": studentID,
+			"quiz_id":    quizID,
+		})
+
+	sql, args, err := query.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build query: %w", err)
+	}
+
+	err = pgxscan.Get(ctx, r.DB.Pool, attempt, sql, args...)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // No attempt exists
+		}
+		return nil, fmt.Errorf("query execution: %w", err)
+	}
+
+	return attempt, nil
 }

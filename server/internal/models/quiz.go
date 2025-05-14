@@ -52,24 +52,23 @@ type AnswerOption struct {
 	UpdatedAt  time.Time `db:"updated_at" json:"updated_at"`
 }
 
-// QuizAttempt represents a student's attempt at taking a quiz.
+// QuizAttempt represents a student's single attempt at taking a quiz.
 type QuizAttempt struct {
 	ID        int               `db:"id" json:"id"`
-	StudentID int               `db:"student_id" json:"student_id"`
-	QuizID    int               `db:"quiz_id" json:"quiz_id"`
-	CollegeID int               `db:"college_id" json:"college_id"`
-	CourseID  int               `db:"course_id" json:"course_id"` // Denormalized for easier querying
+	StudentID int               `db:"student_id" json:"student_id" validate:"required"`
+	QuizID    int               `db:"quiz_id" json:"quiz_id" validate:"required"`
+	CollegeID int               `db:"college_id" json:"college_id" validate:"required"`
+	CourseID  int               `db:"course_id" json:"course_id" validate:"required"`
 	StartTime time.Time         `db:"start_time" json:"start_time"`
-	EndTime   time.Time         `db:"end_time" json:"end_time"` // Nullable until finished
-	Score     *int              `db:"score" json:"score"`       // Nullable until graded
-	Status    QuizAttemptStatus `db:"status" json:"status"`     // e.g., InProgress, Completed, Graded
+	EndTime   time.Time         `db:"end_time" json:"end_time"`
+	Score     *int              `db:"score" json:"score"`
+	Status    QuizAttemptStatus `db:"status" json:"status"`
 	CreatedAt time.Time         `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time         `db:"updated_at" json:"updated_at"`
 
 	// Relations - not stored in DB
 	Student *Student `db:"-" json:"student,omitempty"`
 	Quiz    *Quiz    `db:"-" json:"quiz,omitempty"`
-	// StudentAnswers []*StudentAnswer `db:"-" json:"student_answers,omitempty"` // Can be loaded separately
 }
 
 // StudentAnswer represents a student's answer to a specific question in an attempt.

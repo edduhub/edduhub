@@ -42,7 +42,6 @@ type QuizService interface {
 	GradeQuizAttempt(ctx context.Context, collegeID int, attemptID int, score int) (*models.QuizAttempt, error)
 	FindQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.QuizAttempt, error)
 	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
-	CountQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int) (int, error)
 	CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
 
 	// StudentAnswer Methods
@@ -227,10 +226,30 @@ func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, questionI
 // --- QuizAttempt Methods ---
 
 func (s *quizService) StartQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error {
-	if err := s.validate.Struct(attempt); err != nil { // Basic validation for IDs
+	// Validate input
+	if err := s.validate.Struct(attempt); err != nil {
 		return fmt.Errorf("validation failed for quiz attempt: %w", err)
 	}
 
+	// Business logic: Check if the student has already attempted this quiz.
+	existingAttempt, err := s.quizRepo.FindQuizAttemptByStudentAndQuiz(
+		ctx,
+		attempt.CollegeID,
+		attempt.StudentID,
+		attempt.QuizID,
+	)
+	// Handle potential errors from the repository call, but not "not found" as an error here.
+	if err != nil {
+		// If the error is something other than "not found", it's a genuine issue.
+		// The repository's FindQuizAttemptByStudentAndQuiz returns nil, nil if no attempt is found.
+		return fmt.Errorf("failed to check for existing quiz attempts: %w", err)
+	}
+
+	if existingAttempt != nil {
+		return fmt.Errorf("quiz already attempted - only one attempt allowed per student")
+	}
+
+	// Rest of your existing validation logic
 	quiz, err := s.quizRepo.GetQuizByID(ctx, attempt.CollegeID, attempt.QuizID)
 	if err != nil {
 		return fmt.Errorf("failed to get quiz ID %d for attempt: %w", attempt.QuizID, err)
@@ -238,21 +257,14 @@ func (s *quizService) StartQuizAttempt(ctx context.Context, attempt *models.Quiz
 	if quiz == nil {
 		return fmt.Errorf("quiz with ID %d not found", attempt.QuizID)
 	}
-	if !quiz.DueDate.IsZero() && time.Now().After(quiz.DueDate) {
-		return fmt.Errorf("quiz ID %d is past its due date (%v)", attempt.QuizID, quiz.DueDate)
-	}
 
-	// Further business logic: check student enrollment, existing attempts, etc.
-	ok, err := s.enrollmentRepo.IsStudentEnrolled(ctx, attempt.CollegeID, attempt.StudentID, attempt.CourseID)
+	// Set initial attempt state
+	attempt.StartTime = time.Now()
+	attempt.Status = models.QuizAttemptStatusInProgress
 
-	if ok {
-
-		attempt.StartTime = time.Now()
-		attempt.Status = models.QuizAttemptStatusInProgress
-		return s.quizRepo.CreateQuizAttempt(ctx, attempt)
-	}
-	return err
+	return s.quizRepo.CreateQuizAttempt(ctx, attempt)
 }
+
 func (s *quizService) GetQuizAttemptByID(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error) {
 	return s.quizRepo.GetQuizAttemptByID(ctx, collegeID, attemptID)
 }
@@ -270,14 +282,28 @@ func (s *quizService) SubmitQuizAttempt(ctx context.Context, collegeID int, atte
 		return nil, fmt.Errorf("quiz attempt ID %d is not in progress, current status: %s", attemptID, attempt.Status)
 	}
 
+	// Get all answers for this attempt
+	answers, err := s.quizRepo.FindStudentAnswersByAttempt(ctx, attemptID, 1000, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get student answers: %w", err)
+	}
+
+	// Calculate total score
+	var totalScore int
+	for _, answer := range answers {
+		if answer.PointsAwarded != nil {
+			totalScore += *answer.PointsAwarded
+		}
+	}
+
 	attempt.EndTime = time.Now()
 	attempt.Status = models.QuizAttemptStatusCompleted
+	attempt.Score = &totalScore
 
 	if err := s.quizRepo.UpdateQuizAttempt(ctx, attempt); err != nil {
 		return nil, fmt.Errorf("failed to update quiz attempt ID %d on submission: %w", attemptID, err)
 	}
-	// use autograding here
-	//
+
 	return attempt, nil
 }
 
@@ -310,10 +336,6 @@ func (s *quizService) FindQuizAttemptsByStudent(ctx context.Context, collegeID i
 
 func (s *quizService) FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error) {
 	return s.quizRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, limit, offset)
-}
-
-func (s *quizService) CountQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int) (int, error) {
-	return s.quizRepo.CountQuizAttemptsByStudent(ctx, collegeID, studentID)
 }
 
 func (s *quizService) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
