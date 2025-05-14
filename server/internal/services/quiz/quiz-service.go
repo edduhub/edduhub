@@ -2,10 +2,11 @@ package quiz
 
 import (
 	"context"
-	"eduhub/server/internal/models"
-	"eduhub/server/internal/repository"
 	"fmt"
 	"time"
+
+	"eduhub/server/internal/models"
+	"eduhub/server/internal/repository"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -83,7 +84,6 @@ func (s *quizService) CreateQuiz(ctx context.Context, quiz *models.Quiz) error {
 		return s.quizRepo.CreateQuiz(ctx, quiz)
 	}
 	return err
-
 }
 
 func (s *quizService) GetQuizByID(ctx context.Context, collegeID int, quizID int) (*models.Quiz, error) {
@@ -156,7 +156,7 @@ func (s *quizService) DeleteQuestion(ctx context.Context, collegeID int, questio
 	// Now find and delete options. FindAnswerOptionsByQuestion is not college-scoped itself,
 	// but we've already validated the parent questionID belongs to the college.
 	options, err := s.quizRepo.FindAnswerOptionsByQuestion(ctx, question.ID) // Use question.ID for clarity
-	if err == nil && options != nil { // If no error and options exist
+	if err == nil && options != nil {                                        // If no error and options exist
 		for _, opt := range options {
 			// Delete each option, ensuring it's also scoped by college.
 			// The repository's DeleteAnswerOption should handle this.
@@ -206,8 +206,8 @@ func (s *quizService) CreateAnswerOption(ctx context.Context, option *models.Ans
 		return fmt.Errorf("invalid questionID", questionID)
 	}
 	return s.quizRepo.CreateAnswerOption(ctx, option)
-
 }
+
 func (s *quizService) GetAnswerOptionByID(ctx context.Context, collegeID int, optionID int) (*models.AnswerOption, error) {
 	// The repository method now handles the college scope check.
 	return s.quizRepo.GetAnswerOptionByID(ctx, collegeID, optionID)
@@ -234,7 +234,6 @@ func (s *quizService) DeleteAnswerOption(ctx context.Context, collegeID int, opt
 	}
 	// The repository's DeleteAnswerOption now includes the college check.
 	return s.quizRepo.DeleteAnswerOption(ctx, collegeID, optionID)
-
 }
 
 func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) {
@@ -406,7 +405,6 @@ func (s *quizService) GradeStudentAnswer(ctx context.Context, collegeID int, ans
 		return nil, fmt.Errorf("failed to update grade for student answer ID %d: %w", answerID, err)
 	}
 	return sa, nil
-
 }
 
 func (s *quizService) FindStudentAnswersByAttempt(ctx context.Context, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {

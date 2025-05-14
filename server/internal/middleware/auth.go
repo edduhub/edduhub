@@ -1,11 +1,12 @@
 package middleware
 
 import (
+	"net/http"
+	"strconv"
+
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/services/auth"
 	"eduhub/server/internal/services/student"
-	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
@@ -72,7 +73,6 @@ func (m *AuthMiddleware) ValidateSession(next echo.HandlerFunc) echo.HandlerFunc
 // Under a multitenant setup, this helps isolate college-specific resources.
 func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-
 		identity, ok := c.Get("identity").(*auth.Identity)
 		if !ok {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
@@ -98,7 +98,6 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 			// student, err := m.StudentRepo.FindByKratosID(c.Request().Context(), identity.ID)
 
 			student, err := m.StudentService.FindByKratosID(ctx, kratosID)
-
 			if err != nil {
 				return helpers.Error(c, "Unauthorized", 403)
 			}
@@ -113,6 +112,7 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 		return next(c)
 	}
 }
+
 func (m *AuthMiddleware) RequireRole(roles ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

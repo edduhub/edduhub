@@ -3,12 +3,12 @@ package services
 import (
 	"eduhub/server/internal/config"
 	"eduhub/server/internal/repository"
+	"eduhub/server/internal/services/attendance"
+	"eduhub/server/internal/services/auth"
 	"eduhub/server/internal/services/college"
 	"eduhub/server/internal/services/course"
 	"eduhub/server/internal/services/grades"
 	"eduhub/server/internal/services/lecture"
-	"eduhub/server/internal/services/attendance"
-	"eduhub/server/internal/services/auth"
 	"eduhub/server/internal/services/quiz" // Added Quiz service import
 	"eduhub/server/internal/services/student"
 )

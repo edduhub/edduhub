@@ -2,9 +2,10 @@ package lecture
 
 import (
 	"context"
+	"fmt"
+
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
-	"fmt"
 
 	"github.com/go-playground/validator/v10"
 )

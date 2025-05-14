@@ -499,31 +499,6 @@ func (r *quizRepository) CreateStudentAnswer(ctx context.Context, answer *models
 	return nil
 }
 
-// func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int,answer *models.StudentAnswer) error {
-// 	// Primarily used for grading
-// 	answer.UpdatedAt = time.Now()
-// 	query := r.DB.SQ.Update(studentAnswerTable).
-// 		Set("is_correct", answer.IsCorrect).
-// 		Set("points_awarded", answer.PointsAwarded).
-// 		Set("updated_at", answer.UpdatedAt).
-// 		Where(squirrel.Eq{"id": answer.ID}) // Update by primary key
-// 		// Or update by attempt_id and question_id if ID is not known
-// 		// Where(squirrel.Eq{"quiz_attempt_id": answer.QuizAttemptID, "question_id": answer.QuestionID})
-
-// 	sql, args, err := query.ToSql()
-// 	if err != nil {
-// 		return fmt.Errorf("UpdateStudentAnswer: build query: %w", err)
-// 	}
-// 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
-// 	if err != nil {
-// 		return fmt.Errorf("UpdateStudentAnswer: exec: %w", err)
-// 	}
-// 	if cmdTag.RowsAffected() == 0 {
-// 		return fmt.Errorf("UpdateStudentAnswer: not found or no changes (id: %d)", answer.ID)
-// 	}
-// 	return nil
-// }
-
 func (r *quizRepository) FindStudentAnswersByAttempt(ctx context.Context, collegeID int, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
 	answers := []*models.StudentAnswer{}
 	// Join with quiz_attempts table to filter by college_id
@@ -621,31 +596,6 @@ func (r *quizRepository) FindQuizAttemptsByQuiz(ctx context.Context, collegeID i
 	return attempts, nil
 }
 
-// func (r *quizRepository) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
-// 	where := squirrel.Eq{"college_id": collegeID, "quiz_id": quizID}
-// 	return r.countQuizAttempts(ctx, where)
-
-// func (r *quizRepository) GetStudentAnswerByID(ctx context.Context, answerID int) (*models.StudentAnswer, error) {
-// 	answer := &models.StudentAnswer{}
-// 	query := r.DB.SQ.Select("id", "quiz_attempt_id", "question_id", "selected_option_id", "answer_text", "is_correct", "points_awarded", "created_at", "updated_at").
-// 		From(studentAnswerTable).Where(squirrel.Eq{"id": answerID})
-
-// 	sql, args, err := query.ToSql()
-// 	if err != nil {
-// 		return nil, fmt.Errorf("GetStudentAnswerByID: build query: %w", err)
-// 	}
-
-// 	err = pgxscan.Get(ctx, r.DB.Pool, answer, sql, args...)
-// 	if err != nil {
-// 		if errors.Is(err, pgx.ErrNoRows) {
-// 			return nil, fmt.Errorf("GetStudentAnswerByID: not found (id: %d)", answerID)
-// 		}
-// 		return nil, fmt.Errorf("GetStudentAnswerByID: exec/scan: %w", err)
-// 	}
-
-// 	return answer, nil
-// }
-
 // Corrected UpdateStudentAnswer implementation
 func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int, answer *models.StudentAnswer) error {
 	answer.UpdatedAt = time.Now()
@@ -673,7 +623,6 @@ func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int,
 // GradeQuizAttempt updates a quiz attempt with the final score based on student answers
 func (r *quizRepository) GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error) {
 	// First, get all student answers for this attempt
-
 }
 
 // FindCompletedQuizAttempts finds all completed quiz attempts for a specific quiz
@@ -829,8 +778,8 @@ func (r *quizRepository) GetQuestionWithCorrectAnswers(ctx context.Context, coll
 		Question:       question,
 		CorrectOptions: correctOptions,
 	}, nil
-
 }
+
 func (r *quizRepository) FindQuizAttemptByStudentAndQuiz(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error) {
 	attempt := &models.QuizAttempt{}
 	query := r.DB.SQ.Select("id", "student_id", "quiz_id", "college_id",

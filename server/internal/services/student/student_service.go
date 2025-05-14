@@ -6,6 +6,7 @@ import (
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -76,7 +77,7 @@ func (s *studentService) GetStudentDetailedProfile(ctx context.Context, collegeI
 
 	// Fetch profile
 	g.Go(func() error {
-		profile, err := s.profileRepo.GetProfileByUserID(gCtx, student.KratosIdentityID) // Assuming KratosIdentityID is the UserID for profile
+		profile, err := s.profileRepo.GetProfileByUserID(gCtx, student.KratosIdentityID)                                                // Assuming KratosIdentityID is the UserID for profile
 		if err != nil && err.Error() != fmt.Sprintf("GetProfileByUserID: profile for user ID %s not found", student.KratosIdentityID) { // Don't error if profile simply not found
 			return fmt.Errorf("failed to get profile: %w", err)
 		}

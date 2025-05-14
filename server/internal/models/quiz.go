@@ -88,4 +88,3 @@ type QuestionWithCorrectAnswer struct {
 	Question       Question       `json:"question"`
 	CorrectAnswers []AnswerOption `json:"correct_answers"`
 }
-
