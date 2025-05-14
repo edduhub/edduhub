@@ -57,15 +57,17 @@ type quizService struct {
 	quizRepo repository.QuizRepository
 	// For more complex business logic, you might inject other repositories or services:
 	courseRepo     repository.CourseRepository
+	collegeRepo    repository.CollegeRepository
 	enrollmentRepo repository.EnrollmentRepository
 	validate       *validator.Validate
 }
 
 // NewQuizService creates a new QuizService.
-func NewQuizService(quizRepo repository.QuizRepository, courseRepo repository.CourseRepository, enrollmentRepo repository.EnrollmentRepository) QuizService {
+func NewQuizService(quizRepo repository.QuizRepository, courseRepo repository.CourseRepository, collegeRepo repository.CollegeRepository, enrollmentRepo repository.EnrollmentRepository) QuizService {
 	return &quizService{
 		quizRepo:       quizRepo,
 		courseRepo:     courseRepo,
+		collegeRepo:    collegeRepo,
 		enrollmentRepo: enrollmentRepo,
 		validate:       validator.New(),
 	}
@@ -77,13 +79,22 @@ func (s *quizService) CreateQuiz(ctx context.Context, quiz *models.Quiz) error {
 	if err := s.validate.Struct(quiz); err != nil {
 		return fmt.Errorf("validation failed for quiz: %w", err)
 	}
+
+	// check if quiz.CollegeID exists via collegeRepo
+	_, appErr := s.collegeRepo.GetCollegeByID(ctx, quiz.CollegeID)
+	if appErr == nil {
+		course, err := s.courseRepo.FindCourseByID(ctx, quiz.CollegeID, quiz.CourseID)
+		if course != nil {
+			return s.quizRepo.CreateQuiz(ctx, quiz)
+		}
+		if err != nil {
+			return err
+		}
+	}
 	// Business logic: e.g., check if quiz.CourseID exists via courseRepo if injected.
 	// check course exists or not
-	course, err := s.courseRepo.FindCourseByID(ctx, quiz.CollegeID, quiz.CourseID)
-	if course != nil {
-		return s.quizRepo.CreateQuiz(ctx, quiz)
-	}
-	return err
+
+	return nil
 }
 
 func (s *quizService) GetQuizByID(ctx context.Context, collegeID int, quizID int) (*models.Quiz, error) {
