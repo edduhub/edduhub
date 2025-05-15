@@ -22,7 +22,7 @@ type QuizService interface {
 	CountQuizzesByCourse(ctx context.Context, collegeID int, courseID int) (int, error)
 
 	// Question Methods
-	CreateQuestion(ctx context.Context, question *models.Question) error
+	CreateQuestion(ctx context.Context, collegeID int, question *models.Question) error
 	GetQuestionByID(ctx context.Context, collegeID int, questionID int) (*models.Question, error)
 	UpdateQuestion(ctx context.Context, collegeID int, question *models.Question) error
 	DeleteQuestion(ctx context.Context, collegeID int, questionID int) error
@@ -198,18 +198,35 @@ func (s *quizService) CountQuizzesByCourse(ctx context.Context, collegeID int, c
 
 // --- Question Methods ---
 
-func (s *quizService) CreateQuestion(ctx context.Context, question *models.Question) error {
+func (s *quizService) CreateQuestion(ctx context.Context, collegeID int, question *models.Question) error {
 
 	if err := s.validate.Struct(question); err != nil {
 		return fmt.Errorf("validation failed for question: %w", err)
 	}
-	
+	// check if quiz exists
+	quiz, err := s.quizRepo.GetQuizByID(ctx, collegeID, question.QuizID)
+	if quiz == nil {
+		return fmt.Errorf("Cannot Create Question into empty quiz ")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get quiz ")
+	}
+	_, err = s.courseRepo.FindCourseByID(ctx, collegeID, quiz.CourseID)
+	if err != nil {
+		return fmt.Errorf("failed to find course by ID %d", quiz.CourseID)
+	}
+	// check if course exists or not
 
 	return s.quizRepo.CreateQuestion(ctx, question)
 }
 
 func (s *quizService) GetQuestionByID(ctx context.Context, collegeID int, questionID int) (*models.Question, error) {
 	// The repository method now handles the college scope check.
+	_, err := s.collegeRepo.GetCollegeByID(ctx, collegeID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get college with ID %d", collegeID)
+	}
+
 	return s.quizRepo.GetQuestionByID(ctx, collegeID, questionID)
 }
 
