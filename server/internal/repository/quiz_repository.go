@@ -613,9 +613,7 @@ func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int,
 	query := r.DB.SQ.Update(studentAnswerTable).
 		Set("is_correct", answer.IsCorrect).
 		Set("points_awarded", answer.PointsAwarded).
-		Set("updated_at", answer.UpdatedAt).
-		.Where(squirrel.Eq{"id": answer.ID})
-
+		Set("updated_at", answer.UpdatedAt).Where(squirrel.Eq{"college_id": collegeID, "id": answer.ID})
 
 	sql, args, err := query.ToSql()
 	if err != nil {
@@ -729,7 +727,7 @@ func (r *quizRepository) GradeQuizAttempt(ctx context.Context, collegeID int, at
 
 		// Check if the answer was already manually graded (PointsAwarded is not nil).
 		if studentDidAnswer && studentAnswer.PointsAwarded != nil {
-			studentAnswer.PointsAwarded= 1 ; 
+			studentAnswer.PointsAwarded = 1
 
 			pointsAwardedForThisQuestion = *studentAnswer.PointsAwarded
 			if studentAnswer.IsCorrect != nil {
