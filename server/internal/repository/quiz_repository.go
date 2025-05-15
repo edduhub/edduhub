@@ -686,22 +686,125 @@ func (r *quizRepository) GetStudentAnswersForAttempt(ctx context.Context, colleg
 }
 
 // GradeQuizAttempt updates a quiz attempt with the final score based on student answers
-func (r *quizRepository) GradeQuizAttempt(ctx context.Context, attemptID int) (*models.QuizAttempt, error) {
-	// First, get all student answers for this attempt
-	attempt,err :=r.GetQuizAttemptByID(ctx,collegeID,attemptID)
-	if err !=nil{
-		return nil,fmt.Errorf("Failed to get attempt ID ",attemptID)
+func (r *quizRepository) GradeQuizAttempt(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error) {
+	// 1. Fetch the quiz attempt to get QuizID, StudentID, and verify CollegeID.
+	attempt, err := r.GetQuizAttemptByID(ctx, collegeID, attemptID)
+	if err != nil {
+		return nil, fmt.Errorf("GradeQuizAttempt: failed to get quiz attempt %d for college %d: %w", attemptID, collegeID, err)
 	}
-questions,err :=r.FindQuestionsByQuiz(ctx,collegeID,attempt.QuizID,0,0)
-if err !=nil{
-	return nil,fmt.Errorf("GradeQuizAttempt: failed to fetch questions for quiz %d %w",attempt.QuizID,err)
-}
-totalScoreAchieved :=0 
-for _,question := range questions {
-	studentAnswer,saErr := r.GetStudentAnswerForQuestion(ctx,collegeID,attempt,ID,question.ID)
-	pointsForQuestion :=0 
-	
-}
+	if attempt == nil {
+		return nil, fmt.Errorf("GradeQuizAttempt: quiz attempt %d not found for college %d", attemptID, collegeID)
+	}
+
+	// 2. Fetch all questions for the quiz.
+	questions, err := r.FindQuestionsByQuiz(ctx, collegeID, attempt.QuizID, 0, 0) // 0, 0 for no limit/offset
+	if err != nil {
+		return nil, fmt.Errorf("GradeQuizAttempt: failed to find questions for quiz %d: %w", attempt.QuizID, err)
+	}
+
+	// 3. Fetch all student answers for this attempt.
+	allStudentAnswersForAttempt, err := r.FindStudentAnswersByAttempt(ctx, collegeID, attemptID, 0, 0) // 0, 0 for no limit/offset
+	if err != nil {
+		// If error is not pgx.ErrNoRows, then it's a problem. ErrNoRows is acceptable (student might not have answered anything).
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("GradeQuizAttempt: failed to find student answers for attempt %d: %w", attemptID, err)
+		}
+		// If ErrNoRows, allStudentAnswersForAttempt will be empty or nil, which is fine.
+	}
+
+	// Create a map for quick lookup of student answers by question ID.
+	studentAnswersMap := make(map[int]*models.StudentAnswer)
+	for _, sa := range allStudentAnswersForAttempt {
+		studentAnswersMap[sa.QuestionID] = sa
+	}
+
+	var totalScoreAchieved int = 0
+
+	// 4. Grade each question.
+	for _, question := range questions {
+		studentAnswer, studentDidAnswer := studentAnswersMap[question.ID]
+
+		var pointsAwardedForThisQuestion int = 0
+		var isThisAnswerCorrect bool = false // Default to false
+
+		// Check if the answer was already manually graded (PointsAwarded is not nil).
+		if studentDidAnswer && studentAnswer.PointsAwarded != nil {
+			studentAnswer.PointsAwarded= 1 ; 
+
+			pointsAwardedForThisQuestion = *studentAnswer.PointsAwarded
+			if studentAnswer.IsCorrect != nil {
+				isThisAnswerCorrect = *studentAnswer.IsCorrect
+			} else {
+				// If points are awarded but IsCorrect is nil, assume correct if points > 0.
+				isThisAnswerCorrect = pointsAwardedForThisQuestion > 0
+			}
+		} else if studentDidAnswer { // Auto-grade if student answered and not manually graded.
+			// Fetch correct answer options for this question to perform auto-grading.
+			// GetQuestionWithCorrectAnswers returns the question model and a slice of *only* its correct options.
+			questionWithCorrectOptions, errCorrectOpt := r.GetQuestionWithCorrectAnswers(ctx, collegeID, question.ID)
+			if errCorrectOpt != nil {
+				// Log warning, but continue grading other questions. Points for this question will be 0.
+				fmt.Printf("Warning: GradeQuizAttempt: failed to get correct answer options for question %d: %v\n", question.ID, errCorrectOpt)
+			} else {
+				// Perform auto-grading based on question type
+				if question.Type == models.MultipleChoice || question.Type == models.TrueFalse {
+					// gradeMultipleChoice handles *[]int SelectedOptionID and compares against correct options.
+					// For True/False, it works if correct options are set up like MC (e.g., one correct option).
+					isThisAnswerCorrect, pointsAwardedForThisQuestion = gradeMultipleChoice(studentAnswer, question, questionWithCorrectOptions.CorrectOptions)
+				} else if question.Type == "ShortAnswer" { // Assuming "ShortAnswer" is a valid type from models.QuizType
+					// Auto-grading short answers is complex. Default to 0 points unless manually graded.
+					// You might implement keyword matching or other heuristics here if desired.
+					isThisAnswerCorrect = false
+					pointsAwardedForThisQuestion = 0
+				}
+				// Add other question types (e.g., FillInTheBlanks) as needed.
+			}
+		}
+		// If !studentDidAnswer (studentDidAnswer is false), pointsAwardedForThisQuestion remains 0, isThisAnswerCorrect remains false.
+
+		totalScoreAchieved += pointsAwardedForThisQuestion
+
+		// 5. Upsert the StudentAnswer record with grading results.
+		// CreateStudentAnswer handles insert or update based on (quiz_attempt_id, question_id) conflict.
+		saToUpsert := models.StudentAnswer{
+			QuizAttemptID: attempt.ID,
+			QuestionID:    question.ID,
+			IsCorrect:     &isThisAnswerCorrect,
+			PointsAwarded: &pointsAwardedForThisQuestion,
+		}
+
+		if studentDidAnswer {
+			// If student answered, preserve their original answer details (ID, selected options, text).
+			// CreateStudentAnswer's ON CONFLICT clause will use these if updating.
+			saToUpsert.ID = studentAnswer.ID // Important if upsert logic might rely on ID for existing records.
+			saToUpsert.SelectedOptionID = studentAnswer.SelectedOptionID
+			saToUpsert.AnswerText = studentAnswer.AnswerText
+		} else {
+			// If student did not answer, SelectedOptionID and AnswerText will be nil/empty by default.
+			// CreateStudentAnswer will insert a new record.
+		}
+
+		if err := r.CreateStudentAnswer(ctx, &saToUpsert); err != nil {
+			return nil, fmt.Errorf("GradeQuizAttempt: failed to upsert student answer for question %d, attempt %d: %w", question.ID, attempt.ID, err)
+		}
+	}
+
+	// 6. Update the QuizAttempt record.
+	attempt.Score = &totalScoreAchieved
+	attempt.Status = models.QuizAttemptStatusGraded // Mark as Graded
+
+	// EndTime should ideally be set when the student submits or when the attempt auto-concludes.
+	// Only set it here if it's not already set (e.g., for an attempt that was never formally submitted but is being graded).
+	if attempt.EndTime.IsZero() {
+		attempt.EndTime = time.Now()
+	}
+
+	if err := r.UpdateQuizAttempt(ctx, attempt); err != nil {
+		return nil, fmt.Errorf("GradeQuizAttempt: failed to update quiz attempt %d: %w", attempt.ID, err)
+	}
+
+	// 7. Return the updated QuizAttempt.
+	return attempt, nil
 }
 
 // FindCompletedQuizAttempts finds all completed quiz attempts for a specific quiz
@@ -812,6 +915,54 @@ func (r *quizRepository) FindIncompleteQuizAttemptByStudent(ctx context.Context,
 	}
 
 	return attempt, nil
+}
+
+// gradeMultipleChoice compares student's selected options against correct options.
+// Handles both single and multiple correct options based on the correct options defined for the question.
+// `studentAnswer` is the student's submitted answer for this question.
+// `question` is the question model, primarily for getting `question.Points`.
+// `correctAnswerOptions` is a slice containing *only* the AnswerOption models that are marked as correct for this question.
+// Returns (isCorrect bool, pointsAwarded int).
+func gradeMultipleChoice(studentAnswer *models.StudentAnswer, question *models.Question, correctAnswerOptions []*models.AnswerOption) (bool, int) {
+	// Build a map of actual correct option IDs for the question for quick lookup.
+	actualCorrectOptionIDsMap := make(map[int]bool)
+	for _, opt := range correctAnswerOptions {
+		// No need to check opt.IsCorrect here, as correctAnswerOptions should only contain correct ones.
+		actualCorrectOptionIDsMap[opt.ID] = true
+	}
+
+	// If no correct options are defined for the question in the database, it's ungradable automatically.
+	if len(actualCorrectOptionIDsMap) == 0 {
+		return false, 0
+	}
+
+	// Get student's selected option IDs.
+	// studentAnswer.SelectedOptionID is *[]int (a pointer to a slice of ints).
+	var studentSelectedIDs []int
+	if studentAnswer != nil && studentAnswer.SelectedOptionID != nil && *studentAnswer.SelectedOptionID != nil {
+		studentSelectedIDs = *studentAnswer.SelectedOptionID // Dereference the pointer to get the slice.
+	}
+
+	// Build a map of student's selected option IDs for efficient comparison.
+	studentSelectedIDsMap := make(map[int]bool)
+	for _, id := range studentSelectedIDs {
+		studentSelectedIDsMap[id] = true
+	}
+
+	// To be considered correct, the student must select *all* the correct options and *no* incorrect options.
+	// This means the set of student's selected IDs must be identical to the set of actual correct option IDs.
+	if len(studentSelectedIDsMap) != len(actualCorrectOptionIDsMap) {
+		return false, 0 // Incorrect number of options selected.
+	}
+
+	for id := range studentSelectedIDsMap { // Check if every option selected by student is in the set of correct options.
+		if !actualCorrectOptionIDsMap[id] { // If a student-selected ID is not in the map of correct IDs.
+			return false, 0 // Student selected an option that is not actually correct.
+		}
+	}
+
+	// If all checks pass, the answer is correct.
+	return true, question.Points
 }
 
 // GetQuestionWithAnswerOptions retrieves a question with all its answer options

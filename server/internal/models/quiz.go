@@ -2,6 +2,14 @@ package models
 
 import "time"
 
+type QuizType string
+
+const (
+	MultipleChoice QuizType = "MultipleChoice"
+	TrueFalse      QuizType = "TrueFalse"
+	// short answer
+)
+
 // Quiz represents a quiz associated with a course.
 type Quiz struct {
 	ID               int       `db:"id" json:"id"`
@@ -24,7 +32,7 @@ type Question struct {
 	ID        int       `db:"id" json:"id"`
 	QuizID    int       `db:"quiz_id" json:"quiz_id"`
 	Text      string    `db:"text" json:"text"`
-	Type      string    `db:"type" json:"type"` // e.g., MultipleChoice, TrueFalse, ShortAnswer
+	Type      QuizType  `db:"type" json:"type"` // e.g., MultipleChoice, TrueFalse, ShortAnswer
 	Points    int       `db:"points" json:"points"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
@@ -76,7 +84,7 @@ type StudentAnswer struct {
 	ID               int       `db:"id" json:"id"`
 	QuizAttemptID    int       `db:"quiz_attempt_id" json:"quiz_attempt_id"`
 	QuestionID       int       `db:"question_id" json:"question_id"`
-	SelectedOptionID *int      `db:"selected_option_id" json:"selected_option_id"` // Nullable, for MC/TF
+	SelectedOptionID *[]int      `db:"selected_option_id" json:"selected_option_id"` // Nullable, for MC/TF
 	AnswerText       string    `db:"answer_text" json:"answer_text"`               // Nullable, for ShortAnswer
 	IsCorrect        *bool     `db:"is_correct" json:"is_correct"`                 // Nullable until graded
 	PointsAwarded    *int      `db:"points_awarded" json:"points_awarded"`         // Nullable until graded
@@ -89,6 +97,6 @@ type QuestionWithCorrectAnswer struct {
 	CorrectAnswers []AnswerOption `json:"correct_answers"`
 }
 type QuestionWithStudentAnswer struct {
-	Question       *Question        `json:"question"`
+	Question      *Question        `json:"question"`
 	StudentAnswer []*StudentAnswer `json:"student_answers"`
 }
