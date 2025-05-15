@@ -102,37 +102,108 @@ func (s *quizService) GetQuizByID(ctx context.Context, collegeID int, quizID int
 }
 
 func (s *quizService) UpdateQuiz(ctx context.Context, quiz *models.Quiz) error {
+	if quiz == nil {
+		return fmt.Errorf("quiz is nil")
+	}
 	if err := s.validate.Struct(quiz); err != nil {
 		return fmt.Errorf("validation failed for quiz: %w", err)
 	}
 	if quiz.ID == 0 {
 		return fmt.Errorf("quiz ID is required for update")
 	}
-	return s.quizRepo.UpdateQuiz(ctx, quiz)
+
+	if err := s.quizRepo.UpdateQuiz(ctx, quiz); err != nil {
+		return fmt.Errorf("failed to update quiz: %w", err)
+	}
+	return nil
 }
 
 func (s *quizService) DeleteQuiz(ctx context.Context, collegeID int, quizID int) error {
-	// Business logic: Consider if there are active attempts or if questions should be cascade deleted.
-	// For now, direct deletion. The repository handles deleting the quiz itself.
-	// If questions/options need to be deleted, fetch them first and delete them.
+	// Check for active quiz attempts
+	attempts, err := s.quizRepo.FindCompletedQuizAttempts(ctx, collegeID, quizID)
+	if err != nil {
+		return fmt.Errorf("DeleteQuiz: failed to check quiz attempts: %w", err)
+	}
+	if len(attempts) > 0 {
+		return fmt.Errorf("DeleteQuiz: cannot delete quiz with active attempts")
+	}
 
-	return s.quizRepo.DeleteQuiz(ctx, collegeID, quizID)
+	// Fetch and delete questions associated with the quiz
+	questions, err := s.quizRepo.FindQuestionsByQuiz(ctx, collegeID, quizID, 0, 0)
+	if err != nil {
+		return fmt.Errorf("DeleteQuiz: failed to fetch questions: %w", err)
+	}
+
+	for _, question := range questions {
+		if err := s.quizRepo.DeleteQuestion(ctx, collegeID, question.ID); err != nil {
+			return fmt.Errorf("DeleteQuiz: failed to delete question (id: %d): %w", question.ID, err)
+		}
+	}
+
+	// Delete the quiz
+	if err := s.quizRepo.DeleteQuiz(ctx, collegeID, quizID); err != nil {
+		return fmt.Errorf("DeleteQuiz: failed to delete quiz: %w", err)
+	}
+
+	return nil
 }
 
 func (s *quizService) FindQuizzesByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Quiz, error) {
+	// Validate input parameters
+	if collegeID <= 0 {
+		return nil, fmt.Errorf("invalid college ID")
+	}
+	if courseID <= 0 {
+		return nil, fmt.Errorf("invalid course ID")
+	}
+
+	// Verify college exists
+	_, err := s.collegeRepo.GetCollegeByID(ctx, collegeID)
+	if err != nil {
+		return nil, fmt.Errorf("college verification failed: %w", err)
+	}
+
+	// Verify course exists and belongs to college
+	course, err := s.courseRepo.FindCourseByID(ctx, collegeID, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("course verification failed: %w", err)
+	}
+	if course == nil {
+		return nil, fmt.Errorf("course not found in college")
+	}
+
+	// Apply reasonable limits
+	if limit > 100 {
+		limit = 100 // Prevent excessive queries
+	}
+
 	return s.quizRepo.FindQuizzesByCourse(ctx, collegeID, courseID, limit, offset)
 }
 
 func (s *quizService) CountQuizzesByCourse(ctx context.Context, collegeID int, courseID int) (int, error) {
+	_, err := s.collegeRepo.GetCollegeByID(ctx, collegeID)
+	if err != nil {
+		return 0, fmt.Errorf("college verfication failed %w", err)
+	}
+	course, err := s.courseRepo.FindCourseByID(ctx, collegeID, courseID)
+	if course == nil {
+		return 0, fmt.Errorf("no course found with course ID %d", courseID)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("course verification failed %w", err)
+	}
+
 	return s.quizRepo.CountQuizzesByCourse(ctx, collegeID, courseID)
 }
 
 // --- Question Methods ---
 
 func (s *quizService) CreateQuestion(ctx context.Context, question *models.Question) error {
+
 	if err := s.validate.Struct(question); err != nil {
 		return fmt.Errorf("validation failed for question: %w", err)
 	}
+	
 
 	return s.quizRepo.CreateQuestion(ctx, question)
 }

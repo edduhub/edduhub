@@ -7,7 +7,7 @@ type QuizType string
 const (
 	MultipleChoice QuizType = "MultipleChoice"
 	TrueFalse      QuizType = "TrueFalse"
-	// short answer
+	ShortAnswer    QuizType = "ShortAnswer"
 )
 
 // Quiz represents a quiz associated with a course.
@@ -94,9 +94,25 @@ type StudentAnswer struct {
 
 type QuestionWithCorrectAnswer struct {
 	Question       Question       `json:"question"`
-	CorrectAnswers []AnswerOption `json:"correct_answers"`
+	CorrectOptions []*AnswerOption `json:"correct_options"` // Changed from CorrectAnswers to CorrectOptions
 }
 type QuestionWithStudentAnswer struct {
 	Question      *Question        `json:"question"`
 	StudentAnswer []*StudentAnswer `json:"student_answers"`
+}
+
+// QuestionWithOptions represents a question along with its answer options.
+type QuestionWithOptions struct {
+	Question      *Question       `json:"question"`
+	AnswerOptions []*AnswerOption `json:"answer_options"`
+}
+
+// QuizStatistics represents various statistics for a quiz.
+type QuizStatistics struct {
+	QuizID            int `json:"quiz_id"`
+	TotalAttempts     int `json:"total_attempts"`
+	CompletedAttempts int `json:"completed_attempts"`
+	AverageScore      int `json:"average_score"` // Could be float64 for more precision
+	HighestScore      int `json:"highest_score"`
+	LowestScore       int `json:"lowest_score"`
 }

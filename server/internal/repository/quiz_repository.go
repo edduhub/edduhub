@@ -303,7 +303,7 @@ func (r *quizRepository) CountQuestionsByQuiz(ctx context.Context, collegeID int
 	return count, nil
 }
 
-// --- AnswerOption Methods --- (Simplified - add Get/Update/Delete similarly if needed) ---
+
 
 func (r *quizRepository) CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error {
 	now := time.Now()
