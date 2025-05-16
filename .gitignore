@@ -1,6 +1,7 @@
 
 
 .env
+.envrc
 
 .env.*.local 
 .vscode / 

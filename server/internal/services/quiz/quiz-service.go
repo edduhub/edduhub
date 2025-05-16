@@ -222,11 +222,6 @@ func (s *quizService) CreateQuestion(ctx context.Context, collegeID int, questio
 
 func (s *quizService) GetQuestionByID(ctx context.Context, collegeID int, questionID int) (*models.Question, error) {
 	// The repository method now handles the college scope check.
-	_, err := s.collegeRepo.GetCollegeByID(ctx, collegeID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get college with ID %d", collegeID)
-	}
-
 	return s.quizRepo.GetQuestionByID(ctx, collegeID, questionID)
 }
 
@@ -234,16 +229,27 @@ func (s *quizService) UpdateQuestion(ctx context.Context, collegeID int, questio
 	if err := s.validate.Struct(question); err != nil {
 		return fmt.Errorf("validation failed for question: %w", err)
 	}
+	_, collegeErr := s.collegeRepo.GetCollegeByID(ctx, collegeID)
+	if collegeErr != nil {
+		return fmt.Errorf("failed to get college with ID %d", collegeID)
+	}
 	if question.ID == 0 {
 		return fmt.Errorf("question ID is required for update")
 	}
+	// check if quiz exists or not
+	quiz, err := s.quizRepo.GetQuizByID(ctx, collegeID, question.QuizID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch quiz with ID %d", question.QuizID)
+	}
+	if quiz == nil {
+		return fmt.Errorf("cannot update question to non existent quiz")
+	}
+
 	// The repository method now handles the college scope check using collegeID and question.ID.
 	return s.quizRepo.UpdateQuestion(ctx, collegeID, question)
 }
 
 func (s *quizService) DeleteQuestion(ctx context.Context, collegeID int, questionID int) error {
-	// Business logic: Delete associated answer options first.
-
 	// Before deleting options or the question, verify the question exists and belongs to the college.
 	// The repository's GetQuestionByID now includes the college check.
 	question, err := s.quizRepo.GetQuestionByID(ctx, collegeID, questionID)
@@ -273,8 +279,8 @@ func (s *quizService) DeleteQuestion(ctx context.Context, collegeID int, questio
 	return s.quizRepo.DeleteQuestion(ctx, collegeID, questionID)
 }
 
-func (s *quizService) FindQuestionsByQuiz(ctx context.Context, quizID int, limit, offset uint64, withOptions bool) ([]*models.Question, error) {
-	questions, err := s.quizRepo.FindQuestionsByQuiz(ctx, quizID, limit, offset)
+func (s *quizService) FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64, withOptions bool) ([]*models.Question, error) {
+	questions, err := s.quizRepo.FindQuestionsByQuiz(ctx, collegeID, quizID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -290,17 +296,17 @@ func (s *quizService) FindQuestionsByQuiz(ctx context.Context, quizID int, limit
 	return questions, nil
 }
 
-func (s *quizService) CountQuestionsByQuiz(ctx context.Context, quizID int) (int, error) {
-	return s.quizRepo.CountQuestionsByQuiz(ctx, quizID)
+func (s *quizService) CountQuestionsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
+	return s.quizRepo.CountQuestionsByQuiz(ctx, collegeID, quizID)
 }
 
 // --- AnswerOption Methods ---
 
-func (s *quizService) CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error {
+func (s *quizService) CreateAnswerOption(ctx context.Context, collegeID int, option *models.AnswerOption) error {
 	if err := s.validate.Struct(option); err != nil {
 		return fmt.Errorf("validation failed for answer option: %w", err)
 	}
-	questionID, err := s.quizRepo.GetQuestionByID(ctx, option.QuestionID)
+	questionID, err := s.quizRepo.GetQuestionByID(ctx, collegeID, option.QuestionID)
 	if err != nil {
 		return fmt.Errorf("invalid questionID", questionID)
 	}
@@ -335,18 +341,10 @@ func (s *quizService) DeleteAnswerOption(ctx context.Context, collegeID int, opt
 	return s.quizRepo.DeleteAnswerOption(ctx, collegeID, optionID)
 }
 
-func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) {
+func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, collegeID int, questionID int) ([]*models.AnswerOption, error) {
 	// This method is typically called after fetching a Question.
-	// To ensure multi-tenancy, the caller of this service method should have already
-	// validated that the questionID belongs to a quiz within their college scope
-	// (e.g., by calling GetQuestionByID with collegeID first).
-	// We could add a collegeID parameter here and pass it down, but FindAnswerOptionsByQuestion
-	// in the repo doesn't currently use it and relies on questionID.
-	// For strictness, we *should* add collegeID here and modify the repo method to join.
-	// Let's add a basic check here assuming GetQuestionByID is the entry point.
-	// HACK: Need collegeID here for a proper check if this method is called directly.
-	// Assuming for now that questionID is valid in the caller's context.
-	_, err := s.quizRepo.GetQuestionByID(ctx, 0, questionID) // Placeholder 0 for collegeID - needs actual collegeID
+
+	_, err := s.quizRepo.GetQuestionByID(ctx, collegeID, questionID) // Placeholder 0 for collegeID - needs actual collegeID
 	if err != nil {
 		return nil, err
 	}
@@ -355,28 +353,16 @@ func (s *quizService) FindAnswerOptionsByQuestion(ctx context.Context, questionI
 
 // --- QuizAttempt Methods ---
 
-func (s *quizService) StartQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error {
+func (s *quizService) StartQuizAttempt(ctx context.Context, collegeID int, attempt *models.QuizAttempt) error {
 	// Validate input
 	if err := s.validate.Struct(attempt); err != nil {
 		return fmt.Errorf("validation failed for quiz attempt: %w", err)
 	}
 
 	// Business logic: Check if the student has already attempted this quiz.
-	existingAttempt, err := s.quizRepo.FindQuizAttemptByStudentAndQuiz(
-		ctx,
-		attempt.CollegeID,
-		attempt.StudentID,
-		attempt.QuizID,
-	)
-	// Handle potential errors from the repository call, but not "not found" as an error here.
+	_, err := s.quizRepo.GetQuizAttemptByID(ctx, collegeID, attempt.ID)
 	if err != nil {
-		// If the error is something other than "not found", it's a genuine issue.
-		// The repository's FindQuizAttemptByStudentAndQuiz returns nil, nil if no attempt is found.
-		return fmt.Errorf("failed to check for existing quiz attempts: %w", err)
-	}
-
-	if existingAttempt != nil {
-		return fmt.Errorf("quiz already attempted - only one attempt allowed per student")
+		return fmt.Errorf("quiz alredy attempted with ID %d", err)
 	}
 
 	// Rest of your existing validation logic
