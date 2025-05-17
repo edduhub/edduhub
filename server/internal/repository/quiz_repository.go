@@ -396,14 +396,14 @@ func (r *quizRepository) DeleteAnswerOption(ctx context.Context, collegeID int, 
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return fmt.Errorf("DeleteAnswerOption: build query: %w", err)
+		return fmt.Errorf("DeleteAnswerOption: build query for college :%d:  %w", collegeID, err)
 	}
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("DeleteAnswerOption: exec for college %d: %w", collegeID, err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("no options deleted")
+		return fmt.Errorf("DeleteAnswerOption: not found or no changes (id: %d for college %d)", optionID, collegeID)
 	}
 	return nil
 }
@@ -609,12 +609,14 @@ func (r *quizRepository) UpdateStudentAnswer(ctx context.Context, collegeID int,
 	if existingAnswer.QuizAttemptID != answer.QuizAttemptID {
 		return fmt.Errorf("UpdateStudentAnswer: attempt ID mismatch for answer ID %d", answer.ID)
 	}
-
 	answer.UpdatedAt = time.Now()
+
 	query := r.DB.SQ.Update(studentAnswerTable).
 		Set("is_correct", answer.IsCorrect).
 		Set("points_awarded", answer.PointsAwarded).
-		Set("updated_at", answer.UpdatedAt).Where(squirrel.Eq{"college_id": collegeID, "id": answer.ID})
+		Set("updated_at", answer.UpdatedAt).
+		Where(squirrel.Eq{"id": answer.ID}).
+		Where("quiz_attempt_id IN (SELECT id FROM " + quizAttemptTable + " WHERE college_id = ?)", collegeID)
 
 	sql, args, err := query.ToSql()
 	if err != nil {
