@@ -54,6 +54,9 @@ type QuizRepository interface {
 	// Advanced Quiz Methods
 	GradeQuizAttempt(ctx context.Context, collegeID, attemptID int) (*models.QuizAttempt, error)
 	FindCompletedQuizAttempts(ctx context.Context, collegeID int, quizID int) ([]*models.QuizAttempt, error)
+	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
+	// CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
+	FindQuizAttemptByStudentAndQuiz(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error)
 	GetQuizStatistics(ctx context.Context, collegeID int, quizID int) (*models.QuizStatistics, error)
 	FindIncompleteQuizAttemptByStudent(ctx context.Context, collegeID int, studentID int, quizID int) (*models.QuizAttempt, error)
 	GetQuestionWithAnswerOptions(ctx context.Context, collegeID, questionID int) (*models.QuestionWithOptions, error)
@@ -302,8 +305,6 @@ func (r *quizRepository) CountQuestionsByQuiz(ctx context.Context, collegeID int
 	}
 	return count, nil
 }
-
-
 
 func (r *quizRepository) CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error {
 	now := time.Now()

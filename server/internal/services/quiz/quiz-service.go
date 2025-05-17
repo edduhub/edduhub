@@ -44,7 +44,7 @@ type QuizService interface {
 	GradeQuizAttempt(ctx context.Context, collegeID int, attemptID int, score int) (*models.QuizAttempt, error)
 	FindQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.QuizAttempt, error)
 	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
-	CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
+	// CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
 
 	// StudentAnswer Methods
 	SubmitStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error
@@ -454,9 +454,9 @@ func (s *quizService) FindQuizAttemptsByQuiz(ctx context.Context, collegeID int,
 	return s.quizRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, limit, offset)
 }
 
-func (s *quizService) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
-	return s.quizRepo.CountQuizAttemptsByQuiz(ctx, collegeID, quizID)
-}
+// func (s *quizService) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
+// 	return s.quizRepo.CountQuizAttemptsByQuiz(ctx, collegeID, quizID)
+// }
 
 // --- StudentAnswer Methods ---
 
