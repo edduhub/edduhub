@@ -280,6 +280,7 @@ func (s *quizService) DeleteQuestion(ctx context.Context, collegeID int, questio
 
 	// Finally, delete the question itself, scoped by college.
 	return s.quizRepo.DeleteQuestion(ctx, collegeID, questionID)
+
 }
 
 func (s *quizService) FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64, withOptions bool) ([]*models.Question, error) {
