@@ -26,19 +26,19 @@ type QuizService interface {
 	GetQuestionByID(ctx context.Context, collegeID int, questionID int) (*models.Question, error)
 	UpdateQuestion(ctx context.Context, collegeID int, question *models.Question) error
 	DeleteQuestion(ctx context.Context, collegeID int, questionID int) error
-	FindQuestionsByQuiz(ctx context.Context, quizID int, limit, offset uint64, withOptions bool) ([]*models.Question, error)
-	CountQuestionsByQuiz(ctx context.Context, quizID int) (int, error)
+	FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64, withOptions bool) ([]*models.Question, error)
+	CountQuestionsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
 
 	// AnswerOption Methods
-	CreateAnswerOption(ctx context.Context, option *models.AnswerOption) error
+	CreateAnswerOption(ctx context.Context, collegeID int, option *models.AnswerOption) error
 	GetAnswerOptionByID(ctx context.Context, collegeID int, optionID int) (*models.AnswerOption, error)
 	UpdateAnswerOption(ctx context.Context, collegeID int, option *models.AnswerOption) error
 	DeleteAnswerOption(ctx context.Context, collegeID int, optionID int) error
-	FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error)
+	FindAnswerOptionsByQuestion(ctx context.Context, collegeID, questionID int) ([]*models.AnswerOption, error)
 	// Note: FindAnswerOptionsByQuestion relies on questionID being valid within the college context,
 	// which should be ensured by the caller (e.g., after fetching the question via GetQuestionByID).
 	// QuizAttempt Methods
-	StartQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error
+	StartQuizAttempt(ctx context.Context, collegeID int, attempt *models.QuizAttempt) error
 	GetQuizAttemptByID(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error)
 	SubmitQuizAttempt(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error)
 	GradeQuizAttempt(ctx context.Context, collegeID int, attemptID int, score int) (*models.QuizAttempt, error)
@@ -492,12 +492,12 @@ func (s *quizService) GradeStudentAnswer(ctx context.Context, collegeID int, ans
 	return sa, nil
 }
 
-func (s *quizService) FindStudentAnswersByAttempt(ctx context.Context, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
+func (s *quizService) FindStudentAnswersByAttempt(ctx context.Context, collegeID, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
 	// This method needs collegeID to scope the attempt.
-	return s.quizRepo.FindStudentAnswersByAttempt(ctx, 0, attemptID, limit, offset) // HACK: Needs collegeID
+	return s.quizRepo.FindStudentAnswersByAttempt(ctx, collegeID, attemptID, limit, offset) // HACK: Needs collegeID
 }
 
-func (s *quizService) GetStudentAnswerForQuestion(ctx context.Context, attemptID int, questionID int) (*models.StudentAnswer, error) {
+func (s *quizService) GetStudentAnswerForQuestion(ctx context.Context, collegeID, attemptID int, questionID int) (*models.StudentAnswer, error) {
 	// This method needs collegeID to scope the attempt.
-	return s.quizRepo.GetStudentAnswerForQuestion(ctx, 0, attemptID, questionID) // HACK: Needs collegeID
+	return s.quizRepo.GetStudentAnswerForQuestion(ctx, collegeID, attemptID, questionID) // HACK: Needs collegeID
 }
