@@ -43,8 +43,8 @@ type QuizService interface {
 	SubmitQuizAttempt(ctx context.Context, collegeID int, attemptID int) (*models.QuizAttempt, error)
 	GradeQuizAttempt(ctx context.Context, collegeID int, attemptID int, score int) (*models.QuizAttempt, error)
 	FindQuizAttemptsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.QuizAttempt, error)
-	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
-	CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
+	// FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
+	// CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
 
 	// StudentAnswer Methods
 	SubmitStudentAnswer(ctx context.Context, answer *models.StudentAnswer) error
@@ -84,6 +84,9 @@ func (s *quizService) CreateQuiz(ctx context.Context, quiz *models.Quiz) error {
 	_, appErr := s.collegeRepo.GetCollegeByID(ctx, quiz.CollegeID)
 	if appErr == nil {
 		course, err := s.courseRepo.FindCourseByID(ctx, quiz.CollegeID, quiz.CourseID)
+		if course == nil {
+			return err
+		}
 		if course != nil {
 			return s.quizRepo.CreateQuiz(ctx, quiz)
 		}
@@ -450,13 +453,13 @@ func (s *quizService) FindQuizAttemptsByStudent(ctx context.Context, collegeID i
 	return s.quizRepo.FindQuizAttemptsByStudent(ctx, collegeID, studentID, limit, offset)
 }
 
-func (s *quizService) FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error) {
-	return s.quizRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, limit, offset)
-}
+// func (s *quizService) FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error) {
+// 	return s.quizRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, limit, offset)
+// }
 
-func (s *quizService) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
-	return s.quizRepo.CountQuizAttemptsByQuiz(ctx, collegeID, quizID)
-}
+// func (s *quizService) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
+// 	return s.quizRepo.CountQuizAttemptsByQuiz(ctx, collegeID, quizID)
+// }
 
 // --- StudentAnswer Methods ---
 
