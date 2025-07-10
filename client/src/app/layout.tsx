@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,12 +24,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" >
+    <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
       </body>
     </html>
   );
 }
+//if we want to use dark mode to apply for whole
+// application we can use ThemeProvider to wrap  
+// the children here but there is a problem
+// the dark mode might not be applied to the whole 
+// app where there might be another Layout.tsx
+// in the pages directory which is not using the
+// ThemeProvider so we need to wrap the children
+// with ThemeProvider.
