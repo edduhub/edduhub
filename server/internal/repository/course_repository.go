@@ -8,14 +8,16 @@ import (
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan" // Add pgxscan import
+	"database/sql"
+
+	"eduhub/server/internal/repository/db"
+
 	"github.com/jackc/pgx/v4"              // Use v4 for pgx.ErrNoRows
 )
 
 type CourseRepository interface {
 	CreateCourse(ctx context.Context, course *models.Course) error
-	FindCourseByID(ctx context.Context, collegeID int, courseID int) (*models.Course, error) // Added collegeID
+	FindCourseByID(ctx context.Context, collegeID int, courseID int) (*models.Course, error)
 	UpdateCourse(ctx context.Context, course *models.Course) error
 	DeleteCourse(ctx context.Context, collegeID int, courseID int) error
 
@@ -30,11 +32,13 @@ type CourseRepository interface {
 
 type courseRepository struct {
 	DB *DB
+	*db.Queries
 }
 
-func NewCourseRepository(db *DB) CourseRepository {
+func NewCourseRepository(database *DB) CourseRepository {
 	return &courseRepository{
-		DB: db,
+		DB: database,
+		Queries: db.New(database.Pool),
 	}
 }
 
@@ -50,51 +54,40 @@ func (c *courseRepository) CreateCourse(ctx context.Context, course *models.Cour
 		course.UpdatedAt = now
 	}
 
-	query := c.DB.SQ.Insert(courseTable).
-		Columns("name", "description", "credits", "instructor_id", "college_id", "created_at", "updated_at"). // Added college_id, created_at, updated_at
-		Values(
-			course.Name,
-			course.Description,
-			course.Credits,
-			course.InstructorID,
-			course.CollegeID, // Assuming CollegeID exists in models.Course
-			course.CreatedAt,
-			course.UpdatedAt,
-		).
-		Suffix("RETURNING id")
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("create course query build error: %w", err)
+	// Use sqlc generated code
+	params := db.CreateCourseParams{
+		Name:         course.Name,
+		Description:  sql.NullString{String: course.Description, Valid: course.Description != ""},
+		Credits:      int32(course.Credits),
+		InstructorID: sql.NullInt32{Int32: int32(course.InstructorID), Valid: course.InstructorID > 0},
+		CreatedAt:    course.CreatedAt,
+		UpdatedAt:    course.UpdatedAt,
 	}
 
-	err = c.DB.Pool.QueryRow(ctx, sql, args...).Scan(&course.ID) // Scan the returned ID into the original course struct
+	result, err := c.Queries.CreateCourse(ctx, params)
 	if err != nil {
-		// Consider checking for specific DB errors (e.g., unique constraints)
-		return fmt.Errorf("CreateCourse: failed to execute query or scan ID: %w", err)
+		return fmt.Errorf("CreateCourse: failed to execute query: %w", err)
 	}
+
+	// Update the course struct with the returned values
+	course.ID = int(result.ID)
+	course.Name = result.Name
+	course.Description = result.Description.String
+	course.Credits = int(result.Credits)
+	course.InstructorID = int(result.InstructorID.Int32)
+	course.CreatedAt = result.CreatedAt
+	course.UpdatedAt = result.UpdatedAt
+
 	return nil
 }
 
 func (c *courseRepository) FindCourseByID(ctx context.Context, collegeID int, courseID int) (*models.Course, error) {
-	query := c.DB.SQ.Select(
-		"id", "name", "description", "credits", "instructor_id", "college_id", "created_at", "updated_at", // Added college_id, timestamps
-	).
-		From(courseTable).
-		Where(squirrel.Eq{
-			"id":         courseID,
-			"college_id": collegeID, // Scope by college
-		})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("FindCourseByID: failed to build query: %w", err)
+	// Use sqlc generated code
+	params := db.FindCourseByIDParams{
+		ID:       int32(courseID),
+		CollegeID: sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
 	}
-
-	// Initialize the struct BEFORE scanning!
-	course := &models.Course{}
-
-	// Use pgxscan.Get for single row
-	err = pgxscan.Get(ctx, c.DB.Pool, course, sql, args...)
+	result, err := c.Queries.FindCourseByID(ctx, params)
 	if err != nil {
 		// It's better to check for specific errors like "no rows"
 		if errors.Is(err, pgx.ErrNoRows) { // Use errors.Is for checking pgx.ErrNoRows
@@ -103,135 +96,143 @@ func (c *courseRepository) FindCourseByID(ctx context.Context, collegeID int, co
 		return nil, fmt.Errorf("unable to find course: %w", err) // Wrap the original error
 	}
 
+	// Convert db.FindCourseByIDRow to models.Course
+	course := &models.Course{
+		ID:          int(result.ID),
+		Name:        result.Name,
+		Description: result.Description.String,
+		Credits:     int(result.Credits),
+		InstructorID: int(result.InstructorID.Int32),
+		CollegeID:   int(result.CollegeID.Int32),
+		CreatedAt:   result.CreatedAt,
+		UpdatedAt:   result.UpdatedAt,
+	}
+
 	return course, nil
 }
 
 func (c *courseRepository) UpdateCourse(ctx context.Context, course *models.Course) error {
 	course.UpdatedAt = time.Now()
 
-	query := c.DB.SQ.Update(courseTable).
-		Set("name", course.Name).
-		Set("description", course.Description).
-		Set("credits", course.Credits).
-		Set("instructor_id", course.InstructorID).
-		Set("updated_at", course.UpdatedAt).
-		Where(squirrel.Eq{
-			"id":         course.ID,
-			"college_id": course.CollegeID, // Ensure update is scoped
-		})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("UpdateCourse: failed to build query: %w", err)
+	// Use sqlc generated code
+	params := db.UpdateCourseParams{
+		Name:         course.Name,
+		Description:  sql.NullString{String: course.Description, Valid: course.Description != ""},
+		Credits:      int32(course.Credits),
+		InstructorID: sql.NullInt32{Int32: int32(course.InstructorID), Valid: course.InstructorID > 0},
+		CollegeID:    sql.NullInt32{Int32: int32(course.CollegeID), Valid: course.CollegeID > 0},
+		UpdatedAt:    course.UpdatedAt,
+		ID:           int32(course.ID),
 	}
 
-	commandTag, err := c.DB.Pool.Exec(ctx, sql, args...)
+	err := c.Queries.UpdateCourse(ctx, params)
 	if err != nil {
 		return fmt.Errorf("UpdateCourse: failed to execute query: %w", err)
-	}
-
-	if commandTag.RowsAffected() == 0 {
-		return fmt.Errorf("UpdateCourse: no course found with ID %d for college ID %d, or no changes made", course.ID, course.CollegeID)
 	}
 
 	return nil
 }
 
 func (c *courseRepository) DeleteCourse(ctx context.Context, collegeID int, courseID int) error {
-	query := c.DB.SQ.Delete(courseTable).
-		Where(squirrel.Eq{
-			"id":         courseID,
-			"college_id": collegeID, // Scope deletion
-		})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("DeleteCourse: failed to build query: %w", err)
+	// Use sqlc generated code
+	params := db.DeleteCourseParams{
+		ID:       int32(courseID),
+		CollegeID: sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
 	}
-
-	commandTag, err := c.DB.Pool.Exec(ctx, sql, args...)
+	err := c.Queries.DeleteCourse(ctx, params)
 	if err != nil {
 		// Consider foreign key constraint errors
 		return fmt.Errorf("DeleteCourse: failed to execute query: %w", err)
-	}
-
-	if commandTag.RowsAffected() == 0 {
-		return fmt.Errorf("DeleteCourse: no course found with ID %d for college ID %d, or already deleted", courseID, collegeID)
 	}
 
 	return nil
 }
 
 func (c *courseRepository) FindAllCourses(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Course, error) {
-	query := c.DB.SQ.Select(
-		"id", "name", "description", "credits", "instructor_id", "college_id", "created_at", "updated_at",
-	).
-		From(courseTable).
-		Where(squirrel.Eq{"college_id": collegeID}).
-		OrderBy("name ASC"). // Example ordering
-		Limit(limit).
-		Offset(offset)
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("FindAllCourses: failed to build query: %w", err)
+	// Use sqlc generated code
+	params := db.FindAllCoursesParams{
+		CollegeID: sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
+		Limit:     int32(limit),
+		Offset:    int32(offset),
 	}
 
-	courses := []*models.Course{}
-	err = pgxscan.Select(ctx, c.DB.Pool, &courses, sql, args...)
+	results, err := c.Queries.FindAllCourses(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("FindAllCourses: failed to execute query or scan: %w", err)
+	}
+
+	// Convert []db.FindAllCoursesRow to []*models.Course
+	courses := make([]*models.Course, len(results))
+	for i, result := range results {
+		courses[i] = &models.Course{
+			ID:          int(result.ID),
+			Name:        result.Name,
+			Description: result.Description.String,
+			Credits:     int(result.Credits),
+			InstructorID: int(result.InstructorID.Int32),
+			CollegeID:   int(result.CollegeID.Int32),
+			CreatedAt:   result.CreatedAt,
+			UpdatedAt:   result.UpdatedAt,
+		}
 	}
 
 	return courses, nil
 }
 
 func (c *courseRepository) FindCoursesByInstructor(ctx context.Context, collegeID int, instructorID int, limit, offset uint64) ([]*models.Course, error) {
-	query := c.DB.SQ.Select(
-		"id", "name", "description", "credits", "instructor_id", "college_id", "created_at", "updated_at",
-	).
-		From(courseTable).
-		Where(squirrel.Eq{
-			"college_id":    collegeID,
-			"instructor_id": instructorID,
-		}).
-		OrderBy("name ASC").
-		Limit(limit).
-		Offset(offset)
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("FindCoursesByInstructor: failed to build query: %w", err)
+	// Use sqlc generated code
+	params := db.FindCoursesByInstructorParams{
+		CollegeID:    sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
+		InstructorID: sql.NullInt32{Int32: int32(instructorID), Valid: instructorID > 0},
+		Limit:        int32(limit),
+		Offset:       int32(offset),
 	}
 
-	courses := []*models.Course{}
-	err = pgxscan.Select(ctx, c.DB.Pool, &courses, sql, args...)
+	results, err := c.Queries.FindCoursesByInstructor(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("FindCoursesByInstructor: failed to execute query or scan: %w", err)
+	}
+
+	// Convert []db.Course to []*models.Course
+	courses := make([]*models.Course, len(results))
+	for i, result := range results {
+		courses[i] = &models.Course{
+			ID:          int(result.ID),
+			Name:        result.Name,
+			Description: result.Description.String,
+			Credits:     int(result.Credits),
+			InstructorID: int(result.InstructorID.Int32),
+			CollegeID:   int(result.CollegeID.Int32),
+			CreatedAt:   result.CreatedAt,
+			UpdatedAt:   result.UpdatedAt,
+		}
 	}
 
 	return courses, nil
 }
 
 func (c *courseRepository) CountCoursesByCollege(ctx context.Context, collegeID int) (int, error) {
-	return c.countCourses(ctx, squirrel.Eq{"college_id": collegeID})
+	// Use sqlc generated code
+	params := sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0}
+	count, err := c.Queries.CountCoursesByCollege(ctx, params)
+	if err != nil {
+		return 0, fmt.Errorf("CountCoursesByCollege: failed to execute query or scan: %w", err)
+	}
+
+	return int(count), nil
 }
 
 func (c *courseRepository) CountCoursesByInstructor(ctx context.Context, collegeID int, instructorID int) (int, error) {
-	return c.countCourses(ctx, squirrel.Eq{"college_id": collegeID, "instructor_id": instructorID})
+	// Use sqlc generated code
+	params := db.CountCoursesByInstructorParams{
+		CollegeID:    sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
+		InstructorID: sql.NullInt32{Int32: int32(instructorID), Valid: instructorID > 0},
+	}
+	count, err := c.Queries.CountCoursesByInstructor(ctx, params)
+	if err != nil {
+		return 0, fmt.Errorf("CountCoursesByInstructor: failed to execute query or scan: %w", err)
+	}
+
+	return int(count), nil
 }
 
-// countCourses is a helper function for counting based on conditions.
-func (c *courseRepository) countCourses(ctx context.Context, whereClause squirrel.Sqlizer) (int, error) {
-	query := c.DB.SQ.Select("COUNT(*)").From(courseTable).Where(whereClause)
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("countCourses: failed to build query: %w", err)
-	}
-	var count int
-	err = c.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("countCourses: failed to execute query or scan: %w", err)
-	}
-	return count, nil
-}

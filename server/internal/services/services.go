@@ -45,7 +45,7 @@ func NewServices(cfg *config.Config) *Services {
 	courseService := course.NewCourseService(repo.CourseRepository)
 	gradeService := grades.NewGradeServices(repo.GradeRepository, repo.StudentRepository, repo.EnrollmentRepository, repo.CourseRepository)
 	lectureService := lecture.NewLectureService(repo.LectureRepository)
-	quizService := quiz.NewQuizService(repo.QuizRepository) // Initialize QuizService
+	quizService := quiz.NewQuizService(repo.QuizRepository, repo.CourseRepository, repo.CollegeRepository, repo.EnrollmentRepository) // Initialize QuizService
 
 	return &Services{
 		Auth:           authService,

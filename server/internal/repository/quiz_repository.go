@@ -727,7 +727,8 @@ func (r *quizRepository) GradeQuizAttempt(ctx context.Context, collegeID int, at
 
 		// Check if the answer was already manually graded (PointsAwarded is not nil).
 		if studentDidAnswer && studentAnswer.PointsAwarded != nil {
-			studentAnswer.PointsAwarded = 1
+			pointsAwarded := 1
+			studentAnswer.PointsAwarded = &pointsAwarded
 
 			pointsAwardedForThisQuestion = *studentAnswer.PointsAwarded
 			if studentAnswer.IsCorrect != nil {

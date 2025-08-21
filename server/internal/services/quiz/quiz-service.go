@@ -490,7 +490,7 @@ func (s *quizService) GradeStudentAnswer(ctx context.Context, collegeID int, ans
 
 	// Update the student answer. The repository method UpdateStudentAnswer
 	// should ideally also check college scope, but it currently updates by ID.
-	if err := s.quizRepo.UpdateStudentAnswer(ctx, sa); err != nil { // UpdateStudentAnswer needs collegeID too
+	if err := s.quizRepo.UpdateStudentAnswer(ctx, collegeID, sa); err != nil { // UpdateStudentAnswer needs collegeID too
 		return nil, fmt.Errorf("failed to update grade for student answer ID %d: %w", answerID, err)
 	}
 	return sa, nil

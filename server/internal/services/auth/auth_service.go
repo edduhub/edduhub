@@ -16,7 +16,7 @@ type AuthService interface {
 	AddPermission(ctx context.Context, identityID, action, resource string) error
 	RemovePermission(ctx context.Context, identityID, action, resource string) error
 	GetPublicURL() string
-	ExtractStudentID(ctx context.Context)
+	ExtractStudentID(ctx context.Context) (int, error)
 }
 
 type authService struct {
@@ -29,6 +29,13 @@ func NewAuthService(kratos *kratosService, keto *ketoService) AuthService {
 		Auth:  kratos,
 		AuthZ: keto,
 	}
+}
+
+func (a *authService) ExtractStudentID(ctx context.Context) (int, error) {
+	// This is a placeholder implementation
+	// In a real implementation, you would extract the student ID from the context
+	// For example, from a JWT token or session data
+	return 0, nil
 }
 
 func (a *authService) InitiateRegistrationFlow(ctx context.Context) (map[string]any, error) {
@@ -52,7 +59,7 @@ func (a *authService) HasRole(identity *Identity, role string) bool {
 }
 
 func (a *authService) CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error) {
-	return a.AuthZ.CheckPermission(ctx, identity.ID, action, resource)
+	return a.AuthZ.CheckPermission(ctx, "app", identity.ID, action, resource)
 }
 
 func (a *authService) AssignRole(ctx context.Context, identityID string, role string) error {

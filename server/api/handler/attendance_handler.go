@@ -119,7 +119,7 @@ func (a *AttendanceHandler) GetAttendanceByCourse(c echo.Context) error {
 		return helpers.Error(c, "Invalid course ID", http.StatusBadRequest)
 	}
 
-	attendance, err := a.attendanceService.GetAttendanceByCourse(ctx, collegeID, courseID)
+	attendance, err := a.attendanceService.GetAttendanceByCourse(ctx, collegeID, courseID, 100, 0)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err)
 	}
@@ -139,7 +139,7 @@ func (a *AttendanceHandler) GetAttendanceForStudent(c echo.Context) error {
 		return helpers.Error(c, "invalid studentID", 400)
 	}
 
-	attendance, err := a.attendanceService.GetAttendanceByStudent(ctx, collegeID, studentID)
+	attendance, err := a.attendanceService.GetAttendanceByStudent(ctx, collegeID, studentID, 100, 0)
 	if err != nil {
 		return helpers.Error(c, "unable to get attendance by student", http.StatusInternalServerError)
 	}
@@ -163,7 +163,7 @@ func (a *AttendanceHandler) GetAttendanceByStudentAndCourse(c echo.Context) erro
 		return err
 	}
 
-	attendance, err := a.attendanceService.GetAttendanceByStudentAndCourse(ctx, collegeID, studentID, courseID)
+	attendance, err := a.attendanceService.GetAttendanceByStudentAndCourse(ctx, collegeID, studentID, courseID, 100, 0)
 	if err != nil {
 		return helpers.Error(c, "unable to get attendance", http.StatusInternalServerError)
 	}
@@ -189,7 +189,7 @@ func (a *AttendanceHandler) UpdateAttendance(c echo.Context) error {
 		return helpers.Error(c, "invalid courseID ", 400)
 	}
 
-	ok, err := a.attendanceService.UpdateAttendance(ctx, collegeID, studentID, courseID, lectureID)
+	ok, err := a.attendanceService.UpdateAttendanceStatus(ctx, collegeID, studentID, courseID, lectureID, "Present")
 	if !ok {
 		return helpers.Error(c, "Unable update attendance", 500)
 	}

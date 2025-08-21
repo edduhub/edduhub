@@ -145,7 +145,7 @@ func (m *AuthMiddleware) RequirePermission(subject, resource, action string) ech
 					"error": "Unauthorized",
 				})
 			}
-			allowed, err := m.AuthService.CheckPermission(c.Request().Context(), identity, subject, resource, action)
+			allowed, err := m.AuthService.CheckPermission(c.Request().Context(), identity, action, resource)
 			if err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{
 					"error": "Error checking permissions",
