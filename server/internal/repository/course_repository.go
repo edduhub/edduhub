@@ -3,16 +3,13 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt" // Keep fmt for error wrapping
+	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"eduhub/server/internal/models"
-
-	"database/sql"
-
-	"eduhub/server/internal/repository/db"
-
-	"github.com/jackc/pgx/v4"              // Use v4 for pgx.ErrNoRows
 )
 
 type CourseRepository interface {
@@ -31,18 +28,16 @@ type CourseRepository interface {
 }
 
 type courseRepository struct {
-	DB *DB
-	*db.Queries
+	Pool *pgxpool.Pool
 }
 
 func NewCourseRepository(database *DB) CourseRepository {
 	return &courseRepository{
-		DB: database,
-		Queries: db.New(database.Pool),
+		Pool: database.Pool,
 	}
 }
 
-const courseTable = "course" // Define table name constant
+const courseTable = "courses" // Define table name constant
 
 func (c *courseRepository) CreateCourse(ctx context.Context, course *models.Course) error {
 	// Set timestamps
@@ -54,78 +49,89 @@ func (c *courseRepository) CreateCourse(ctx context.Context, course *models.Cour
 		course.UpdatedAt = now
 	}
 
-	// Use sqlc generated code
-	params := db.CreateCourseParams{
-		Name:         course.Name,
-		Description:  sql.NullString{String: course.Description, Valid: course.Description != ""},
-		Credits:      int32(course.Credits),
-		InstructorID: sql.NullInt32{Int32: int32(course.InstructorID), Valid: course.InstructorID > 0},
-		CreatedAt:    course.CreatedAt,
-		UpdatedAt:    course.UpdatedAt,
-	}
+	sql := `INSERT INTO courses (
+    name,
+    description,
+    credits,
+    instructor_id,
+    college_id,
+    created_at,
+    updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, name, description, credits, instructor_id, college_id, created_at, updated_at`
 
-	result, err := c.Queries.CreateCourse(ctx, params)
+	var result models.Course
+
+	err := c.Pool.QueryRow(ctx, sql,
+		course.Name,
+		course.Description,
+		int32(course.Credits),
+		int32(course.InstructorID),
+		int32(course.CollegeID),
+		course.CreatedAt,
+		course.UpdatedAt,
+	).Scan(&result.ID, &result.Name, &result.Description, &result.Credits, &result.InstructorID, &result.CollegeID, &result.CreatedAt, &result.UpdatedAt)
+
 	if err != nil {
 		return fmt.Errorf("CreateCourse: failed to execute query: %w", err)
 	}
 
 	// Update the course struct with the returned values
-	course.ID = int(result.ID)
-	course.Name = result.Name
-	course.Description = result.Description.String
-	course.Credits = int(result.Credits)
-	course.InstructorID = int(result.InstructorID.Int32)
-	course.CreatedAt = result.CreatedAt
-	course.UpdatedAt = result.UpdatedAt
+	*course = result
 
 	return nil
 }
 
 func (c *courseRepository) FindCourseByID(ctx context.Context, collegeID int, courseID int) (*models.Course, error) {
-	// Use sqlc generated code
-	params := db.FindCourseByIDParams{
-		ID:       int32(courseID),
-		CollegeID: sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
-	}
-	result, err := c.Queries.FindCourseByID(ctx, params)
+	sql := `SELECT id, name, description, credits, instructor_id, college_id, created_at, updated_at
+FROM courses
+WHERE id = $1 AND college_id = $2`
+
+	var course models.Course
+
+	err := c.Pool.QueryRow(ctx, sql, int32(courseID), int32(collegeID)).Scan(
+		&course.ID,
+		&course.Name,
+		&course.Description,
+		&course.Credits,
+		&course.InstructorID,
+		&course.CollegeID,
+		&course.CreatedAt,
+		&course.UpdatedAt,
+	)
+
 	if err != nil {
-		// It's better to check for specific errors like "no rows"
-		if errors.Is(err, pgx.ErrNoRows) { // Use errors.Is for checking pgx.ErrNoRows
-			return nil, fmt.Errorf("FindCourseByID: course with ID %d not found for college ID %d", courseID, collegeID) // Or a custom ErrNotFound
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("FindCourseByID: course with ID %d not found for college ID %d", courseID, collegeID)
 		}
-		return nil, fmt.Errorf("unable to find course: %w", err) // Wrap the original error
+		return nil, fmt.Errorf("FindCourseByID: failed to execute query: %w", err)
 	}
 
-	// Convert db.FindCourseByIDRow to models.Course
-	course := &models.Course{
-		ID:          int(result.ID),
-		Name:        result.Name,
-		Description: result.Description.String,
-		Credits:     int(result.Credits),
-		InstructorID: int(result.InstructorID.Int32),
-		CollegeID:   int(result.CollegeID.Int32),
-		CreatedAt:   result.CreatedAt,
-		UpdatedAt:   result.UpdatedAt,
-	}
-
-	return course, nil
+	return &course, nil
 }
 
 func (c *courseRepository) UpdateCourse(ctx context.Context, course *models.Course) error {
 	course.UpdatedAt = time.Now()
 
-	// Use sqlc generated code
-	params := db.UpdateCourseParams{
-		Name:         course.Name,
-		Description:  sql.NullString{String: course.Description, Valid: course.Description != ""},
-		Credits:      int32(course.Credits),
-		InstructorID: sql.NullInt32{Int32: int32(course.InstructorID), Valid: course.InstructorID > 0},
-		CollegeID:    sql.NullInt32{Int32: int32(course.CollegeID), Valid: course.CollegeID > 0},
-		UpdatedAt:    course.UpdatedAt,
-		ID:           int32(course.ID),
-	}
+	sql := `UPDATE courses
+SET name = $1,
+    description = $2,
+    credits = $3,
+    instructor_id = $4,
+    updated_at = $5
+WHERE id = $6 AND college_id = $7`
 
-	err := c.Queries.UpdateCourse(ctx, params)
+	_, err := c.Pool.Exec(ctx, sql,
+		course.Name,
+		course.Description,
+		int32(course.Credits),
+		int32(course.InstructorID),
+		course.UpdatedAt,
+		int32(course.ID),
+		int32(course.CollegeID),
+	)
+
 	if err != nil {
 		return fmt.Errorf("UpdateCourse: failed to execute query: %w", err)
 	}
@@ -134,12 +140,10 @@ func (c *courseRepository) UpdateCourse(ctx context.Context, course *models.Cour
 }
 
 func (c *courseRepository) DeleteCourse(ctx context.Context, collegeID int, courseID int) error {
-	// Use sqlc generated code
-	params := db.DeleteCourseParams{
-		ID:       int32(courseID),
-		CollegeID: sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
-	}
-	err := c.Queries.DeleteCourse(ctx, params)
+	sql := `DELETE FROM courses
+WHERE id = $1 AND college_id = $2`
+
+	_, err := c.Pool.Exec(ctx, sql, int32(courseID), int32(collegeID))
 	if err != nil {
 		// Consider foreign key constraint errors
 		return fmt.Errorf("DeleteCourse: failed to execute query: %w", err)
@@ -149,90 +153,95 @@ func (c *courseRepository) DeleteCourse(ctx context.Context, collegeID int, cour
 }
 
 func (c *courseRepository) FindAllCourses(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Course, error) {
-	// Use sqlc generated code
-	params := db.FindAllCoursesParams{
-		CollegeID: sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
-		Limit:     int32(limit),
-		Offset:    int32(offset),
-	}
+	sql := `SELECT id, name, description, credits, instructor_id, college_id, created_at, updated_at
+FROM courses
+WHERE college_id = $1
+ORDER BY name ASC
+LIMIT $2 OFFSET $3`
 
-	results, err := c.Queries.FindAllCourses(ctx, params)
+	rows, err := c.Pool.Query(ctx, sql, int32(collegeID), int32(limit), int32(offset))
 	if err != nil {
-		return nil, fmt.Errorf("FindAllCourses: failed to execute query or scan: %w", err)
+		return nil, fmt.Errorf("FindAllCourses: failed to execute query: %w", err)
 	}
 
-	// Convert []db.FindAllCoursesRow to []*models.Course
-	courses := make([]*models.Course, len(results))
-	for i, result := range results {
-		courses[i] = &models.Course{
-			ID:          int(result.ID),
-			Name:        result.Name,
-			Description: result.Description.String,
-			Credits:     int(result.Credits),
-			InstructorID: int(result.InstructorID.Int32),
-			CollegeID:   int(result.CollegeID.Int32),
-			CreatedAt:   result.CreatedAt,
-			UpdatedAt:   result.UpdatedAt,
+	defer rows.Close()
+
+	courses := make([]*models.Course, 0)
+	for rows.Next() {
+		var course models.Course
+
+		err := rows.Scan(&course.ID, &course.Name, &course.Description, &course.Credits, &course.InstructorID, &course.CollegeID, &course.CreatedAt, &course.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("FindAllCourses: failed to scan: %w", err)
 		}
+
+		courses = append(courses, &course)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("FindAllCourses: failed during rows iteration: %w", err)
 	}
 
 	return courses, nil
 }
 
 func (c *courseRepository) FindCoursesByInstructor(ctx context.Context, collegeID int, instructorID int, limit, offset uint64) ([]*models.Course, error) {
-	// Use sqlc generated code
-	params := db.FindCoursesByInstructorParams{
-		CollegeID:    sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
-		InstructorID: sql.NullInt32{Int32: int32(instructorID), Valid: instructorID > 0},
-		Limit:        int32(limit),
-		Offset:       int32(offset),
-	}
+	sql := `SELECT id, name, description, credits, instructor_id, college_id, created_at, updated_at
+FROM courses
+WHERE college_id = $1 AND instructor_id = $2
+ORDER BY name ASC
+LIMIT $3 OFFSET $4`
 
-	results, err := c.Queries.FindCoursesByInstructor(ctx, params)
+	rows, err := c.Pool.Query(ctx, sql, int32(collegeID), int32(instructorID), int32(limit), int32(offset))
 	if err != nil {
-		return nil, fmt.Errorf("FindCoursesByInstructor: failed to execute query or scan: %w", err)
+		return nil, fmt.Errorf("FindCoursesByInstructor: failed to execute query: %w", err)
 	}
 
-	// Convert []db.Course to []*models.Course
-	courses := make([]*models.Course, len(results))
-	for i, result := range results {
-		courses[i] = &models.Course{
-			ID:          int(result.ID),
-			Name:        result.Name,
-			Description: result.Description.String,
-			Credits:     int(result.Credits),
-			InstructorID: int(result.InstructorID.Int32),
-			CollegeID:   int(result.CollegeID.Int32),
-			CreatedAt:   result.CreatedAt,
-			UpdatedAt:   result.UpdatedAt,
+	defer rows.Close()
+
+	courses := make([]*models.Course, 0)
+	for rows.Next() {
+		var course models.Course
+
+		err := rows.Scan(&course.ID, &course.Name, &course.Description, &course.Credits, &course.InstructorID, &course.CollegeID, &course.CreatedAt, &course.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("FindCoursesByInstructor: failed to scan: %w", err)
 		}
+
+		courses = append(courses, &course)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("FindCoursesByInstructor: failed during rows iteration: %w", err)
 	}
 
 	return courses, nil
 }
 
 func (c *courseRepository) CountCoursesByCollege(ctx context.Context, collegeID int) (int, error) {
-	// Use sqlc generated code
-	params := sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0}
-	count, err := c.Queries.CountCoursesByCollege(ctx, params)
+	sql := `SELECT COUNT(*) as count
+FROM courses
+WHERE college_id = $1`
+
+	var count int64
+	err := c.Pool.QueryRow(ctx, sql, int32(collegeID)).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("CountCoursesByCollege: failed to execute query or scan: %w", err)
+		return 0, fmt.Errorf("CountCoursesByCollege: failed to execute query: %w", err)
 	}
 
 	return int(count), nil
 }
 
 func (c *courseRepository) CountCoursesByInstructor(ctx context.Context, collegeID int, instructorID int) (int, error) {
-	// Use sqlc generated code
-	params := db.CountCoursesByInstructorParams{
-		CollegeID:    sql.NullInt32{Int32: int32(collegeID), Valid: collegeID > 0},
-		InstructorID: sql.NullInt32{Int32: int32(instructorID), Valid: instructorID > 0},
-	}
-	count, err := c.Queries.CountCoursesByInstructor(ctx, params)
+	sql := `SELECT COUNT(*) as count
+FROM courses
+WHERE college_id = $1 AND instructor_id = $2`
+
+	var count int64
+	err := c.Pool.QueryRow(ctx, sql, int32(collegeID), int32(instructorID)).Scan(&count)
 	if err != nil {
-		return 0, fmt.Errorf("CountCoursesByInstructor: failed to execute query or scan: %w", err)
+		return 0, fmt.Errorf("CountCoursesByInstructor: failed to execute query: %w", err)
 	}
 
 	return int(count), nil
 }
-

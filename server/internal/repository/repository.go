@@ -19,7 +19,7 @@ type Repository struct {
 // It needs a bun.DB instance to create the base repositories
 func NewRepository(DB *DB) *Repository {
 	// Create type-specific database repositories
-	attendanceRepo := NewAttendanceRepository(DB)
+	attendanceRepo := NewAttendanceRepository(DB.Pool)
 	studentRepo := NewStudentRepository(DB)
 	userRepo := NewUserRepository(DB)
 	enrollmentRepo := NewEnrollmentRepository(DB)

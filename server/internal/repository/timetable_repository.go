@@ -8,9 +8,9 @@ import (
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4" // For pgx.ErrNoRows
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
+	
 )
 
 const timeTableBlockTable = "timetable_blocks"
@@ -43,25 +43,8 @@ func (r *timetableRepository) CreateTimeTableBlock(ctx context.Context, block *m
 	block.CreatedAt = now
 	block.UpdatedAt = now
 
-	query := r.DB.SQ.Insert(timeTableBlockTable).
-		Columns(
-			"college_id", "department_id", "course_id", "class_id",
-			"day_of_week", "start_time", "end_time", "room_number", "faculty_id",
-			"created_at", "updated_at",
-		).
-		Values(
-			block.CollegeID, block.DepartmentID, block.CourseID, block.ClassID,
-			block.DayOfWeek, block.StartTime, block.EndTime, block.RoomNumber, block.FacultyID,
-			block.CreatedAt, block.UpdatedAt,
-		).
-		Suffix("RETURNING id")
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("CreateTimeTableBlock: failed to build query: %w", err)
-	}
-
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&block.ID)
+	sql := `INSERT INTO timetable_blocks (college_id, department_id, course_id, class_id, day_of_week, start_time, end_time, room_number, faculty_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`
+	err := r.DB.Pool.QueryRow(ctx, sql, block.CollegeID, block.DepartmentID, block.CourseID, block.ClassID, block.DayOfWeek, block.StartTime, block.EndTime, block.RoomNumber, block.FacultyID, block.CreatedAt, block.UpdatedAt).Scan(&block.ID)
 	if err != nil {
 		return fmt.Errorf("CreateTimeTableBlock: failed to execute query or scan ID: %w", err)
 	}
@@ -69,17 +52,9 @@ func (r *timetableRepository) CreateTimeTableBlock(ctx context.Context, block *m
 }
 
 func (r *timetableRepository) GetTimeTableBlockByID(ctx context.Context, blockID int, collegeID int) (*models.TimeTableBlock, error) {
+	sql := `SELECT id, college_id, department_id, course_id, class_id, day_of_week, start_time, end_time, room_number, faculty_id, created_at, updated_at FROM timetable_blocks WHERE id = $1 AND college_id = $2`
 	block := &models.TimeTableBlock{}
-	query := r.DB.SQ.Select(timeTableBlockQueryFields...).
-		From(timeTableBlockTable).
-		Where(squirrel.Eq{"id": blockID, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetTimeTableBlockByID: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, block, sql, args...)
+	err := pgxscan.Get(ctx, r.DB.Pool, block, sql, blockID, collegeID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetTimeTableBlockByID: block with ID %d for college ID %d not found: %w", blockID, collegeID, err)
@@ -92,24 +67,8 @@ func (r *timetableRepository) GetTimeTableBlockByID(ctx context.Context, blockID
 func (r *timetableRepository) UpdateTimeTableBlock(ctx context.Context, block *models.TimeTableBlock) error {
 	block.UpdatedAt = time.Now()
 
-	query := r.DB.SQ.Update(timeTableBlockTable).
-		Set("department_id", block.DepartmentID).
-		Set("course_id", block.CourseID).
-		Set("class_id", block.ClassID).
-		Set("day_of_week", block.DayOfWeek).
-		Set("start_time", block.StartTime).
-		Set("end_time", block.EndTime).
-		Set("room_number", block.RoomNumber).
-		Set("faculty_id", block.FacultyID).
-		Set("updated_at", block.UpdatedAt).
-		Where(squirrel.Eq{"id": block.ID, "college_id": block.CollegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("UpdateTimeTableBlock: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `UPDATE timetable_blocks SET department_id = $1, course_id = $2, class_id = $3, day_of_week = $4, start_time = $5, end_time = $6, room_number = $7, faculty_id = $8, updated_at = $9 WHERE id = $10 AND college_id = $11`
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, block.DepartmentID, block.CourseID, block.ClassID, block.DayOfWeek, block.StartTime, block.EndTime, block.RoomNumber, block.FacultyID, block.UpdatedAt, block.ID, block.CollegeID)
 	if err != nil {
 		return fmt.Errorf("UpdateTimeTableBlock: failed to execute query: %w", err)
 	}
@@ -121,15 +80,8 @@ func (r *timetableRepository) UpdateTimeTableBlock(ctx context.Context, block *m
 }
 
 func (r *timetableRepository) DeleteTimeTableBlock(ctx context.Context, blockID int, collegeID int) error {
-	query := r.DB.SQ.Delete(timeTableBlockTable).
-		Where(squirrel.Eq{"id": blockID, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("DeleteTimeTableBlock: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `DELETE FROM timetable_blocks WHERE id = $1 AND college_id = $2`
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, blockID, collegeID)
 	if err != nil {
 		return fmt.Errorf("DeleteTimeTableBlock: failed to execute query: %w", err)
 	}
@@ -140,50 +92,67 @@ func (r *timetableRepository) DeleteTimeTableBlock(ctx context.Context, blockID 
 	return nil
 }
 
-func (r *timetableRepository) applyTimeTableBlockFilter(query squirrel.SelectBuilder, filter models.TimeTableBlockFilter) squirrel.SelectBuilder {
-	query = query.Where(squirrel.Eq{"college_id": filter.CollegeID}) // CollegeID is mandatory
-
-	if filter.DepartmentID != nil {
-		query = query.Where(squirrel.Eq{"department_id": *filter.DepartmentID})
-	}
-	if filter.CourseID != nil {
-		query = query.Where(squirrel.Eq{"course_id": *filter.CourseID})
-	}
-	if filter.ClassID != nil {
-		query = query.Where(squirrel.Eq{"class_id": *filter.ClassID})
-	}
-	if filter.DayOfWeek != nil {
-		query = query.Where(squirrel.Eq{"day_of_week": *filter.DayOfWeek})
-	}
-	if filter.FacultyID != nil {
-		query = query.Where(squirrel.Eq{"faculty_id": *filter.FacultyID})
-	}
-	return query
-}
 
 func (r *timetableRepository) GetTimeTableBlocks(ctx context.Context, filter models.TimeTableBlockFilter) ([]*models.TimeTableBlock, error) {
 	if filter.CollegeID == 0 { // Or handle as pointer and check for nil
 		return nil, errors.New("GetTimeTableBlocks: CollegeID filter is required")
 	}
 
-	query := r.DB.SQ.Select(timeTableBlockQueryFields...).From(timeTableBlockTable)
-	query = r.applyTimeTableBlockFilter(query, filter)
-	query = query.OrderBy("day_of_week ASC", "start_time ASC")
+	sql := "SELECT id, college_id, department_id, course_id, class_id, day_of_week, start_time, end_time, room_number, faculty_id, created_at, updated_at FROM timetable_blocks WHERE college_id = $1"
+	args := []interface{}{filter.CollegeID}
+	paramCount := 1
+
+	if filter.DepartmentID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND department_id = $%d", paramCount)
+		args = append(args, *filter.DepartmentID)
+	}
+	if filter.CourseID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND course_id = $%d", paramCount)
+		args = append(args, *filter.CourseID)
+	}
+	if filter.ClassID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND class_id = $%d", paramCount)
+		args = append(args, *filter.ClassID)
+	}
+	if filter.DayOfWeek != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND day_of_week = $%d", paramCount)
+		args = append(args, *filter.DayOfWeek)
+	}
+	if filter.InstructorID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND faculty_id = $%d", paramCount)
+		args = append(args, *filter.InstructorID)
+	}
+	if filter.StartTime != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND start_time = $%d", paramCount)
+		args = append(args, *filter.StartTime)
+	}
+	if filter.EndTime != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND end_time = $%d", paramCount)
+		args = append(args, *filter.EndTime)
+	}
+
+	sql += " ORDER BY day_of_week ASC, start_time ASC"
 
 	if filter.Limit > 0 {
-		query = query.Limit(filter.Limit)
+		paramCount++
+		sql += fmt.Sprintf(" LIMIT $%d", paramCount)
+		args = append(args, filter.Limit)
 	}
 	if filter.Offset > 0 {
-		query = query.Offset(filter.Offset)
-	}
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetTimeTableBlocks: failed to build query: %w", err)
+		paramCount++
+		sql += fmt.Sprintf(" OFFSET $%d", paramCount)
+		args = append(args, filter.Offset)
 	}
 
 	var blocks []*models.TimeTableBlock
-	err = pgxscan.Select(ctx, r.DB.Pool, &blocks, sql, args...)
+	err := pgxscan.Select(ctx, r.DB.Pool, &blocks, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*models.TimeTableBlock{}, nil
@@ -198,16 +167,48 @@ func (r *timetableRepository) CountTimeTableBlocks(ctx context.Context, filter m
 		return 0, errors.New("CountTimeTableBlocks: CollegeID filter is required")
 	}
 
-	query := r.DB.SQ.Select("COUNT(*)").From(timeTableBlockTable)
-	query = r.applyTimeTableBlockFilter(query, filter)
+	sql := "SELECT COUNT(*) FROM timetable_blocks WHERE college_id = $1"
+	args := []interface{}{filter.CollegeID}
+	paramCount := 1
 
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("CountTimeTableBlocks: failed to build query: %w", err)
+	if filter.DepartmentID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND department_id = $%d", paramCount)
+		args = append(args, *filter.DepartmentID)
+	}
+	if filter.CourseID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND course_id = $%d", paramCount)
+		args = append(args, *filter.CourseID)
+	}
+	if filter.ClassID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND class_id = $%d", paramCount)
+		args = append(args, *filter.ClassID)
+	}
+	if filter.DayOfWeek != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND day_of_week = $%d", paramCount)
+		args = append(args, *filter.DayOfWeek)
+	}
+	if filter.InstructorID != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND faculty_id = $%d", paramCount)
+		args = append(args, *filter.InstructorID)
+	}
+	if filter.StartTime != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND start_time = $%d", paramCount)
+		args = append(args, *filter.StartTime)
+	}
+	if filter.EndTime != nil {
+		paramCount++
+		sql += fmt.Sprintf(" AND end_time = $%d", paramCount)
+		args = append(args, *filter.EndTime)
 	}
 
 	var count int
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("CountTimeTableBlocks: failed to execute query or scan: %w", err)
 	}

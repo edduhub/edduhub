@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4"
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5"
 )
 
 type CollegeRepository interface {
@@ -52,54 +52,36 @@ func (c *collegeRepository) CreateCollege(ctx context.Context, college *models.C
 	college.CreatedAt = now
 	college.UpdatedAt = now
 
-	query := c.DB.SQ.Insert(collegeTable).Columns("name", "address", "city", "state", "country", "created_at", "updated_at").Values(college.Name, college.Address, college.City, college.State, college.Country, college.CreatedAt, college.UpdatedAt).Suffix("RETURNING id")
-	sql, args, err := query.ToSql()
+	sql := `INSERT INTO college (name, address, city, state, country, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	err := c.DB.Pool.QueryRow(ctx, sql, college.Name, college.Address, college.City, college.State, college.Country, college.CreatedAt, college.UpdatedAt).Scan(&college.ID)
 	if err != nil {
-		return errors.New("create college: failed  to build query")
-	}
-	err = c.DB.Pool.QueryRow(ctx, sql, args...).Scan(&college.ID)
-	if err != nil {
-		return errors.New("unable to create college")
+		return fmt.Errorf("CreateCollege: failed to execute query: %w", err)
 	}
 	return nil
 }
 
 func (c *collegeRepository) GetCollegeByID(ctx context.Context, id int) (*models.College, error) {
-	query := c.DB.SQ.Select("id", "name", "address", "city", "state", "country", "created_at", "updated_at").From(collegeTable).Where(squirrel.Eq{
-		"id": id,
-	})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.New("failed to build query")
-	}
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college WHERE id = $1`
 	college := &models.College{}
-	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, args...)
+	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, id)
 	if findErr != nil {
-		if findErr == pgx.ErrNoRows {
-			return nil, errors.New("GetCollegeByid id not found")
+		if errors.Is(findErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("GetCollegeByID: college with id %d not found", id)
 		}
-		return nil, errors.New("GetCollegeID: failed to execute query")
+		return nil, fmt.Errorf("GetCollegeByID: failed to execute query: %w", findErr)
 	}
 	return college, nil
 }
 
 func (c *collegeRepository) GetCollegeByName(ctx context.Context, name string) (*models.College, error) {
-	query := c.DB.SQ.Select("id", "name", "address", "city", "state", "country", "created_at", "updated_at").From(collegeTable).Where(squirrel.Eq{
-		"name": name,
-	})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.New("failed to build query")
-	}
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college WHERE name = $1`
 	college := &models.College{}
-	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, args...)
+	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, name)
 	if findErr != nil {
-		if findErr == pgx.ErrNoRows {
-			return nil, errors.New("GetCollegeByid id not found")
+		if errors.Is(findErr, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("GetCollegeByName: college with name '%s' not found", name)
 		}
-		return nil, errors.New("GetCollegeID: failed to execute query")
+		return nil, fmt.Errorf("GetCollegeByName: failed to execute query: %w", findErr)
 	}
 	return college, nil
 }
@@ -120,52 +102,36 @@ func (c *collegeRepository) GetCollegeByName(ctx context.Context, name string) (
 
 func (c *collegeRepository) UpdateCollege(ctx context.Context, college *models.College) error {
 	college.UpdatedAt = time.Now()
-	query := c.DB.SQ.Update(collegeTable).Set("name", college.Name).Set("address", college.Address).Set("city", college.City).Set("updated_at", college.UpdatedAt).Where(squirrel.Eq{
-		"id": college.ID,
-	})
-	sql, args, err := query.ToSql()
+	sql := `UPDATE college SET name = $1, address = $2, city = $3, state = $4, country = $5, updated_at = $6 WHERE id = $7`
+	commandTag, err := c.DB.Pool.Exec(ctx, sql, college.Name, college.Address, college.City, college.State, college.Country, college.UpdatedAt, college.ID)
 	if err != nil {
-		return errors.New("update college: failed to build query")
-	}
-	commandTag, err := c.DB.Pool.Exec(ctx, sql, args...)
-	if err != nil {
-		return errors.New("update college: faile to execute query")
+		return fmt.Errorf("UpdateCollege: failed to execute query: %w", err)
 	}
 	if commandTag.RowsAffected() == 0 {
-		return errors.New("update college: no college found with the requested id")
+		return fmt.Errorf("UpdateCollege: no college found with ID %d", college.ID)
 	}
 
 	return nil
 }
 
 func (c *collegeRepository) DeleteCollege(ctx context.Context, id int) error {
-	query := c.DB.SQ.Delete(collegeTable).Where(squirrel.Eq{
-		"id": id,
-	})
-	sql, args, err := query.ToSql()
+	sql := `DELETE FROM college WHERE id = $1`
+	commandTag, err := c.DB.Pool.Exec(ctx, sql, id)
 	if err != nil {
-		return errors.New("failed to build query")
-	}
-	commandTag, err := c.DB.Pool.Exec(ctx, sql, args...)
-	if err != nil {
-		return errors.New("failed to execute query")
+		return fmt.Errorf("DeleteCollege: failed to execute query: %w", err)
 	}
 	if commandTag.RowsAffected() == 0 {
-		return errors.New("no enrollment found")
+		return fmt.Errorf("DeleteCollege: no college found with ID %d", id)
 	}
 	return nil
 }
 
 func (c *collegeRepository) ListColleges(ctx context.Context, limit, offset uint64) ([]*models.College, error) {
-	query := c.DB.SQ.Select("id", "name", "address", "city", "state", "country", "created_at", "updated_at").From(collegeTable)
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, errors.New("list college: failed to execute query")
-	}
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college ORDER BY name ASC LIMIT $1 OFFSET $2`
 	colleges := []*models.College{}
-	err = pgxscan.Select(ctx, c.DB.Pool, &colleges, sql, args...)
+	err := pgxscan.Select(ctx, c.DB.Pool, &colleges, sql, int32(limit), int32(offset))
 	if err != nil {
-		return nil, errors.New("list colleges: failed to execute query")
+		return nil, fmt.Errorf("ListColleges: failed to execute query: %w", err)
 	}
 	return colleges, nil
 }

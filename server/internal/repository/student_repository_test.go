@@ -2,33 +2,35 @@ package repository
 
 import (
 	"context"
-	"errors"
-	"regexp"
 	"testing"
 	"time"
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/jackc/pgx/v4"
-	"github.com/pashagolub/pgxmock"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupStudentTest(t *testing.T) (pgxmock.PgxPoolIface, *DB, StudentRepository, context.Context) {
-	mock, err := pgxmock.NewPool()
+func setupStudentTest(t *testing.T) (*pgxpool.Pool, *DB, StudentRepository, context.Context) {
+	databaseURL := "postgres://your_db_user:your_db_password@localhost:5432/edduhub"
+
+	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)
 
+	t.Cleanup(func() {
+		pool.Close()
+	})
+
 	db := &DB{
-		Pool: mock,
-		SQ:   squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
+		Pool: pool,
 	}
 
 	repo := NewStudentRepository(db)
 	ctx := context.Background()
 
-	return mock, db, repo, ctx
+	return pool, db, repo, ctx
 }
 
 func TestCreateStudent(t *testing.T) {

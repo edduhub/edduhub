@@ -8,9 +8,8 @@ import (
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4"
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5"
 )
 
 type DepartmentRepository interface {
@@ -40,17 +39,8 @@ func (r *departmentRepository) CreateDepartment(ctx context.Context, department 
 	department.CreatedAt = now
 	department.UpdatedAt = now
 
-	query := r.DB.SQ.Insert(departmentTable).
-		Columns("college_id", "name", "hod", "created_at", "updated_at").
-		Values(department.CollegeID, department.Name, department.HOD, department.CreatedAt, department.UpdatedAt).
-		Suffix("RETURNING id")
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("CreateDepartment: failed to build query: %w", err)
-	}
-
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&department.ID)
+	sql := `INSERT INTO departments (college_id, name, hod, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	err := r.DB.Pool.QueryRow(ctx, sql, department.CollegeID, department.Name, department.HOD, department.CreatedAt, department.UpdatedAt).Scan(&department.ID)
 	if err != nil {
 		return fmt.Errorf("CreateDepartment: failed to execute query or scan ID: %w", err)
 	}
@@ -59,16 +49,8 @@ func (r *departmentRepository) CreateDepartment(ctx context.Context, department 
 
 func (r *departmentRepository) GetDepartmentByID(ctx context.Context, collegeID int, departmentID int) (*models.Department, error) {
 	department := &models.Department{}
-	query := r.DB.SQ.Select("id", "college_id", "name", "hod", "created_at", "updated_at").
-		From(departmentTable).
-		Where(squirrel.Eq{"id": departmentID, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetDepartmentByID: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, department, sql, args...)
+	sql := `SELECT id, college_id, name, hod, created_at, updated_at FROM departments WHERE id = $1 AND college_id = $2`
+	err := pgxscan.Get(ctx, r.DB.Pool, department, sql, departmentID, collegeID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetDepartmentByID: department with ID %d not found for college ID %d", departmentID, collegeID)
@@ -80,16 +62,8 @@ func (r *departmentRepository) GetDepartmentByID(ctx context.Context, collegeID 
 
 func (r *departmentRepository) GetDepartmentByName(ctx context.Context, collegeID int, name string) (*models.Department, error) {
 	department := &models.Department{}
-	query := r.DB.SQ.Select("id", "college_id", "name", "hod", "created_at", "updated_at").
-		From(departmentTable).
-		Where(squirrel.Eq{"name": name, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetDepartmentByName: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, department, sql, args...)
+	sql := `SELECT id, college_id, name, hod, created_at, updated_at FROM departments WHERE name = $1 AND college_id = $2`
+	err := pgxscan.Get(ctx, r.DB.Pool, department, sql, name, collegeID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetDepartmentByName: department with name '%s' not found for college ID %d", name, collegeID)
@@ -101,18 +75,8 @@ func (r *departmentRepository) GetDepartmentByName(ctx context.Context, collegeI
 
 func (r *departmentRepository) UpdateDepartment(ctx context.Context, department *models.Department) error {
 	department.UpdatedAt = time.Now()
-	query := r.DB.SQ.Update(departmentTable).
-		Set("name", department.Name).
-		Set("hod", department.HOD).
-		Set("updated_at", department.UpdatedAt).
-		Where(squirrel.Eq{"id": department.ID, "college_id": department.CollegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("UpdateDepartment: failed to build query: %w", err)
-	}
-
-	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `UPDATE departments SET name = $1, hod = $2, updated_at = $3 WHERE id = $4 AND college_id = $5`
+	cmdTag, err := r.DB.Pool.Exec(ctx, sql, department.Name, department.HOD, department.UpdatedAt, department.ID, department.CollegeID)
 	if err != nil {
 		return fmt.Errorf("UpdateDepartment: failed to execute query: %w", err)
 	}
@@ -123,15 +87,8 @@ func (r *departmentRepository) UpdateDepartment(ctx context.Context, department 
 }
 
 func (r *departmentRepository) DeleteDepartment(ctx context.Context, collegeID int, departmentID int) error {
-	query := r.DB.SQ.Delete(departmentTable).
-		Where(squirrel.Eq{"id": departmentID, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("DeleteDepartment: failed to build query: %w", err)
-	}
-
-	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `DELETE FROM departments WHERE id = $1 AND college_id = $2`
+	cmdTag, err := r.DB.Pool.Exec(ctx, sql, departmentID, collegeID)
 	if err != nil {
 		return fmt.Errorf("DeleteDepartment: failed to execute query: %w", err)
 	}
@@ -143,17 +100,8 @@ func (r *departmentRepository) DeleteDepartment(ctx context.Context, collegeID i
 
 func (r *departmentRepository) ListDepartmentsByCollege(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Department, error) {
 	departments := []*models.Department{}
-	query := r.DB.SQ.Select("id", "college_id", "name", "hod", "created_at", "updated_at").
-		From(departmentTable).
-		Where(squirrel.Eq{"college_id": collegeID}).
-		OrderBy("name ASC").Limit(limit).Offset(offset)
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("ListDepartmentsByCollege: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Select(ctx, r.DB.Pool, &departments, sql, args...)
+	sql := `SELECT id, college_id, name, hod, created_at, updated_at FROM departments WHERE college_id = $1 ORDER BY name ASC LIMIT $2 OFFSET $3`
+	err := pgxscan.Select(ctx, r.DB.Pool, &departments, sql, collegeID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("ListDepartmentsByCollege: failed to execute query or scan: %w", err)
 	}
@@ -162,12 +110,8 @@ func (r *departmentRepository) ListDepartmentsByCollege(ctx context.Context, col
 
 func (r *departmentRepository) CountDepartmentsByCollege(ctx context.Context, collegeID int) (int, error) {
 	var count int
-	query := r.DB.SQ.Select("COUNT(*)").From(departmentTable).Where(squirrel.Eq{"college_id": collegeID})
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("CountDepartmentsByCollege: build query: %w", err)
-	}
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	sql := `SELECT COUNT(*) FROM departments WHERE college_id = $1`
+	err := r.DB.Pool.QueryRow(ctx, sql, collegeID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("CountDepartmentsByCollege: exec/scan: %w", err)
 	}

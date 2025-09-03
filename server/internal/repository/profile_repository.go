@@ -8,9 +8,8 @@ import (
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4" // For pgx.ErrNoRows
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
 
 const profileTable = "profiles"
@@ -47,25 +46,8 @@ func (r *profileRepository) CreateProfile(ctx context.Context, profile *models.P
 		profile.SocialLinks = make(models.JSONMap)
 	}
 
-	query := r.DB.SQ.Insert(profileTable).
-		Columns(
-			"user_id", "college_id", "bio", "profile_image", "phone_number",
-			"address", "date_of_birth", "joined_at", "last_active",
-			"preferences", "social_links", "created_at", "updated_at",
-		).
-		Values(
-			profile.UserID, profile.CollegeID, profile.Bio, profile.ProfileImage, profile.PhoneNumber,
-			profile.Address, profile.DateOfBirth, profile.JoinedAt, profile.LastActive,
-			profile.Preferences, profile.SocialLinks, profile.CreatedAt, profile.UpdatedAt,
-		).
-		Suffix("RETURNING id")
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("CreateProfile: failed to build query: %w", err)
-	}
-
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&profile.ID)
+	sql := `INSERT INTO profiles (user_id, college_id, bio, profile_image, phone_number, address, date_of_birth, joined_at, last_active, preferences, social_links, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`
+	err := r.DB.Pool.QueryRow(ctx, sql, profile.UserID, profile.CollegeID, profile.Bio, profile.ProfileImage, profile.PhoneNumber, profile.Address, profile.DateOfBirth, profile.JoinedAt, profile.LastActive, profile.Preferences, profile.SocialLinks, profile.CreatedAt, profile.UpdatedAt).Scan(&profile.ID)
 	if err != nil {
 		return fmt.Errorf("CreateProfile: failed to execute query or scan ID: %w", err)
 	}
@@ -74,17 +56,8 @@ func (r *profileRepository) CreateProfile(ctx context.Context, profile *models.P
 
 func (r *profileRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
 	profile := &models.Profile{}
-	queryFields := []string{"id", "user_id", "college_id", "bio", "profile_image", "phone_number", "address", "date_of_birth", "joined_at", "last_active", "preferences", "social_links", "created_at", "updated_at"}
-	query := r.DB.SQ.Select(queryFields...).
-		From(profileTable).
-		Where(squirrel.Eq{"user_id": userID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetProfileByUserID: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, profile, sql, args...)
+	sql := `SELECT id, user_id, college_id, bio, profile_image, phone_number, address, date_of_birth, joined_at, last_active, preferences, social_links, created_at, updated_at FROM profiles WHERE user_id = $1`
+	err := pgxscan.Get(ctx, r.DB.Pool, profile, sql, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetProfileByUserID: profile for user ID %s not found", userID)
@@ -96,17 +69,8 @@ func (r *profileRepository) GetProfileByUserID(ctx context.Context, userID strin
 
 func (r *profileRepository) GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error) {
 	profile := &models.Profile{}
-	queryFields := []string{"id", "user_id", "college_id", "bio", "profile_image", "phone_number", "address", "date_of_birth", "joined_at", "last_active", "preferences", "social_links", "created_at", "updated_at"}
-	query := r.DB.SQ.Select(queryFields...).
-		From(profileTable).
-		Where(squirrel.Eq{"id": profileID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetProfileByID: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, profile, sql, args...)
+	sql := `SELECT id, user_id, college_id, bio, profile_image, phone_number, address, date_of_birth, joined_at, last_active, preferences, social_links, created_at, updated_at FROM profiles WHERE id = $1`
+	err := pgxscan.Get(ctx, r.DB.Pool, profile, sql, profileID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetProfileByID: profile with ID %d not found", profileID)
@@ -128,25 +92,8 @@ func (r *profileRepository) UpdateProfile(ctx context.Context, profile *models.P
 		profile.SocialLinks = make(models.JSONMap)
 	}
 
-	query := r.DB.SQ.Update(profileTable).
-		Set("college_id", profile.CollegeID).
-		Set("bio", profile.Bio).
-		Set("profile_image", profile.ProfileImage).
-		Set("phone_number", profile.PhoneNumber).
-		Set("address", profile.Address).
-		Set("date_of_birth", profile.DateOfBirth).
-		Set("last_active", profile.LastActive).
-		Set("preferences", profile.Preferences).
-		Set("social_links", profile.SocialLinks).
-		Set("updated_at", profile.UpdatedAt).
-		Where(squirrel.Eq{"id": profile.ID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("UpdateProfile: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `UPDATE profiles SET college_id = $1, bio = $2, profile_image = $3, phone_number = $4, address = $5, date_of_birth = $6, last_active = $7, preferences = $8, social_links = $9, updated_at = $10 WHERE id = $11`
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, profile.CollegeID, profile.Bio, profile.ProfileImage, profile.PhoneNumber, profile.Address, profile.DateOfBirth, profile.LastActive, profile.Preferences, profile.SocialLinks, profile.UpdatedAt, profile.ID)
 	if err != nil {
 		return fmt.Errorf("UpdateProfile: failed to execute query: %w", err)
 	}

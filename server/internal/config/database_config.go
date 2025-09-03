@@ -8,8 +8,7 @@ import (
 
 	"eduhub/server/internal/repository"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type DBConfig struct {
@@ -66,7 +65,7 @@ func LoadDatabase() *repository.DB {
 
 	// Use a context with timeout for connection attempts in production
 	// For this example, using context.Background() as in original
-	pool, err := pgxpool.Connect(context.Background(), dsn)
+	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
 		// Same note about panic vs return error applies
 		panic(fmt.Errorf("failed to connect to database: %w", err))
@@ -78,12 +77,9 @@ func LoadDatabase() *repository.DB {
 		panic(fmt.Errorf("failed to ping database: %w", err))
 	}
 
-	sq := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-
 	// --- Complete the return statement ---
 	return &repository.DB{
 		Pool: pool, // Assign the connected pool to the Pool field
-		SQ:   sq,   // Assign the squirrel builder to the SQ field
 	}
 }
 

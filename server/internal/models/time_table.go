@@ -31,7 +31,9 @@ type TimeTableBlockFilter struct {
 	CourseID     *int          `json:"course_id,omitempty"`
 	ClassID      *int          `json:"class_id,omitempty"`
 	DayOfWeek    *time.Weekday `json:"day_of_week,omitempty"`
-	FacultyID    *string       `json:"faculty_id,omitempty"`
+	InstructorID *string       `json:"instructor_id,omitempty"`
+	StartTime    *pgtype.Time  `json:"start_time,omitempty"`
+	EndTime      *pgtype.Time  `json:"end_time,omitempty"`
 	Limit        uint64        `json:"limit,omitempty"`
 	Offset       uint64        `json:"offset,omitempty"`
 }

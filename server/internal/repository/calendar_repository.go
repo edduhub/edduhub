@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4" // For pgx.ErrNoRows
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
 
 const calendarBlockTable = "calendar_blocks"
@@ -42,17 +42,9 @@ func (r *calendarRepository) CreateCalendarBlock(ctx context.Context, block *mod
 	block.CreatedAt = now
 	block.UpdatedAt = now
 
-	query := r.DB.SQ.Insert(calendarBlockTable).
-		Columns("college_id", "title", "description", "event_type", "date", "created_at", "updated_at").
-		Values(block.CollegeID, block.Title, block.Description, block.EventType, block.Date, block.CreatedAt, block.UpdatedAt).
-		Suffix("RETURNING id")
+	sql := `INSERT INTO calendar_blocks (college_id, title, description, event_type, date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
 
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("CreateCalendarBlock: failed to build query: %w", err)
-	}
-
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&block.ID)
+	err := r.DB.Pool.QueryRow(ctx, sql, block.CollegeID, block.Title, block.Description, block.EventType, block.Date, block.CreatedAt, block.UpdatedAt).Scan(&block.ID)
 	if err != nil {
 		return fmt.Errorf("CreateCalendarBlock: failed to execute query or scan ID: %w", err)
 	}
@@ -61,16 +53,9 @@ func (r *calendarRepository) CreateCalendarBlock(ctx context.Context, block *mod
 
 func (r *calendarRepository) GetCalendarBlockByID(ctx context.Context, blockID int, collegeID int) (*models.CalendarBlock, error) {
 	block := &models.CalendarBlock{}
-	query := r.DB.SQ.Select(calendarBlockQueryFields...).
-		From(calendarBlockTable).
-		Where(squirrel.Eq{"id": blockID, "college_id": collegeID})
+	sql := `SELECT id, college_id, title, description, event_type, date, created_at, updated_at FROM calendar_blocks WHERE id = $1 AND college_id = $2`
 
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetCalendarBlockByID: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, block, sql, args...)
+	err := pgxscan.Get(ctx, r.DB.Pool, block, sql, blockID, collegeID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetCalendarBlockByID: block with ID %d for college ID %d not found: %w", blockID, collegeID, err)
@@ -83,20 +68,9 @@ func (r *calendarRepository) GetCalendarBlockByID(ctx context.Context, blockID i
 func (r *calendarRepository) UpdateCalendarBlock(ctx context.Context, block *models.CalendarBlock) error {
 	block.UpdatedAt = time.Now()
 
-	query := r.DB.SQ.Update(calendarBlockTable).
-		Set("title", block.Title).
-		Set("description", block.Description).
-		Set("event_type", block.EventType).
-		Set("date", block.Date).
-		Set("updated_at", block.UpdatedAt).
-		Where(squirrel.Eq{"id": block.ID, "college_id": block.CollegeID})
+	sql := `UPDATE calendar_blocks SET title = $1, description = $2, event_type = $3, date = $4, updated_at = $5 WHERE id = $6 AND college_id = $7`
 
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("UpdateCalendarBlock: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, block.Title, block.Description, block.EventType, block.Date, block.UpdatedAt, block.ID, block.CollegeID)
 	if err != nil {
 		return fmt.Errorf("UpdateCalendarBlock: failed to execute query: %w", err)
 	}
@@ -108,15 +82,9 @@ func (r *calendarRepository) UpdateCalendarBlock(ctx context.Context, block *mod
 }
 
 func (r *calendarRepository) DeleteCalendarBlock(ctx context.Context, blockID int, collegeID int) error {
-	query := r.DB.SQ.Delete(calendarBlockTable).
-		Where(squirrel.Eq{"id": blockID, "college_id": collegeID})
+	sql := `DELETE FROM calendar_blocks WHERE id = $1 AND college_id = $2`
 
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("DeleteCalendarBlock: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, blockID, collegeID)
 	if err != nil {
 		return fmt.Errorf("DeleteCalendarBlock: failed to execute query: %w", err)
 	}
@@ -127,25 +95,33 @@ func (r *calendarRepository) DeleteCalendarBlock(ctx context.Context, blockID in
 	return nil
 }
 
-func (r *calendarRepository) applyCalendarBlockFilter(query squirrel.SelectBuilder, filter models.CalendarBlockFilter) squirrel.SelectBuilder {
-	if filter.CollegeID == nil { // This check should ideally be done before calling this helper
-		// Or, if CollegeID is mandatory for all queries using this filter, make it non-pointer in the struct.
-		// For now, we assume the caller ensures CollegeID is present if required.
-		// However, for GetCalendarBlocks, we'll enforce it.
-	} else {
-		query = query.Where(squirrel.Eq{"college_id": *filter.CollegeID})
+func (r *calendarRepository) applyCalendarBlockFilter(filter models.CalendarBlockFilter) (string, []any) {
+	clauses := []string{}
+	args := []any{}
+
+	if filter.CollegeID != nil {
+		clauses = append(clauses, fmt.Sprintf("college_id = $%d", len(args)+1))
+		args = append(args, *filter.CollegeID)
 	}
 
 	if filter.EventType != nil {
-		query = query.Where(squirrel.Eq{"event_type": *filter.EventType})
+		clauses = append(clauses, fmt.Sprintf("event_type = $%d", len(args)+1))
+		args = append(args, *filter.EventType)
 	}
 	if filter.StartDate != nil {
-		query = query.Where(squirrel.GtOrEq{"date": *filter.StartDate})
+		clauses = append(clauses, fmt.Sprintf("date >= $%d", len(args)+1))
+		args = append(args, *filter.StartDate)
 	}
 	if filter.EndDate != nil {
-		query = query.Where(squirrel.LtOrEq{"date": *filter.EndDate})
+		clauses = append(clauses, fmt.Sprintf("date <= $%d", len(args)+1))
+		args = append(args, *filter.EndDate)
 	}
-	return query
+
+	var whereClause string
+	if len(clauses) > 0 {
+		whereClause = "WHERE " + strings.Join(clauses, " AND ")
+	}
+	return whereClause, args
 }
 
 func (r *calendarRepository) GetCalendarBlocks(ctx context.Context, filter models.CalendarBlockFilter) ([]*models.CalendarBlock, error) {
@@ -153,24 +129,19 @@ func (r *calendarRepository) GetCalendarBlocks(ctx context.Context, filter model
 		return nil, errors.New("GetCalendarBlocks: CollegeID filter is required")
 	}
 
-	query := r.DB.SQ.Select(calendarBlockQueryFields...).From(calendarBlockTable)
-	query = r.applyCalendarBlockFilter(query, filter)
-	query = query.OrderBy("date ASC", "created_at ASC")
+	whereClause, args := r.applyCalendarBlockFilter(filter)
+	baseSQL := "SELECT id, college_id, title, description, event_type, date, created_at, updated_at FROM calendar_blocks " + whereClause + " ORDER BY date ASC, created_at ASC"
 
+	sql := baseSQL
 	if filter.Limit > 0 {
-		query = query.Limit(filter.Limit)
+		sql += fmt.Sprintf(" LIMIT %d", filter.Limit)
 	}
 	if filter.Offset > 0 {
-		query = query.Offset(filter.Offset)
-	}
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetCalendarBlocks: failed to build query: %w", err)
+		sql += fmt.Sprintf(" OFFSET %d", filter.Offset)
 	}
 
 	var blocks []*models.CalendarBlock
-	err = pgxscan.Select(ctx, r.DB.Pool, &blocks, sql, args...)
+	err := pgxscan.Select(ctx, r.DB.Pool, &blocks, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*models.CalendarBlock{}, nil
@@ -185,16 +156,11 @@ func (r *calendarRepository) CountCalendarBlocks(ctx context.Context, filter mod
 		return 0, errors.New("CountCalendarBlocks: CollegeID filter is required")
 	}
 
-	query := r.DB.SQ.Select("COUNT(*)").From(calendarBlockTable)
-	query = r.applyCalendarBlockFilter(query, filter)
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("CountCalendarBlocks: failed to build query: %w", err)
-	}
+	whereClause, args := r.applyCalendarBlockFilter(filter)
+	sql := "SELECT COUNT(*) FROM calendar_blocks " + whereClause
 
 	var count int
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("CountCalendarBlocks: failed to execute query or scan: %w", err)
 	}

@@ -8,9 +8,8 @@ import (
 
 	"eduhub/server/internal/models"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/georgysavva/scany/pgxscan"
-	"github.com/jackc/pgx/v4" // For pgx.ErrNoRows
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
 
 const gradeTable = "grades"
@@ -49,25 +48,8 @@ func (r *gradeRepository) CreateGrade(ctx context.Context, grade *models.Grade) 
 		grade.GradedAt = now
 	}
 
-	query := r.DB.SQ.Insert(gradeTable).
-		Columns(
-			"student_id", "course_id", "college_id", "marks_obtained", "total_marks",
-			"grade_letter", "semester", "academic_year", "exam_type", "graded_at",
-			"comments", "created_at", "updated_at",
-		).
-		Values(
-			grade.StudentID, grade.CourseID, grade.CollegeID, grade.MarksObtained, grade.TotalMarks,
-			grade.GradeLetter, grade.Semester, grade.AcademicYear, grade.ExamType, grade.GradedAt,
-			grade.Comments, grade.CreatedAt, grade.UpdatedAt,
-		).
-		Suffix("RETURNING id")
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("CreateGrade: failed to build query: %w", err)
-	}
-
-	err = r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&grade.ID)
+	sql := `INSERT INTO grades (student_id, course_id, college_id, marks_obtained, total_marks, grade_letter, semester, academic_year, exam_type, graded_at, comments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`
+	err := r.DB.Pool.QueryRow(ctx, sql, grade.StudentID, grade.CourseID, grade.CollegeID, grade.MarksObtained, grade.TotalMarks, grade.GradeLetter, grade.Semester, grade.AcademicYear, grade.ExamType, grade.GradedAt, grade.Comments, grade.CreatedAt, grade.UpdatedAt).Scan(&grade.ID)
 	if err != nil {
 		// Consider specific error handling for duplicate entries or foreign key violations
 		return fmt.Errorf("CreateGrade: failed to execute query or scan ID: %w", err)
@@ -77,16 +59,8 @@ func (r *gradeRepository) CreateGrade(ctx context.Context, grade *models.Grade) 
 
 func (r *gradeRepository) GetGradeByID(ctx context.Context, gradeID int, collegeID int) (*models.Grade, error) {
 	grade := &models.Grade{}
-	query := r.DB.SQ.Select(gradeQueryFields...).
-		From(gradeTable).
-		Where(squirrel.Eq{"id": gradeID, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetGradeByID: failed to build query: %w", err)
-	}
-
-	err = pgxscan.Get(ctx, r.DB.Pool, grade, sql, args...)
+	sql := `SELECT id, student_id, course_id, college_id, marks_obtained, total_marks, grade_letter, semester, academic_year, exam_type, graded_at, comments, created_at, updated_at FROM grades WHERE id = $1 AND college_id = $2`
+	err := pgxscan.Get(ctx, r.DB.Pool, grade, sql, gradeID, collegeID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetGradeByID: grade with ID %d for college ID %d not found: %w", gradeID, collegeID, err)
@@ -99,26 +73,8 @@ func (r *gradeRepository) GetGradeByID(ctx context.Context, gradeID int, college
 func (r *gradeRepository) UpdateGrade(ctx context.Context, grade *models.Grade) error {
 	grade.UpdatedAt = time.Now()
 
-	query := r.DB.SQ.Update(gradeTable).
-		Set("student_id", grade.StudentID). // StudentID might not be updatable, depends on rules
-		Set("course_id", grade.CourseID).   // CourseID might not be updatable
-		Set("marks_obtained", grade.MarksObtained).
-		Set("total_marks", grade.TotalMarks).
-		Set("grade_letter", grade.GradeLetter).
-		Set("semester", grade.Semester).
-		Set("academic_year", grade.AcademicYear).
-		Set("exam_type", grade.ExamType).
-		Set("graded_at", grade.GradedAt).
-		Set("comments", grade.Comments).
-		Set("updated_at", grade.UpdatedAt).
-		Where(squirrel.Eq{"id": grade.ID, "college_id": grade.CollegeID}) // Ensure update is for the correct college
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("UpdateGrade: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `UPDATE grades SET student_id = $1, course_id = $2, marks_obtained = $3, total_marks = $4, grade_letter = $5, semester = $6, academic_year = $7, exam_type = $8, graded_at = $9, comments = $10, updated_at = $11 WHERE id = $12 AND college_id = $13`
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, grade.StudentID, grade.CourseID, grade.MarksObtained, grade.TotalMarks, grade.GradeLetter, grade.Semester, grade.AcademicYear, grade.ExamType, grade.GradedAt, grade.Comments, grade.UpdatedAt, grade.ID, grade.CollegeID)
 	if err != nil {
 		return fmt.Errorf("UpdateGrade: failed to execute query: %w", err)
 	}
@@ -130,15 +86,8 @@ func (r *gradeRepository) UpdateGrade(ctx context.Context, grade *models.Grade) 
 }
 
 func (r *gradeRepository) DeleteGrade(ctx context.Context, gradeID int, collegeID int) error {
-	query := r.DB.SQ.Delete(gradeTable).
-		Where(squirrel.Eq{"id": gradeID, "college_id": collegeID})
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return fmt.Errorf("DeleteGrade: failed to build query: %w", err)
-	}
-
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	sql := `DELETE FROM grades WHERE id = $1 AND college_id = $2`
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, gradeID, collegeID)
 	if err != nil {
 		return fmt.Errorf("DeleteGrade: failed to execute query: %w", err)
 	}
@@ -150,46 +99,55 @@ func (r *gradeRepository) DeleteGrade(ctx context.Context, gradeID int, collegeI
 }
 
 func (r *gradeRepository) GetGrades(ctx context.Context, filter models.GradeFilter) ([]*models.Grade, error) {
-	query := r.DB.SQ.Select(gradeQueryFields...).From(gradeTable)
-
 	if filter.CollegeID == nil {
 		return nil, errors.New("GetGrades: CollegeID filter is required")
 	}
-	query = query.Where(squirrel.Eq{"college_id": *filter.CollegeID})
+
+	sql := `SELECT id, student_id, course_id, college_id, marks_obtained, total_marks, grade_letter, semester, academic_year, exam_type, graded_at, comments, created_at, updated_at FROM grades WHERE college_id = $1`
+	args := []interface{}{*filter.CollegeID}
+	placeholderCount := 1
 
 	if filter.StudentID != nil {
-		query = query.Where(squirrel.Eq{"student_id": *filter.StudentID})
+		placeholderCount++
+		sql += fmt.Sprintf(" AND student_id = $%d", placeholderCount)
+		args = append(args, *filter.StudentID)
 	}
 	if filter.CourseID != nil {
-		query = query.Where(squirrel.Eq{"course_id": *filter.CourseID})
+		placeholderCount++
+		sql += fmt.Sprintf(" AND course_id = $%d", placeholderCount)
+		args = append(args, *filter.CourseID)
 	}
 	if filter.Semester != nil {
-		query = query.Where(squirrel.Eq{"semester": *filter.Semester})
+		placeholderCount++
+		sql += fmt.Sprintf(" AND semester = $%d", placeholderCount)
+		args = append(args, *filter.Semester)
 	}
 	if filter.AcademicYear != nil {
-		query = query.Where(squirrel.Eq{"academic_year": *filter.AcademicYear})
+		placeholderCount++
+		sql += fmt.Sprintf(" AND academic_year = $%d", placeholderCount)
+		args = append(args, *filter.AcademicYear)
 	}
 	if filter.ExamType != "" {
-		query = query.Where(squirrel.Eq{"exam_type": filter.ExamType})
+		placeholderCount++
+		sql += fmt.Sprintf(" AND exam_type = $%d", placeholderCount)
+		args = append(args, filter.ExamType)
 	}
 
-	// For progress tracking, you might want to order by academic_year, semester, graded_at
-	query = query.OrderBy("academic_year ASC", "semester ASC", "graded_at ASC") // Default ordering
+	sql += " ORDER BY academic_year ASC, semester ASC, graded_at ASC"
 
 	if filter.Limit > 0 {
-		query = query.Limit(filter.Limit)
+		placeholderCount++
+		sql += fmt.Sprintf(" LIMIT $%d", placeholderCount)
+		args = append(args, filter.Limit)
 	}
 	if filter.Offset > 0 {
-		query = query.Offset(filter.Offset)
-	}
-
-	sql, args, err := query.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("GetGrades: failed to build query: %w", err)
+		placeholderCount++
+		sql += fmt.Sprintf(" OFFSET $%d", placeholderCount)
+		args = append(args, filter.Offset)
 	}
 
 	var grades []*models.Grade
-	err = pgxscan.Select(ctx, r.DB.Pool, &grades, sql, args...)
+	err := pgxscan.Select(ctx, r.DB.Pool, &grades, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*models.Grade{}, nil // Return empty slice if no rows found

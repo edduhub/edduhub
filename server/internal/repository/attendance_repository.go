@@ -2,16 +2,12 @@ package repository
 
 import (
 	"context"
-	"fmt" // Import fmt for better error wrapping
+	"fmt"
 	"time"
 
-	// Assuming models.Attendance uses time.Time
-	"eduhub/server/internal/models" // Your models package
-)
+	"github.com/jackc/pgx/v5/pgxpool"
 
-// Import the sqlc generated code
-import (
-	"eduhub/server/internal/repository/db"
+	"eduhub/server/internal/models"
 )
 
 type AttendanceRepository interface {
@@ -35,8 +31,7 @@ type AttendanceRepository interface {
 const attendanceTable = "attendance"
 
 type attendanceRepository struct {
-	DB *DB // Assuming DB struct is accessible here
-	*db.Queries
+	Pool *pgxpool.Pool // Direct pgxpool connection
 }
 
 // Assuming models.Attendance struct with db tags is defined in models package:
@@ -51,10 +46,9 @@ type attendanceRepository struct {
 //     LectureID int       `db:"lecture_id"`
 // }
 
-func NewAttendanceRepository(DB *DB) AttendanceRepository {
+func NewAttendanceRepository(pool *pgxpool.Pool) AttendanceRepository {
 	return &attendanceRepository{
-		DB: DB,
-		Queries: db.New(DB.Pool),
+		Pool: pool,
 	}
 }
 
@@ -64,33 +58,30 @@ func (a *attendanceRepository) GetAttendanceByCourse(
 	courseID int,
 	limit, offset uint64, // Added pagination params
 ) ([]*models.Attendance, error) {
-	// Convert parameters to int32 as expected by sqlc
-	params := db.GetAttendanceByCourseParams{
-		CollegeID: int32(collegeID),
-		CourseID:  int32(courseID),
-		Limit:     int32(limit),
-		Offset:    int32(offset),
-	}
+	sql := `SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id
+FROM attendance
+WHERE college_id = $1 AND course_id = $2
+ORDER BY date DESC, student_id ASC
+LIMIT $3 OFFSET $4`
 
-	// Call the sqlc generated method
-	rows, err := a.Queries.GetAttendanceByCourse(ctx, params)
+	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(courseID), int32(limit), int32(offset))
 	if err != nil {
 		return nil, fmt.Errorf("GetAttendanceByCourse: failed to execute query: %w", err)
 	}
+	defer rows.Close()
 
-	// Convert sqlc models to our models
-	attendances := make([]*models.Attendance, len(rows))
-	for i, row := range rows {
-		attendances[i] = &models.Attendance{
-			ID:        int(row.ID),
-			StudentID: int(row.StudentID),
-			CourseID:  int(row.CourseID),
-			CollegeID: int(row.CollegeID),
-			Date:      row.Date,
-			Status:    row.Status,
-			ScannedAt: row.ScannedAt,
-			LectureID: int(row.LectureID),
+	attendances := make([]*models.Attendance, 0)
+	for rows.Next() {
+		attendance := &models.Attendance{}
+		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
+		if err != nil {
+			return nil, fmt.Errorf("GetAttendanceByCourse: failed to scan: %w", err)
 		}
+		attendances = append(attendances, attendance)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAttendanceByCourse: failed during rows iteration: %w", err)
 	}
 
 	return attendances, nil
@@ -101,39 +92,44 @@ func (a *attendanceRepository) MarkAttendance(ctx context.Context, collegeID int
 	// Truncate date for the 'date' column if you only store the date part
 	attendanceDate := now.Truncate(24 * time.Hour)
 
-	// Convert parameters to int32 as expected by sqlc
-	params := db.MarkAttendanceParams{
-		StudentID: int32(studentID),
-		CourseID:  int32(courseID),
-		CollegeID: int32(collegeID),
-		LectureID: int32(lectureID),
-		Date:      attendanceDate,
-		Status:    "Present", // Default status when marked
-		ScannedAt: now,
-	}
+	sql := `INSERT INTO attendance (
+    	student_id,
+    	course_id,
+    	college_id,
+    	lecture_id,
+    	date,
+    	status,
+    	scanned_at
+	) VALUES (
+    	$1, $2, $3, $4, $5, $6, $7
+	) ON CONFLICT (student_id, course_id, lecture_id, date, college_id)
+	DO UPDATE SET scanned_at = EXCLUDED.scanned_at, status = EXCLUDED.status
+	RETURNING *`
 
-	// Call the sqlc generated method
-	_, err := a.Queries.MarkAttendance(ctx, params)
+	var result models.Attendance
+	err := a.Pool.QueryRow(ctx, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), attendanceDate, "Present", now).Scan(
+		&result.ID,
+		&result.StudentID,
+		&result.CourseID,
+		&result.CollegeID,
+		&result.Date,
+		&result.Status,
+		&result.ScannedAt,
+		&result.LectureID,
+	)
 	if err != nil {
 		return false, fmt.Errorf("MarkAttendance: failed to execute query: %w", err)
 	}
 
-	// If no error occurred, the attendance was marked successfully
 	return true, nil
 }
 
 func (a *attendanceRepository) UpdateAttendance(ctx context.Context, collegeID int, studentID int, courseID int, lectureID int, status string) error {
-	// Convert parameters to int32 as expected by sqlc
-	params := db.UpdateAttendanceParams{
-		Status:    status,
-		CollegeID: int32(collegeID),
-		StudentID: int32(studentID),
-		CourseID:  int32(courseID),
-		LectureID: int32(lectureID),
-	}
+	sql := `UPDATE attendance
+SET status = $1
+WHERE college_id = $2 AND student_id = $3 AND course_id = $4 AND lecture_id = $5`
 
-	// Call the sqlc generated method
-	err := a.Queries.UpdateAttendance(ctx, params)
+	_, err := a.Pool.Exec(ctx, sql, status, int32(collegeID), int32(studentID), int32(courseID), int32(lectureID))
 	if err != nil {
 		return fmt.Errorf("UpdateAttendance: failed to execute query: %w", err)
 	}
@@ -148,34 +144,30 @@ func (a *attendanceRepository) GetAttendanceStudentInCourse(
 	courseID int,
 	limit, offset uint64, // Added pagination params
 ) ([]*models.Attendance, error) {
-	// Convert parameters to int32 as expected by sqlc
-	params := db.GetAttendanceStudentInCourseParams{
-		CollegeID: int32(collegeID),
-		StudentID: int32(studentID),
-		CourseID:  int32(courseID),
-		Limit:     int32(limit),
-		Offset:    int32(offset),
-	}
+	sql := `SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id
+FROM attendance
+WHERE college_id = $1 AND student_id = $2 AND course_id = $3
+ORDER BY date DESC, scanned_at DESC
+LIMIT $4 OFFSET $5`
 
-	// Call the sqlc generated method
-	rows, err := a.Queries.GetAttendanceStudentInCourse(ctx, params)
+	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(studentID), int32(courseID), int32(limit), int32(offset))
 	if err != nil {
 		return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed to execute query: %w", err)
 	}
+	defer rows.Close()
 
-	// Convert sqlc models to our models
-	attendances := make([]*models.Attendance, len(rows))
-	for i, row := range rows {
-		attendances[i] = &models.Attendance{
-			ID:        int(row.ID),
-			StudentID: int(row.StudentID),
-			CourseID:  int(row.CourseID),
-			CollegeID: int(row.CollegeID),
-			Date:      row.Date,
-			Status:    row.Status,
-			ScannedAt: row.ScannedAt,
-			LectureID: int(row.LectureID),
+	attendances := make([]*models.Attendance, 0)
+	for rows.Next() {
+		attendance := &models.Attendance{}
+		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
+		if err != nil {
+			return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed to scan: %w", err)
 		}
+		attendances = append(attendances, attendance)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed during rows iteration: %w", err)
 	}
 
 	return attendances, nil
@@ -187,33 +179,30 @@ func (a *attendanceRepository) GetAttendanceStudent(
 	studentID int,
 	limit, offset uint64, // Added pagination params
 ) ([]*models.Attendance, error) {
-	// Convert parameters to int32 as expected by sqlc
-	params := db.GetAttendanceStudentParams{
-		CollegeID: int32(collegeID),
-		StudentID: int32(studentID),
-		Limit:     int32(limit),
-		Offset:    int32(offset),
-	}
+	sql := `SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id
+FROM attendance
+WHERE college_id = $1 AND student_id = $2
+ORDER BY date DESC, course_id ASC, scanned_at DESC
+LIMIT $3 OFFSET $4`
 
-	// Call the sqlc generated method
-	rows, err := a.Queries.GetAttendanceStudent(ctx, params)
+	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(studentID), int32(limit), int32(offset))
 	if err != nil {
 		return nil, fmt.Errorf("GetAttendanceStudent: failed to execute query: %w", err)
 	}
+	defer rows.Close()
 
-	// Convert sqlc models to our models
-	attendances := make([]*models.Attendance, len(rows))
-	for i, row := range rows {
-		attendances[i] = &models.Attendance{
-			ID:        int(row.ID),
-			StudentID: int(row.StudentID),
-			CourseID:  int(row.CourseID),
-			CollegeID: int(row.CollegeID),
-			Date:      row.Date,
-			Status:    row.Status,
-			ScannedAt: row.ScannedAt,
-			LectureID: int(row.LectureID),
+	attendances := make([]*models.Attendance, 0)
+	for rows.Next() {
+		attendance := &models.Attendance{}
+		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
+		if err != nil {
+			return nil, fmt.Errorf("GetAttendanceStudent: failed to scan: %w", err)
 		}
+		attendances = append(attendances, attendance)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAttendanceStudent: failed during rows iteration: %w", err)
 	}
 
 	return attendances, nil
@@ -227,34 +216,30 @@ func (a *attendanceRepository) GetAttendanceByLecture(
 	courseID int,
 	limit, offset uint64, // Added pagination params
 ) ([]*models.Attendance, error) {
-	// Convert parameters to int32 as expected by sqlc
-	params := db.GetAttendanceByLectureParams{
-		CollegeID: int32(collegeID),
-		LectureID: int32(lectureID),
-		CourseID:  int32(courseID),
-		Limit:     int32(limit),
-		Offset:    int32(offset),
-	}
+	sql := `SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id
+FROM attendance
+WHERE college_id = $1 AND lecture_id = $2 AND course_id = $3
+ORDER BY student_id ASC, scanned_at ASC
+LIMIT $4 OFFSET $5`
 
-	// Call the sqlc generated method
-	rows, err := a.Queries.GetAttendanceByLecture(ctx, params)
+	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(lectureID), int32(courseID), int32(limit), int32(offset))
 	if err != nil {
 		return nil, fmt.Errorf("GetAttendanceByLecture: failed to execute query: %w", err)
 	}
+	defer rows.Close()
 
-	// Convert sqlc models to our models
-	attendances := make([]*models.Attendance, len(rows))
-	for i, row := range rows {
-		attendances[i] = &models.Attendance{
-			ID:        int(row.ID),
-			StudentID: int(row.StudentID),
-			CourseID: int(row.CourseID),
-			CollegeID: int(row.CollegeID),
-			Date:      row.Date,
-			Status:    row.Status,
-			ScannedAt: row.ScannedAt,
-			LectureID: int(row.LectureID),
+	attendances := make([]*models.Attendance, 0)
+	for rows.Next() {
+		attendance := &models.Attendance{}
+		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
+		if err != nil {
+			return nil, fmt.Errorf("GetAttendanceByLecture: failed to scan: %w", err)
 		}
+		attendances = append(attendances, attendance)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetAttendanceByLecture: failed during rows iteration: %w", err)
 	}
 
 	return attendances, nil
@@ -263,15 +248,11 @@ func (a *attendanceRepository) GetAttendanceByLecture(
 // FreezeAttendance updates the status of all attendance records for a specific student to "Frozen".
 // This is a simple example; actual freezing logic might be more complex (e.g., only for past dates).
 func (a *attendanceRepository) FreezeAttendance(ctx context.Context, collegeID int, studentID int) error {
-	// Convert parameters to int32 as expected by sqlc
-	params := db.FreezeAttendanceParams{
-		Status:    "Frozen",
-		CollegeID: int32(collegeID),
-		StudentID: int32(studentID),
-	}
+	sql := `UPDATE attendance
+SET status = $1
+WHERE college_id = $2 AND student_id = $3`
 
-	// Call the sqlc generated method
-	err := a.Queries.FreezeAttendance(ctx, params)
+	_, err := a.Pool.Exec(ctx, sql, "Frozen", int32(collegeID), int32(studentID))
 	if err != nil {
 		return fmt.Errorf("FreezeAttendance: failed to execute query: %w", err)
 	}
@@ -284,16 +265,11 @@ func (a *attendanceRepository) UnFreezeAttendance(ctx context.Context, collegeID
 	// Determine the status to revert to. "Absent" might be a safe default if the original status isn't stored.
 	revertStatus := "Absent" // Or fetch original status if stored elsewhere
 
-	// Convert parameters to int32 as expected by sqlc
-	params := db.UnFreezeAttendanceParams{
-		Status:    revertStatus,
-		CollegeID: int32(collegeID),
-		StudentID: int32(studentID),
-		Status_2: "Frozen", // Only unfreeze records that are currently frozen
-	}
+	sql := `UPDATE attendance
+SET status = $1
+WHERE college_id = $2 AND student_id = $3 AND status = $4`
 
-	// Call the sqlc generated method
-	err := a.Queries.UnFreezeAttendance(ctx, params)
+	_, err := a.Pool.Exec(ctx, sql, revertStatus, int32(collegeID), int32(studentID), "Frozen")
 	if err != nil {
 		return fmt.Errorf("UnFreezeAttendance: failed to execute query: %w", err)
 	}
@@ -315,18 +291,19 @@ func (a *attendanceRepository) UnFreezeAttendance(ctx context.Context, collegeID
 func (a *attendanceRepository) SetAttendanceStatus(ctx context.Context, collegeID int, studentID int, courseID int, lectureID int, status string) error {
 	now := time.Now()
 
-	// Convert parameters to int32 as expected by sqlc
-	params := db.SetAttendanceStatusParams{
-		StudentID: int32(studentID),
-		CourseID:  int32(courseID),
-		CollegeID: int32(collegeID),
-		LectureID: int32(lectureID),
-		Status:    status,
-		ScannedAt: now,
-	}
+	sql := `INSERT INTO attendance (
+    student_id,
+    course_id,
+    college_id,
+    lecture_id,
+    status,
+    scanned_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) ON CONFLICT (student_id, course_id, college_id, lecture_id)
+DO UPDATE SET status = EXCLUDED.status, scanned_at = EXCLUDED.scanned_at`
 
-	// Call the sqlc generated method
-	err := a.Queries.SetAttendanceStatus(ctx, params)
+	_, err := a.Pool.Exec(ctx, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), status, now)
 	if err != nil {
 		return fmt.Errorf("SetAttendanceStatus: failed to execute query: %w", err)
 	}
