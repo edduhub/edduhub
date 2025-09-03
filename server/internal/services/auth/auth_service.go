@@ -2,12 +2,14 @@ package auth
 
 import (
 	"context"
+	"fmt"
 )
 
 type AuthService interface {
 	InitiateRegistrationFlow(ctx context.Context) (map[string]any, error)
 	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
+	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
 	CheckCollegeAccess(identity *Identity, collegeID string) bool
 	HasRole(identity *Identity, role string) bool
 	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
@@ -16,7 +18,7 @@ type AuthService interface {
 	AddPermission(ctx context.Context, identityID, action, resource string) error
 	RemovePermission(ctx context.Context, identityID, action, resource string) error
 	GetPublicURL() string
-	ExtractStudentID(ctx context.Context) (int, error)
+	ExtractStudentID(identity *Identity) (int, error)
 }
 
 type authService struct {
@@ -31,11 +33,12 @@ func NewAuthService(kratos *kratosService, keto *ketoService) AuthService {
 	}
 }
 
-func (a *authService) ExtractStudentID(ctx context.Context) (int, error) {
-	// This is a placeholder implementation
-	// In a real implementation, you would extract the student ID from the context
-	// For example, from a JWT token or session data
-	return 0, nil
+func (a *authService) ExtractStudentID(identity *Identity) (int, error) {
+	// In JWT-based authentication, the student ID lookup is handled by middleware
+	// and stored in Echo context under "student_id"
+	// This method cannot access Echo context directly
+	// For proper JWT integration, use helpers.ExtractStudentID(c) instead
+	return 0, fmt.Errorf("ExtractStudentID from identity not implemented - student ID should be extracted from Echo context after LoadStudentProfile middleware")
 }
 
 func (a *authService) InitiateRegistrationFlow(ctx context.Context) (map[string]any, error) {
@@ -48,6 +51,10 @@ func (a *authService) CompleteRegistration(ctx context.Context, flowID string, r
 
 func (a *authService) ValidateSession(ctx context.Context, sessionToken string) (*Identity, error) {
 	return a.Auth.ValidateSession(ctx, sessionToken)
+}
+
+func (a *authService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
+	return a.Auth.ValidateJWT(ctx, jwtToken)
 }
 
 func (a *authService) CheckCollegeAccess(identity *Identity, collegeID string) bool {

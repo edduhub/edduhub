@@ -60,14 +60,15 @@ func (h *AuthHandler) HandleLogin(c echo.Context) error {
 
 // HandleCallback processes the login callback
 func (h *AuthHandler) HandleCallback(c echo.Context) error {
-	sessionToken := c.Request().Header.Get("X-Session-Token")
-	if sessionToken == "" {
-		return helpers.Error(c, "empty session token", 400)
+	// Extract identity from the context, which should be set by JWT middleware
+	identityRaw := c.Get("identity")
+	if identityRaw == nil {
+		return helpers.Error(c, "authorization required", http.StatusUnauthorized)
 	}
 
-	identity, err := h.authService.ValidateSession(c.Request().Context(), sessionToken)
-	if err != nil {
-		return helpers.Error(c, "invalid identity", http.StatusInternalServerError)
+	identity, ok := identityRaw.(*auth.Identity)
+	if !ok {
+		return helpers.Error(c, "invalid identity format", http.StatusInternalServerError)
 	}
 
 	return helpers.Success(c, identity, http.StatusOK)

@@ -69,6 +69,10 @@ selfservice:
             - hook: session
             - hook: show_verification_ui
 
+session:
+  cookie:
+    same_site: Lax
+
 log:
   level: debug
   format: text

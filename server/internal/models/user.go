@@ -17,3 +17,12 @@ type User struct {
 	// Relations - not stored in DB
 	Student *Student `db:"-" json:"student,omitempty"`
 }
+
+// UpdateUserRequest provides fields for partial updates to User via PATCH
+type UpdateUserRequest struct {
+	Name             *string `json:"name" validate:"omitempty,min=1,max=100"`
+	Role             *string `json:"role" validate:"omitempty,min=1,max=50"`
+	Email            *string `json:"email" validate:"omitempty,email"`
+	KratosIdentityID *string `json:"kratos_identity_id" validate:"omitempty,len=36"`
+	IsActive         *bool   `json:"is_active" validate:"omitempty"`
+}

@@ -16,6 +16,7 @@ type UserRepository interface {
 	CreateUser(ctx context.Context, user *models.User) error
 
 	UpdateUser(ctx context.Context, user *models.User) error
+	UpdateUserPartial(ctx context.Context, userID int, req *models.UpdateUserRequest) error
 	FreezeUserByID(ctx context.Context, userID int) error // Changed to operate on ID
 	DeleteUserByID(ctx context.Context, userID int) error // Changed to operate on ID
 	GetUserByID(ctx context.Context, userID int) (*models.User, error)
@@ -197,4 +198,54 @@ func (u *userRepository) DeleteUserByID(ctx context.Context, userID int) error {
 	}
 
 	return nil // Success
+}
+
+func (u *userRepository) UpdateUserPartial(ctx context.Context, userID int, req *models.UpdateUserRequest) error {
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE users SET updated_at = NOW()`
+	args := []any{}
+	argIndex := 1
+
+	if req.Name != nil {
+		sql += fmt.Sprintf(`, name = $%d`, argIndex)
+		args = append(args, *req.Name)
+		argIndex++
+	}
+	if req.Role != nil {
+		sql += fmt.Sprintf(`, role = $%d`, argIndex)
+		args = append(args, *req.Role)
+		argIndex++
+	}
+	if req.Email != nil {
+		sql += fmt.Sprintf(`, email = $%d`, argIndex)
+		args = append(args, *req.Email)
+		argIndex++
+	}
+	if req.KratosIdentityID != nil {
+		sql += fmt.Sprintf(`, kratos_identity_id = $%d`, argIndex)
+		args = append(args, *req.KratosIdentityID)
+		argIndex++
+	}
+	if req.IsActive != nil {
+		sql += fmt.Sprintf(`, is_active = $%d`, argIndex)
+		args = append(args, *req.IsActive)
+		argIndex++
+	}
+
+	if len(args) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	sql += fmt.Sprintf(` WHERE id = $%d`, argIndex)
+	args = append(args, userID)
+
+	commandTag, err := u.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateUserPartial: failed to execute query: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateUserPartial: user with ID %d not found", userID)
+	}
+
+	return nil
 }

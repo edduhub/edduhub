@@ -35,3 +35,11 @@ type CalendarBlockFilter struct {
 	Limit     uint64             `json:"limit,omitempty"`
 	Offset    uint64             `json:"offset,omitempty"`
 }
+
+// UpdateCalendarRequest provides fields for partial updates to Calendar via PATCH
+type UpdateCalendarRequest struct {
+	Title *string `json:"title" validate:"omitempty,min=1,max=200"`
+	Description *string `json:"description" validate:"omitempty,max=1000"`
+	EventType *CalendarEventType `json:"event_type" validate:"omitempty,oneof=exam holiday event deadline other"`
+	Date *time.Time `json:"date" validate:"omitempty"`
+}

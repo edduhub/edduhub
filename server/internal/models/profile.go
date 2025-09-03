@@ -23,3 +23,16 @@ type Profile struct {
 
 // JSONMap is a helper type for storing JSON data
 type JSONMap map[string]interface{}
+
+// UpdateProfileRequest provides fields for partial updates to Profile via PATCH
+type UpdateProfileRequest struct {
+	UserID       *string             `json:"user_id" validate:"omitempty,len=36"`
+	CollegeID    *string             `json:"college_id" validate:"omitempty,len=36"`
+	Bio          *string             `json:"bio" validate:"omitempty,max=500"`
+	ProfileImage *string             `json:"profile_image" validate:"omitempty,url"`
+	PhoneNumber  *string             `json:"phone_number" validate:"omitempty,len=10"`
+	Address      *string             `json:"address" validate:"omitempty,max=250"`
+	DateOfBirth  *time.Time          `json:"date_of_birth" validate:"omitempty"`
+	Preferences  *JSONMap            `json:"preferences"`
+	SocialLinks  *JSONMap            `json:"social_links"`
+}

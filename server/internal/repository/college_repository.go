@@ -17,6 +17,7 @@ type CollegeRepository interface {
 	GetCollegeByID(ctx context.Context, id int) (*models.College, error)
 	GetCollegeByName(ctx context.Context, name string) (*models.College, error)
 	UpdateCollege(ctx context.Context, college *models.College) error
+	UpdateCollegePartial(ctx context.Context, id int, req *models.UpdateCollegeRequest) error
 	DeleteCollege(ctx context.Context, id int) error
 	ListColleges(ctx context.Context, limit, offset uint64) ([]*models.College, error)
 }
@@ -134,4 +135,54 @@ func (c *collegeRepository) ListColleges(ctx context.Context, limit, offset uint
 		return nil, fmt.Errorf("ListColleges: failed to execute query: %w", err)
 	}
 	return colleges, nil
+}
+
+func (c *collegeRepository) UpdateCollegePartial(ctx context.Context, id int, req *models.UpdateCollegeRequest) error {
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE college SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.Name != nil {
+		sql += fmt.Sprintf(`, name = $%d`, argIndex)
+		args = append(args, *req.Name)
+		argIndex++
+	}
+	if req.Address != nil {
+		sql += fmt.Sprintf(`, address = $%d`, argIndex)
+		args = append(args, *req.Address)
+		argIndex++
+	}
+	if req.City != nil {
+		sql += fmt.Sprintf(`, city = $%d`, argIndex)
+		args = append(args, *req.City)
+		argIndex++
+	}
+	if req.State != nil {
+		sql += fmt.Sprintf(`, state = $%d`, argIndex)
+		args = append(args, *req.State)
+		argIndex++
+	}
+	if req.Country != nil {
+		sql += fmt.Sprintf(`, country = $%d`, argIndex)
+		args = append(args, *req.Country)
+		argIndex++
+	}
+
+	if len(args) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	sql += fmt.Sprintf(` WHERE id = $%d`, argIndex)
+	args = append(args, id)
+
+	commandTag, err := c.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateCollegePartial: failed to execute query: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateCollegePartial: college with ID %d not found", id)
+	}
+
+	return nil
 }

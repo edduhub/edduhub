@@ -41,3 +41,18 @@ type GradeFilter struct {
 	Limit  uint64 `json:"limit,omitempty"`
 	Offset uint64 `json:"offset,omitempty"`
 }
+
+// UpdateGradeRequest provides fields for partial updates to Grade via PATCH
+type UpdateGradeRequest struct {
+	StudentID      *string    `json:"student_id" validate:"omitempty"`
+	CourseID       *int       `json:"course_id" validate:"omitempty,gte=1"`
+	CollegeID      *int       `json:"college_id" validate:"omitempty,gte=1"`
+	MarksObtained  *float64   `json:"marks_obtained" validate:"omitempty,gte=0"`
+	TotalMarks     *float64   `json:"total_marks" validate:"omitempty,gte=0"`
+	GradeLetter    *string    `json:"grade_letter" validate:"omitempty,min=1,max=5"`
+	Semester       *int       `json:"semester" validate:"omitempty,gte=1,lte=8"`
+	AcademicYear   *string    `json:"academic_year" validate:"omitempty,len=9"`
+	ExamType       *ExamType  `json:"exam_type" validate:"omitempty"`
+	GradedAt       *time.Time `json:"graded_at" validate:"omitempty"`
+	Comments       *string    `json:"comments" validate:"omitempty,max=500"`
+}

@@ -142,6 +142,40 @@ func (k *kratosService) ValidateSession(ctx context.Context, sessionToken string
 	return &result.Identity, nil
 }
 
+// ValidateJWT validates a JWT token by calling Kratos' JWT introspection endpoint.
+func (k *kratosService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
+	url := fmt.Sprintf("%s/sessions/whoami", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JWT validation request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate JWT: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("invalid JWT token: %s", http.StatusText(resp.StatusCode))
+	}
+
+	var result struct {
+		Identity Identity `json:"identity"`
+		Active   bool     `json:"active"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode JWT validation response: %w", err)
+	}
+
+	if !result.Active {
+		return nil, fmt.Errorf("JWT token is not active")
+	}
+
+	return &result.Identity, nil
+}
+
 // CheckCollegeAccess verifies that the student's college ID matches the provided ID.
 func (k *kratosService) CheckCollegeAccess(identity *Identity, collegeID string) bool {
 	return identity.Traits.College.ID == collegeID

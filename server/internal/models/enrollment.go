@@ -25,3 +25,13 @@ type Enrollment struct {
 	Student *Student `db:"-" json:"student,omitempty"`
 	Course  *Course  `db:"-" json:"course,omitempty"`
 }
+
+// UpdateEnrollmentRequest provides fields for partial updates to Enrollment via PATCH
+type UpdateEnrollmentRequest struct {
+	StudentID      *int              `json:"student_id" validate:"omitempty,gte=1"`
+	CourseID       *int              `json:"course_id" validate:"omitempty,gte=1"`
+	CollegeID      *int              `json:"college_id" validate:"omitempty,gte=1"`
+	EnrollmentDate *time.Time        `json:"enrollment_date" validate:"omitempty"`
+	Status         *EnrollmentStatus `json:"status" validate:"omitempty,oneof=active inactive completed"`
+	Grade          *string           `json:"grade" validate:"omitempty,max=5"`
+}

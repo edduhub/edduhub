@@ -15,3 +15,12 @@ type College struct {
 	// Relations - not stored in DB
 	Students []*Student `db:"-" json:"students,omitempty"`
 }
+
+// UpdateCollegeRequest provides fields for partial updates to College via PATCH
+type UpdateCollegeRequest struct {
+	Name    *string `json:"name" validate:"omitempty,min=1,max=100"`
+	Address *string `json:"address" validate:"omitempty"`
+	City    *string `json:"city" validate:"omitempty,min=1,max=50"`
+	State   *string `json:"state" validate:"omitempty,min=1,max=50"`
+	Country *string `json:"country" validate:"omitempty,min=1,max=50"`
+}

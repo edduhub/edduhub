@@ -47,3 +47,23 @@ type Subjects struct {
 	Previous Courses `json:"previous"` // Previously completed courses
 	Optional Courses `json:"optional"` // Optional/elective courses
 }
+
+// UpdateCourseRequest provides fields for partial updates to Course via PATCH
+type UpdateCourseRequest struct {
+	Name        *string `json:"name" validate:"omitempty,min=3,max=100"`
+	CollegeID   *int    `json:"college_id" validate:"omitempty,gte=1"`
+	Description *string `json:"description" validate:"omitempty,max=200"`
+	Credits     *int    `json:"credits" validate:"omitempty,gte=1,lte=5"`
+	InstructorID *int   `json:"instructor_id" validate:"omitempty,gte=1"`
+}
+
+// UpdateLectureRequest provides fields for partial updates to Lecture via PATCH
+type UpdateLectureRequest struct {
+	CourseID    *int        `json:"course_id" validate:"omitempty,gte=1"`
+	CollegeID   *int        `json:"college_id" validate:"omitempty,gte=1"`
+	Title       *string     `json:"title" validate:"omitempty,min=3,max=100"`
+	Description *string     `json:"description" validate:"omitempty,max=200"`
+	StartTime   *time.Time  `json:"start_time" validate:"omitempty"`
+	EndTime     *time.Time  `json:"end_time" validate:"omitempty"`
+	MeetingLink *string     `json:"meeting_link" validate:"omitempty,url"`
+}

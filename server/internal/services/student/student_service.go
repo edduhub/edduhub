@@ -21,6 +21,7 @@ type StudentDetailedProfile struct {
 type StudentService interface {
 	FindByKratosID(ctx context.Context, kratosID string) (*models.Student, error)
 	GetStudentDetailedProfile(ctx context.Context, collegeID int, studentID int) (*StudentDetailedProfile, error)
+	UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error
 	// Add other student-specific business logic methods here
 	// For example:
 	// GetStudentDashboardData(ctx context.Context, collegeID int, studentID int) (*StudentDashboard, error)
@@ -77,8 +78,8 @@ func (s *studentService) GetStudentDetailedProfile(ctx context.Context, collegeI
 
 	// Fetch profile
 	g.Go(func() error {
-		profile, err := s.profileRepo.GetProfileByUserID(gCtx, student.KratosIdentityID)                                                // Assuming KratosIdentityID is the UserID for profile
-		if err != nil && err.Error() != fmt.Sprintf("GetProfileByUserID: profile for user ID %s not found", student.KratosIdentityID) { // Don't error if profile simply not found
+		profile, err := s.profileRepo.GetProfileByUserID(gCtx, student.KratosIdentityID)
+		if err != nil && err.Error() != fmt.Sprintf("GetProfileByUserID: profile for user ID %s not found", student.KratosIdentityID) {
 			return fmt.Errorf("failed to get profile: %w", err)
 		}
 		detailedProfile.Profile = profile
@@ -87,7 +88,7 @@ func (s *studentService) GetStudentDetailedProfile(ctx context.Context, collegeI
 
 	// Fetch enrollments
 	g.Go(func() error {
-		enrollments, err := s.enrollmentRepo.FindEnrollmentsByStudent(gCtx, collegeID, studentID, 0, 0) // 0,0 for no limit/offset for now
+		enrollments, err := s.enrollmentRepo.FindEnrollmentsByStudent(gCtx, collegeID, studentID, 0, 0)
 		if err != nil {
 			return fmt.Errorf("failed to get enrollments: %w", err)
 		}
@@ -96,4 +97,8 @@ func (s *studentService) GetStudentDetailedProfile(ctx context.Context, collegeI
 	})
 
 	return detailedProfile, g.Wait()
+}
+
+func (s *studentService) UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error {
+	return s.studentRepo.UpdateStudentPartial(ctx, collegeID, studentID, req)
 }

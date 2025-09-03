@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS enrollments (
     student_id INT NOT NULL,
     course_id INT NOT NULL,
     college_id INT NOT NULL, -- Denormalized? Or specific to enrollment context?
-    enrollment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    enrollment_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     status VARCHAR(50) NOT NULL DEFAULT 'Active', -- e.g., Active, Completed, Dropped
     grade VARCHAR(10), -- Nullable
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

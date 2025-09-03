@@ -6,9 +6,9 @@ vars:
   COVERAGE_INTEGRATION_OUT: coverage-integration.out
   COVERAGE_MERGED_OUT: coverage-merged.out
   COVERAGE_HTML_OUT: coverage.html
-  MIGRATE_PATH: /home/tgt/Desktop/edduhub/server/db/migrations
+  MIGRATE_PATH: server/db/migrations
   # Using TEST_DB_URL assuming this is for the test database based on the instructions
-  TEST_DB_URL: postgres://user:password@localhost:5432/testdb?sslmode=disable
+  TEST_DB_URL: postgres://keto:secret@localhost:5432/keto?sslmode=disable
 
 
 tasks:

@@ -15,6 +15,7 @@ type CollegeService interface {
 	GetCollegeByID(ctx context.Context, id int) (*models.College, error)
 	GetCollegeByName(ctx context.Context, name string) (*models.College, error)
 	UpdateCollege(ctx context.Context, college *models.College) error
+	UpdateCollegePartial(ctx context.Context, id int, req *models.UpdateCollegeRequest) error
 	DeleteCollege(ctx context.Context, id int) error
 	ListColleges(ctx context.Context, limit, offset uint64) ([]*models.College, error)
 }
@@ -59,4 +60,11 @@ func (c *collegeService) DeleteCollege(ctx context.Context, id int) error {
 
 func (c *collegeService) ListColleges(ctx context.Context, limit, offset uint64) ([]*models.College, error) {
 	return c.collegeRepo.ListColleges(ctx, limit, offset)
+}
+
+func (c *collegeService) UpdateCollegePartial(ctx context.Context, id int, req *models.UpdateCollegeRequest) error {
+	if err := c.validate.Struct(req); err != nil {
+		return fmt.Errorf("validation failed for college update: %w", err)
+	}
+	return c.collegeRepo.UpdateCollegePartial(ctx, id, req)
 }

@@ -19,7 +19,7 @@ type ProfileRepository interface {
 	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
 	GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error)
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
-	// Optional: DeleteProfile(ctx context.Context, profileID int) error
+	DeleteProfile(ctx context.Context, profile *models.Profile) error
 }
 
 type profileRepository struct {
@@ -101,5 +101,20 @@ func (r *profileRepository) UpdateProfile(ctx context.Context, profile *models.P
 	if commandTag.RowsAffected() == 0 {
 		return fmt.Errorf("UpdateProfile: no profile found with ID %d, or no changes made", profile.ID)
 	}
+	return nil
+}
+
+
+func (r *profileRepository) DeleteProfile(ctx context.Context, profile *models.Profile) error {
+	sql := `DELETE FROM profiles WHERE id = $1`
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, profile.ID)
+	if err != nil {
+		return fmt.Errorf("DeleteProfile: failed to execute query: %w", err)
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("DeleteProfile: no profile found with ID %d", profile.ID)
+	}
+
 	return nil
 }

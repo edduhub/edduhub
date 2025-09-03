@@ -68,6 +68,45 @@ func (m *AuthMiddleware) ValidateSession(next echo.HandlerFunc) echo.HandlerFunc
 	}
 }
 
+// ValidateJWT checks if the JWT token provided in the Authorization header
+// is valid. This replaces session-based validation with JWT token validation.
+func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		authHeader := c.Request().Header.Get("Authorization")
+		if authHeader == "" {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "No authorization header provided",
+			})
+		}
+
+		// Extract token from Bearer header
+		const bearerPrefix = "Bearer "
+		if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "Invalid authorization header format. Expected: Bearer <token>",
+			})
+		}
+
+		jwtToken := authHeader[len(bearerPrefix):]
+		if jwtToken == "" {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "Empty JWT token",
+			})
+		}
+
+		identity, err := m.AuthService.ValidateJWT(c.Request().Context(), jwtToken)
+		if err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "Invalid JWT token: " + err.Error(),
+			})
+		}
+
+		// Store identity in context for later use by other middleware handlers.
+		c.Set(identityContextKey, identity)
+		return next(c)
+	}
+}
+
 // RequireCollege ensures that the authenticated user belongs to the specified college.
 // It extracts the collegeID from URL parameters and then calls AuthService.CheckCollegeAccess.
 // Under a multitenant setup, this helps isolate college-specific resources.
@@ -102,7 +141,7 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 				return helpers.Error(c, "Unauthorized", 403)
 			}
 			if student == nil {
-				helpers.Error(c, "Not registered", 401)
+				return helpers.Error(c, "Not registered", 401)
 			}
 			if !student.IsActive {
 				return helpers.Error(c, "Inactive", 401)

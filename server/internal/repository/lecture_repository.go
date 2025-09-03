@@ -16,6 +16,7 @@ type LectureRepository interface {
 	CreateLecture(ctx context.Context, lecture *models.Lecture) error
 	GetLectureByID(ctx context.Context, collegeID int, lectureID int) (*models.Lecture, error)
 	UpdateLecture(ctx context.Context, lecture *models.Lecture) error
+	UpdateLecturePartial(ctx context.Context, collegeID int, lectureID int, req *models.UpdateLectureRequest) error
 	DeleteLecture(ctx context.Context, collegeID int, lectureID int) error
 
 	// Finder methods
@@ -109,4 +110,64 @@ func (r *lectureRepository) CountLecturesByCourse(ctx context.Context, collegeID
 		return 0, fmt.Errorf("CountLecturesByCourse: failed to execute query or scan: %w", err)
 	}
 	return count, nil
+}
+
+func (r *lectureRepository) UpdateLecturePartial(ctx context.Context, collegeID int, lectureID int, req *models.UpdateLectureRequest) error {
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE lectures SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.CourseID != nil {
+		sql += fmt.Sprintf(`, course_id = $%d`, argIndex)
+		args = append(args, int32(*req.CourseID))
+		argIndex++
+	}
+	if req.CollegeID != nil {
+		sql += fmt.Sprintf(`, college_id = $%d`, argIndex)
+		args = append(args, int32(*req.CollegeID))
+		argIndex++
+	}
+	if req.Title != nil {
+		sql += fmt.Sprintf(`, title = $%d`, argIndex)
+		args = append(args, *req.Title)
+		argIndex++
+	}
+	if req.Description != nil {
+		sql += fmt.Sprintf(`, description = $%d`, argIndex)
+		args = append(args, *req.Description)
+		argIndex++
+	}
+	if req.StartTime != nil {
+		sql += fmt.Sprintf(`, start_time = $%d`, argIndex)
+		args = append(args, *req.StartTime)
+		argIndex++
+	}
+	if req.EndTime != nil {
+		sql += fmt.Sprintf(`, end_time = $%d`, argIndex)
+		args = append(args, *req.EndTime)
+		argIndex++
+	}
+	if req.MeetingLink != nil {
+		sql += fmt.Sprintf(`, meeting_link = $%d`, argIndex)
+		args = append(args, *req.MeetingLink)
+		argIndex++
+	}
+
+	if len(args) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	sql += fmt.Sprintf(` WHERE id = $%d AND college_id = $%d`, argIndex, argIndex+1)
+	args = append(args, int32(lectureID), int32(collegeID))
+
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateLecturePartial: failed to execute query: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateLecturePartial: lecture with ID %d not found in college %d", lectureID, collegeID)
+	}
+
+	return nil
 }

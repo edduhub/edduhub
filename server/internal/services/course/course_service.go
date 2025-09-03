@@ -14,6 +14,7 @@ type CourseService interface {
 	CreateCourse(ctx context.Context, course *models.Course) error
 	FindCourseByID(ctx context.Context, collegeID int, courseID int) (*models.Course, error) // Added collegeID
 	UpdateCourse(ctx context.Context, courseID int, course *models.Course) error
+	UpdateCoursePartial(ctx context.Context, collegeID int, courseID int, req *models.UpdateCourseRequest) error
 	DeleteCourse(ctx context.Context, collegeID int, courseID int) error
 
 	// Find methods with pagination
@@ -80,4 +81,11 @@ func (c *courseService) CountCoursesByCollege(ctx context.Context, collegeID int
 
 func (c *courseService) CountCoursesByInstructor(ctx context.Context, collegeID int, instructorID int) (int, error) {
 	return c.courseRepo.CountCoursesByInstructor(ctx, collegeID, instructorID)
+}
+
+func (c *courseService) UpdateCoursePartial(ctx context.Context, collegeID int, courseID int, req *models.UpdateCourseRequest) error {
+	if err := c.validate.Struct(req); err != nil {
+		return fmt.Errorf("validation failed for course update: %w", err)
+	}
+	return c.courseRepo.UpdateCoursePartial(ctx, collegeID, courseID, req)
 }

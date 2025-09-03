@@ -25,6 +25,7 @@ type StudentRepository interface {
 	// Find methods with pagination
 	FindAllStudentsByCollege(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Student, error)
 	CountStudentsByCollege(ctx context.Context, collegeID int) (int, error)
+	UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error
 }
 
 type studentRepository struct {
@@ -330,4 +331,46 @@ WHERE kratos_identity_id = $1`
 	}
 
 	return &student, nil
+}
+func (s *studentRepository) UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error {
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE students SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.UserID != nil {
+		sql += fmt.Sprintf(`, user_id = $%d`, argIndex)
+		args = append(args, int32(*req.UserID))
+		argIndex++
+	}
+	if req.CollegeID != nil {
+		sql += fmt.Sprintf(`, college_id = $%d`, argIndex)
+		args = append(args, int32(*req.CollegeID))
+		argIndex++
+	}
+	if req.EnrollmentYear != nil {
+		sql += fmt.Sprintf(`, enrollment_year = $%d`, argIndex)
+		args = append(args, int32(*req.EnrollmentYear))
+		argIndex++
+	}
+	if req.RollNo != nil {
+		sql += fmt.Sprintf(`, roll_no = $%d`, argIndex)
+		args = append(args, *req.RollNo)
+		argIndex++
+	}
+	if req.IsActive != nil {
+		sql += fmt.Sprintf(`, is_active = $%d`, argIndex)
+		args = append(args, *req.IsActive)
+		argIndex++
+	}
+
+	sql += fmt.Sprintf(` WHERE student_id = $%d AND college_id = $%d`, argIndex, argIndex+1)
+	args = append(args, int32(studentID), int32(collegeID))
+
+	_, err := s.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateStudentPartial: failed to execute query: %w", err)
+	}
+
+	return nil
 }

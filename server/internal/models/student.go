@@ -18,3 +18,12 @@ type Student struct {
 	// Enrollments []*Enrollment `db:"-" json:"enrollments,omitempty"`
 	// QRCodes     []*QRCode     `db:"-" json:"qr_codes,omitempty"`
 }
+
+// UpdateStudentRequest provides fields for partial updates to Student via PATCH
+type UpdateStudentRequest struct {
+	UserID *int `json:"user_id" validate:"omitempty,gte=1"`
+	CollegeID *int `json:"college_id" validate:"omitempty,gte=1"`
+	EnrollmentYear *int `json:"enrollment_year" validate:"omitempty,gte=1947"`
+	RollNo *string `json:"roll_no" validate:"omitempty,min=1,max=50"`
+	IsActive *bool `json:"is_active" validate:"omitempty"`
+}

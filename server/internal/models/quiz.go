@@ -116,3 +116,28 @@ type QuizStatistics struct {
 	HighestScore      int `json:"highest_score"`
 	LowestScore       int `json:"lowest_score"`
 }
+
+// UpdateQuizRequest provides fields for partial updates to Quiz via PATCH
+type UpdateQuizRequest struct {
+	CollegeID        *int       `json:"college_id" validate:"omitempty,gte=1"`
+	CourseID         *int       `json:"course_id" validate:"omitempty,gte=1"`
+	Title            *string    `json:"title" validate:"omitempty,min=1,max=100"`
+	Description      *string    `json:"description" validate:"omitempty,max=500"`
+	TimeLimitMinutes *int       `json:"time_limit_minutes" validate:"omitempty,gte=0"`
+	DueDate          *time.Time `json:"due_date" validate:"omitempty"`
+}
+
+// UpdateQuestionRequest provides fields for partial updates to Question via PATCH
+type UpdateQuestionRequest struct {
+	QuizID *int      `json:"quiz_id" validate:"omitempty,gte=1"`
+	Text   *string   `json:"text" validate:"omitempty,min=1,max=1000"`
+	Type   *QuizType `json:"type" validate:"omitempty,oneof=MultipleChoice TrueFalse ShortAnswer"`
+	Points *int      `json:"points" validate:"omitempty,gte=0,lte=100"`
+}
+
+// UpdateAnswerOptionRequest provides fields for partial updates to AnswerOption via PATCH
+type UpdateAnswerOptionRequest struct {
+	QuestionID *int    `json:"question_id" validate:"omitempty,gte=1"`
+	Text       *string `json:"text" validate:"omitempty,min=1,max=250"`
+	IsCorrect  *bool   `json:"is_correct" validate:"omitempty"`
+}

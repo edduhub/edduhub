@@ -14,6 +14,7 @@ type LectureService interface {
 	CreateLecture(ctx context.Context, lecture *models.Lecture) error
 	GetLectureByID(ctx context.Context, collegeID int, lectureID int) (*models.Lecture, error)
 	UpdateLecture(ctx context.Context, lecture *models.Lecture) error
+	UpdateLecturePartial(ctx context.Context, collegeID int, lectureID int, req *models.UpdateLectureRequest) error
 	DeleteLecture(ctx context.Context, collegeID int, lectureID int) error
 
 	// Finder methods
@@ -71,4 +72,11 @@ func (l *lectureService) FindLecturesByCourse(ctx context.Context, collegeID int
 
 func (l *lectureService) CountLecturesByCourse(ctx context.Context, collegeID int, courseID int) (int, error) {
 	return l.lectureRepo.CountLecturesByCourse(ctx, collegeID, courseID)
+}
+
+func (l *lectureService) UpdateLecturePartial(ctx context.Context, collegeID int, lectureID int, req *models.UpdateLectureRequest) error {
+	if err := l.validate.Struct(req); err != nil {
+		return fmt.Errorf("validation failed for lecture update: %w", err)
+	}
+	return l.lectureRepo.UpdateLecturePartial(ctx, collegeID, lectureID, req)
 }

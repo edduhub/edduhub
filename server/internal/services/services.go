@@ -11,6 +11,7 @@ import (
 	"eduhub/server/internal/services/lecture"
 	"eduhub/server/internal/services/quiz" // Added Quiz service import
 	"eduhub/server/internal/services/student"
+	"eduhub/server/internal/services/user"
 )
 
 type Services struct {

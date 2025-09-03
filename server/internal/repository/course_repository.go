@@ -16,6 +16,7 @@ type CourseRepository interface {
 	CreateCourse(ctx context.Context, course *models.Course) error
 	FindCourseByID(ctx context.Context, collegeID int, courseID int) (*models.Course, error)
 	UpdateCourse(ctx context.Context, course *models.Course) error
+	UpdateCoursePartial(ctx context.Context, collegeID int, courseID int, req *models.UpdateCourseRequest) error
 	DeleteCourse(ctx context.Context, collegeID int, courseID int) error
 
 	// Find methods with pagination
@@ -244,4 +245,54 @@ WHERE college_id = $1 AND instructor_id = $2`
 	}
 
 	return int(count), nil
+}
+
+func (c *courseRepository) UpdateCoursePartial(ctx context.Context, collegeID int, courseID int, req *models.UpdateCourseRequest) error {
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE courses SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.Name != nil {
+		sql += fmt.Sprintf(`, name = $%d`, argIndex)
+		args = append(args, *req.Name)
+		argIndex++
+	}
+	if req.CollegeID != nil {
+		sql += fmt.Sprintf(`, college_id = $%d`, argIndex)
+		args = append(args, int32(*req.CollegeID))
+		argIndex++
+	}
+	if req.Description != nil {
+		sql += fmt.Sprintf(`, description = $%d`, argIndex)
+		args = append(args, *req.Description)
+		argIndex++
+	}
+	if req.Credits != nil {
+		sql += fmt.Sprintf(`, credits = $%d`, argIndex)
+		args = append(args, int32(*req.Credits))
+		argIndex++
+	}
+	if req.InstructorID != nil {
+		sql += fmt.Sprintf(`, instructor_id = $%d`, argIndex)
+		args = append(args, int32(*req.InstructorID))
+		argIndex++
+	}
+
+	if len(args) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	sql += fmt.Sprintf(` WHERE id = $%d AND college_id = $%d`, argIndex, argIndex+1)
+	args = append(args, int32(courseID), int32(collegeID))
+
+	commandTag, err := c.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateCoursePartial: failed to execute query: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateCoursePartial: course with ID %d not found in college %d", courseID, collegeID)
+	}
+
+	return nil
 }
