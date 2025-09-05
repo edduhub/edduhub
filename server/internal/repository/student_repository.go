@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -63,35 +64,13 @@ func (s *studentRepository) CreateStudent(ctx context.Context, student *models.S
     $1, $2, $3, $4, $5, $6, $7, $8
 ) RETURNING student_id, user_id, college_id, kratos_identity_id, enrollment_year, roll_no, is_active, created_at, updated_at`
 
-	var enrollmentYear sqlDriver.NullInt32
+	var enrollmentYear int32
 
-	err := s.Pool.QueryRow(ctx, sql,
-		int32(student.UserID),
-		int32(student.CollegeID),
-		student.KratosIdentityID,
-		int32(student.EnrollmentYear),
-		student.RollNo,
-		student.IsActive,
-		student.CreatedAt,
-		student.UpdatedAt,
-	).Scan(
-		&student.StudentID,
-		&student.UserID,
-		&student.CollegeID,
-		&student.KratosIdentityID,
-		&enrollmentYear,
-		&student.RollNo,
-		&student.IsActive,
-		&student.CreatedAt,
-		&student.UpdatedAt,
-	)
+	args := []any{int32(student.UserID), int32(student.CollegeID), student.KratosIdentityID, enrollmentYear, student.RollNo, student.IsActive, student.CreatedAt, student.UpdatedAt}
+	err := pgxscan.Get(ctx, s.Pool, student, sql, args...)
 
 	if err != nil {
 		return fmt.Errorf("CreateStudent: failed to execute query: %w", err)
-	}
-
-	if enrollmentYear.Valid {
-		student.EnrollmentYear = int(enrollmentYear.Int32)
 	}
 
 	return nil
@@ -104,19 +83,7 @@ WHERE roll_no = $1 AND college_id = $2`
 
 	var student models.Student
 	var enrollmentYear sqlDriver.NullInt32
-
-	err := s.Pool.QueryRow(ctx, sql, rollNo, int32(collegeID)).Scan(
-		&student.StudentID,
-		&student.UserID,
-		&student.CollegeID,
-		&student.KratosIdentityID,
-		&enrollmentYear,
-		&student.RollNo,
-		&student.IsActive,
-		&student.CreatedAt,
-		&student.UpdatedAt,
-	)
-
+	err := pgxscan.Get(ctx, s.Pool, &student, sql, rollNo, int32(collegeID))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, fmt.Errorf("GetStudentByRollNo: student with rollNo %s not found in college %d", rollNo, collegeID)
@@ -149,45 +116,11 @@ FROM students
 WHERE college_id = $1
 ORDER BY roll_no ASC
 LIMIT $2 OFFSET $3`
-
-	rows, err := s.Pool.Query(ctx, sql, int32(collegeID), int32(limit), int32(offset))
+	var students []*models.Student
+	err := pgxscan.Select(ctx, s.Pool, &students, sql, int32(collegeID), int32(limit), int32(offset))
 	if err != nil {
-		return nil, fmt.Errorf("FindAllStudentsByCollege: failed to execute query: %w", err)
+		return nil, fmt.Errorf("FindAllStudentsByCollege: failed to query students %w", err)
 	}
-
-	defer rows.Close()
-
-	students := make([]*models.Student, 0)
-	for rows.Next() {
-		var student models.Student
-		var enrollmentYear sqlDriver.NullInt32
-
-		err := rows.Scan(
-			&student.StudentID,
-			&student.UserID,
-			&student.CollegeID,
-			&student.KratosIdentityID,
-			&enrollmentYear,
-			&student.RollNo,
-			&student.IsActive,
-			&student.CreatedAt,
-			&student.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("FindAllStudentsByCollege: failed to scan: %w", err)
-		}
-
-		if enrollmentYear.Valid {
-			student.EnrollmentYear = int(enrollmentYear.Int32)
-		}
-
-		students = append(students, &student)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("FindAllStudentsByCollege: failed during rows iteration: %w", err)
-	}
-
 	return students, nil
 }
 
@@ -213,25 +146,13 @@ WHERE student_id = $1 AND college_id = $2`
 	var student models.Student
 	var enrollmentYear sqlDriver.NullInt32
 
-	err := s.Pool.QueryRow(ctx, sql, int32(studentID), int32(collegeID)).Scan(
-		&student.StudentID,
-		&student.UserID,
-		&student.CollegeID,
-		&student.KratosIdentityID,
-		&enrollmentYear,
-		&student.RollNo,
-		&student.IsActive,
-		&student.CreatedAt,
-		&student.UpdatedAt,
-	)
-
+	err := pgxscan.Get(ctx, s.Pool, &student, sql, studentID, collegeID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("GetStudentByID: failed to execute query: %w", err)
 	}
-
 	if enrollmentYear.Valid {
 		student.EnrollmentYear = int(enrollmentYear.Int32)
 	}
@@ -306,19 +227,7 @@ WHERE kratos_identity_id = $1`
 
 	var student models.Student
 	var enrollmentYear sqlDriver.NullInt32
-
-	err := s.Pool.QueryRow(ctx, sql, kratosID).Scan(
-		&student.StudentID,
-		&student.UserID,
-		&student.CollegeID,
-		&student.KratosIdentityID,
-		&enrollmentYear,
-		&student.RollNo,
-		&student.IsActive,
-		&student.CreatedAt,
-		&student.UpdatedAt,
-	)
-
+	err := pgxscan.Select(ctx, s.Pool, &student, sql, kratosID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil

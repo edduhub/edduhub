@@ -9,7 +9,13 @@ type Department struct {
 	HOD       string    `db:"hod" json:"hod"` // Head of Department (could be a user ID in the future)
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
 
-	// Relations - not stored in DB
-	College *College `db:"-" json:"college,omitempty"`
+type UpdateDepartmentRequest struct {
+	ID        *int    `db:"id" validate:"omitempty,gte=0"`
+	CollegeID *int    `db:"college_id" validate:"omitempty,gte=0"`
+	Name      *string `db:"name" validate:"omitempty,min=4,max=40"`
+	HOD       *string  `db:"hod" validate:"omitempty,min=3,max=30"`
+	CreatedAt *time.Time
+	UpdatedAt *time.Time
 }

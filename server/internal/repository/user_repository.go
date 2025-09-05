@@ -53,14 +53,15 @@ func (u *userRepository) CreateUser(ctx context.Context, user *models.User) erro
 	}
 
 	// Build the INSERT query directly
-	sql := `INSERT INTO users (name, role, email, kratos_identity_id, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	sql := `INSERT INTO users (name, role, email, kratos_identity_id, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, role, email, kratos_identity_id, is_active, created_at, updated_at`
 	args := []any{user.Name, user.Role, user.Email, user.KratosIdentityID, user.IsActive, user.CreatedAt, user.UpdatedAt}
 
-	// Execute the query and scan the returned ID back into the struct
-	err := u.DB.Pool.QueryRow(ctx, sql, args...).Scan(&user.ID)
+	var result models.User
+	err := pgxscan.Get(ctx, u.DB.Pool, &result, sql, args...)
 	if err != nil {
-		return fmt.Errorf("CreateUser: failed to execute query or scan ID: %w", err)
+		return fmt.Errorf("CreateUser: failed to execute query or scan: %w", err)
 	}
+	*user = result
 
 	return nil // Success
 }
@@ -133,14 +134,16 @@ func (u *userRepository) FindAllUsers(ctx context.Context, limit, offset uint64)
 
 // CountUsers counts the total number of users.
 func (u *userRepository) CountUsers(ctx context.Context) (int, error) {
-	sql := `SELECT COUNT(*) FROM users`
+	sql := `SELECT COUNT(*) as count FROM users`
 
-	var count int
-	err := u.DB.Pool.QueryRow(ctx, sql).Scan(&count)
+	var result struct {
+		Count int `db:"count"`
+	}
+	err := pgxscan.Get(ctx, u.DB.Pool, &result, sql)
 	if err != nil {
 		return 0, fmt.Errorf("CountUsers: failed to execute query or scan: %w", err)
 	}
-	return count, nil
+	return result.Count, nil
 }
 
 // UpdateUser updates an existing user record.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -64,15 +65,7 @@ func (c *courseRepository) CreateCourse(ctx context.Context, course *models.Cour
 
 	var result models.Course
 
-	err := c.Pool.QueryRow(ctx, sql,
-		course.Name,
-		course.Description,
-		int32(course.Credits),
-		int32(course.InstructorID),
-		int32(course.CollegeID),
-		course.CreatedAt,
-		course.UpdatedAt,
-	).Scan(&result.ID, &result.Name, &result.Description, &result.Credits, &result.InstructorID, &result.CollegeID, &result.CreatedAt, &result.UpdatedAt)
+	err := pgxscan.Get(ctx, c.Pool, &result, sql, course.Name, course.Description, int32(course.Credits), int32(course.InstructorID), int32(course.CollegeID), course.CreatedAt, course.UpdatedAt)
 
 	if err != nil {
 		return fmt.Errorf("CreateCourse: failed to execute query: %w", err)
@@ -91,16 +84,7 @@ WHERE id = $1 AND college_id = $2`
 
 	var course models.Course
 
-	err := c.Pool.QueryRow(ctx, sql, int32(courseID), int32(collegeID)).Scan(
-		&course.ID,
-		&course.Name,
-		&course.Description,
-		&course.Credits,
-		&course.InstructorID,
-		&course.CollegeID,
-		&course.CreatedAt,
-		&course.UpdatedAt,
-	)
+	err := pgxscan.Get(ctx, c.Pool, &course, sql, int32(courseID), int32(collegeID))
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -160,27 +144,10 @@ WHERE college_id = $1
 ORDER BY name ASC
 LIMIT $2 OFFSET $3`
 
-	rows, err := c.Pool.Query(ctx, sql, int32(collegeID), int32(limit), int32(offset))
-	if err != nil {
-		return nil, fmt.Errorf("FindAllCourses: failed to execute query: %w", err)
-	}
-
-	defer rows.Close()
-
 	courses := make([]*models.Course, 0)
-	for rows.Next() {
-		var course models.Course
-
-		err := rows.Scan(&course.ID, &course.Name, &course.Description, &course.Credits, &course.InstructorID, &course.CollegeID, &course.CreatedAt, &course.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("FindAllCourses: failed to scan: %w", err)
-		}
-
-		courses = append(courses, &course)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("FindAllCourses: failed during rows iteration: %w", err)
+	err := pgxscan.Select(ctx, c.Pool, &courses, sql, int32(collegeID), int32(limit), int32(offset))
+	if err != nil {
+		return nil, fmt.Errorf("FindAllCourses: failed to scan: %w", err)
 	}
 
 	return courses, nil
@@ -193,27 +160,10 @@ WHERE college_id = $1 AND instructor_id = $2
 ORDER BY name ASC
 LIMIT $3 OFFSET $4`
 
-	rows, err := c.Pool.Query(ctx, sql, int32(collegeID), int32(instructorID), int32(limit), int32(offset))
-	if err != nil {
-		return nil, fmt.Errorf("FindCoursesByInstructor: failed to execute query: %w", err)
-	}
-
-	defer rows.Close()
-
 	courses := make([]*models.Course, 0)
-	for rows.Next() {
-		var course models.Course
-
-		err := rows.Scan(&course.ID, &course.Name, &course.Description, &course.Credits, &course.InstructorID, &course.CollegeID, &course.CreatedAt, &course.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("FindCoursesByInstructor: failed to scan: %w", err)
-		}
-
-		courses = append(courses, &course)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("FindCoursesByInstructor: failed during rows iteration: %w", err)
+	err := pgxscan.Select(ctx, c.Pool, &courses, sql, int32(collegeID), int32(instructorID), int32(limit), int32(offset))
+	if err != nil {
+		return nil, fmt.Errorf("FindCoursesByInstructor: failed to scan: %w", err)
 	}
 
 	return courses, nil
@@ -224,13 +174,15 @@ func (c *courseRepository) CountCoursesByCollege(ctx context.Context, collegeID 
 FROM courses
 WHERE college_id = $1`
 
-	var count int64
-	err := c.Pool.QueryRow(ctx, sql, int32(collegeID)).Scan(&count)
+	var result struct {
+		Count int64 `db:"count"`
+	}
+	err := pgxscan.Get(ctx, c.Pool, &result, sql, int32(collegeID))
 	if err != nil {
 		return 0, fmt.Errorf("CountCoursesByCollege: failed to execute query: %w", err)
 	}
 
-	return int(count), nil
+	return int(result.Count), nil
 }
 
 func (c *courseRepository) CountCoursesByInstructor(ctx context.Context, collegeID int, instructorID int) (int, error) {
@@ -238,13 +190,15 @@ func (c *courseRepository) CountCoursesByInstructor(ctx context.Context, college
 FROM courses
 WHERE college_id = $1 AND instructor_id = $2`
 
-	var count int64
-	err := c.Pool.QueryRow(ctx, sql, int32(collegeID), int32(instructorID)).Scan(&count)
+	var result struct {
+		Count int64 `db:"count"`
+	}
+	err := pgxscan.Get(ctx, c.Pool, &result, sql, int32(collegeID), int32(instructorID))
 	if err != nil {
 		return 0, fmt.Errorf("CountCoursesByInstructor: failed to execute query: %w", err)
 	}
 
-	return int(count), nil
+	return int(result.Count), nil
 }
 
 func (c *courseRepository) UpdateCoursePartial(ctx context.Context, collegeID int, courseID int, req *models.UpdateCourseRequest) error {

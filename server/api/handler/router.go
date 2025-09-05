@@ -34,9 +34,9 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 
 	// User profile management
 	profile := apiGroup.Group("/profile")
-	profile.GET("", a.User.GetProfile)
-	profile.PATCH("", a.User.UpdateProfile)    // PATCH: Allows partial updates to user profile
-	profile.PATCH("/password", a.User.ChangePassword)    // PATCH: Allows partial updates to password
+	// profile.GET("", a.User.GetProfile)
+	// profile.PATCH("", a.User.UpdateProfile)    // PATCH: Allows partial updates to user profile
+	// profile.PATCH("/password", a.User.ChangePassword)    // PATCH: Allows partial updates to password
 
 	// College management
 	college := apiGroup.Group("/college", m.RequireRole(middleware.RoleAdmin))
@@ -45,14 +45,14 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	college.GET("/stats", a.College.GetCollegeStats)
 
 	// User management
-	users := apiGroup.Group("/users", m.RequireRole(middleware.RoleAdmin))
-	users.GET("", a.User.ListUsers)
-	users.POST("", a.User.CreateUser)
-	users.GET("/:userID", a.User.GetUser)
-	users.PATCH("/:userID", a.User.UpdateUser)    // PATCH: Allows partial updates to user details
-	users.DELETE("/:userID", a.User.DeleteUser)
-	users.PATCH("/:userID/role", a.User.UpdateUserRole)    // PATCH: Allows partial updates to user role
-	users.PATCH("/:userID/status", a.User.UpdateUserStatus)    // PATCH: Allows partial updates to user status
+	// users := apiGroup.Group("/users", m.RequireRole(middleware.RoleAdmin))
+	// users.GET("", a.User.ListUsers)
+	// users.POST("", a.User.CreateUser)
+	// users.GET("/:userID", a.User.GetUser)
+	// users.PATCH("/:userID", a.User.UpdateUser)    // PATCH: Allows partial updates to user details
+	// users.DELETE("/:userID", a.User.DeleteUser)
+	// users.PATCH("/:userID/role", a.User.UpdateUserRole)    // PATCH: Allows partial updates to user role
+	// users.PATCH("/:userID/status", a.User.UpdateUserStatus)    // PATCH: Allows partial updates to user status
 
 	// Student management
 	students := apiGroup.Group("/students", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))

@@ -12,6 +12,7 @@ type Handlers struct {
 	College    *CollegeHandler
 	Course     *CourseHandler
 	Lecture    *LectureHandler
+	Quiz       *QuizHandler
 	// other handlers
 }
 
@@ -24,5 +25,6 @@ func NewHandlers(services *services.Services) *Handlers {
 		College:    NewCollegeHandler(services.CollegeService),
 		Course:     NewCourseHandler(services.CourseService),
 		Lecture:    NewLectureHandler(services.LectureService),
+		Quiz:       NewQuizHandler(services.QuizService),
 	}
 }

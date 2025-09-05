@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"eduhub/server/internal/models"
@@ -22,10 +23,6 @@ type AttendanceRepository interface {
 	GetAttendanceStudentInCourse(ctx context.Context, collegeID int, studentID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
 	GetAttendanceStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.Attendance, error)
 	GetAttendanceByLecture(ctx context.Context, collegeID int, lectureID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
-
-	// Count methods (add corresponding count methods if needed)
-	// ProcessQRCode(ctx context.Context, collegeID int, studentID int, courseID int, lectureID int) (bool, error)
-	// SetAttendanceStatus(ctx context.Context, collegeID int, studentID, courseID int, lectureID int, status string) error
 }
 
 const attendanceTable = "attendance"
@@ -64,24 +61,10 @@ WHERE college_id = $1 AND course_id = $2
 ORDER BY date DESC, student_id ASC
 LIMIT $3 OFFSET $4`
 
-	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(courseID), int32(limit), int32(offset))
-	if err != nil {
-		return nil, fmt.Errorf("GetAttendanceByCourse: failed to execute query: %w", err)
-	}
-	defer rows.Close()
-
 	attendances := make([]*models.Attendance, 0)
-	for rows.Next() {
-		attendance := &models.Attendance{}
-		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
-		if err != nil {
-			return nil, fmt.Errorf("GetAttendanceByCourse: failed to scan: %w", err)
-		}
-		attendances = append(attendances, attendance)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("GetAttendanceByCourse: failed during rows iteration: %w", err)
+	err := pgxscan.Select(ctx, a.Pool, &attendances, sql, int32(collegeID), int32(courseID), int32(limit), int32(offset))
+	if err != nil {
+		return nil, fmt.Errorf("GetAttendanceByCourse: failed to scan: %w", err)
 	}
 
 	return attendances, nil
@@ -107,16 +90,7 @@ func (a *attendanceRepository) MarkAttendance(ctx context.Context, collegeID int
 	RETURNING *`
 
 	var result models.Attendance
-	err := a.Pool.QueryRow(ctx, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), attendanceDate, "Present", now).Scan(
-		&result.ID,
-		&result.StudentID,
-		&result.CourseID,
-		&result.CollegeID,
-		&result.Date,
-		&result.Status,
-		&result.ScannedAt,
-		&result.LectureID,
-	)
+	err := pgxscan.Get(ctx, a.Pool, &result, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), attendanceDate, "Present", now)
 	if err != nil {
 		return false, fmt.Errorf("MarkAttendance: failed to execute query: %w", err)
 	}
@@ -150,24 +124,10 @@ WHERE college_id = $1 AND student_id = $2 AND course_id = $3
 ORDER BY date DESC, scanned_at DESC
 LIMIT $4 OFFSET $5`
 
-	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(studentID), int32(courseID), int32(limit), int32(offset))
-	if err != nil {
-		return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed to execute query: %w", err)
-	}
-	defer rows.Close()
-
 	attendances := make([]*models.Attendance, 0)
-	for rows.Next() {
-		attendance := &models.Attendance{}
-		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
-		if err != nil {
-			return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed to scan: %w", err)
-		}
-		attendances = append(attendances, attendance)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed during rows iteration: %w", err)
+	err := pgxscan.Select(ctx, a.Pool, &attendances, sql, int32(collegeID), int32(studentID), int32(courseID), int32(limit), int32(offset))
+	if err != nil {
+		return nil, fmt.Errorf("GetAttendanceStudentInCourse: failed to scan: %w", err)
 	}
 
 	return attendances, nil
@@ -185,24 +145,10 @@ WHERE college_id = $1 AND student_id = $2
 ORDER BY date DESC, course_id ASC, scanned_at DESC
 LIMIT $3 OFFSET $4`
 
-	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(studentID), int32(limit), int32(offset))
-	if err != nil {
-		return nil, fmt.Errorf("GetAttendanceStudent: failed to execute query: %w", err)
-	}
-	defer rows.Close()
-
 	attendances := make([]*models.Attendance, 0)
-	for rows.Next() {
-		attendance := &models.Attendance{}
-		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
-		if err != nil {
-			return nil, fmt.Errorf("GetAttendanceStudent: failed to scan: %w", err)
-		}
-		attendances = append(attendances, attendance)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("GetAttendanceStudent: failed during rows iteration: %w", err)
+	err := pgxscan.Select(ctx, a.Pool, &attendances, sql, int32(collegeID), int32(studentID), int32(limit), int32(offset))
+	if err != nil {
+		return nil, fmt.Errorf("GetAttendanceStudent: failed to scan: %w", err)
 	}
 
 	return attendances, nil
@@ -222,24 +168,10 @@ WHERE college_id = $1 AND lecture_id = $2 AND course_id = $3
 ORDER BY student_id ASC, scanned_at ASC
 LIMIT $4 OFFSET $5`
 
-	rows, err := a.Pool.Query(ctx, sql, int32(collegeID), int32(lectureID), int32(courseID), int32(limit), int32(offset))
-	if err != nil {
-		return nil, fmt.Errorf("GetAttendanceByLecture: failed to execute query: %w", err)
-	}
-	defer rows.Close()
-
 	attendances := make([]*models.Attendance, 0)
-	for rows.Next() {
-		attendance := &models.Attendance{}
-		err := rows.Scan(&attendance.ID, &attendance.StudentID, &attendance.CourseID, &attendance.CollegeID, &attendance.Date, &attendance.Status, &attendance.ScannedAt, &attendance.LectureID)
-		if err != nil {
-			return nil, fmt.Errorf("GetAttendanceByLecture: failed to scan: %w", err)
-		}
-		attendances = append(attendances, attendance)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("GetAttendanceByLecture: failed during rows iteration: %w", err)
+	err := pgxscan.Select(ctx, a.Pool, &attendances, sql, int32(collegeID), int32(lectureID), int32(courseID), int32(limit), int32(offset))
+	if err != nil {
+		return nil, fmt.Errorf("GetAttendanceByLecture: failed to scan: %w", err)
 	}
 
 	return attendances, nil

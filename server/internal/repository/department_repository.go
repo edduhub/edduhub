@@ -17,6 +17,7 @@ type DepartmentRepository interface {
 	GetDepartmentByID(ctx context.Context, collegeID int, departmentID int) (*models.Department, error)
 	GetDepartmentByName(ctx context.Context, collegeID int, name string) (*models.Department, error)
 	UpdateDepartment(ctx context.Context, department *models.Department) error
+	UpdateDepartmentPartial(ctx context.Context, department *models.UpdateDepartmentRequest) error
 	DeleteDepartment(ctx context.Context, collegeID int, departmentID int) error
 	ListDepartmentsByCollege(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Department, error)
 	CountDepartmentsByCollege(ctx context.Context, collegeID int) (int, error)
@@ -39,11 +40,13 @@ func (r *departmentRepository) CreateDepartment(ctx context.Context, department 
 	department.CreatedAt = now
 	department.UpdatedAt = now
 
-	sql := `INSERT INTO departments (college_id, name, hod, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`
-	err := r.DB.Pool.QueryRow(ctx, sql, department.CollegeID, department.Name, department.HOD, department.CreatedAt, department.UpdatedAt).Scan(&department.ID)
+	sql := `INSERT INTO departments (college_id, name, hod, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id, college_id, name, hod, created_at, updated_at`
+	var result models.Department
+	err := pgxscan.Get(ctx, r.DB.Pool, &result, sql, department.CollegeID, department.Name, department.HOD, department.CreatedAt, department.UpdatedAt)
 	if err != nil {
-		return fmt.Errorf("CreateDepartment: failed to execute query or scan ID: %w", err)
+		return fmt.Errorf("CreateDepartment: failed to execute query or scan: %w", err)
 	}
+	*department = result
 	return nil
 }
 
@@ -107,13 +110,48 @@ func (r *departmentRepository) ListDepartmentsByCollege(ctx context.Context, col
 	}
 	return departments, nil
 }
+func (r *departmentRepository) UpdateDepartmentPartial(ctx context.Context, req *models.UpdateDepartmentRequest) error {
+	sql := `UPDATE departments SET updated_at=NOW()`
+	args := []interface{}{}
+	argIndex := 1
+	if req.ID != nil {
+		sql += fmt.Sprintf(`, id=$%d`, argIndex)
+		args = append(args, *req.ID)
+		argIndex++
+	}
+	if req.CollegeID != nil {
+		sql += fmt.Sprintf(`, college_id=$%d`, argIndex)
+		args = append(args, int32(*req.CollegeID))
+		argIndex++
+	}
+	if req.Name != nil {
+		sql += fmt.Sprintf(`, name=$%d`, argIndex)
+		args = append(args, req.Name)
+		argIndex++
+	}
+	if req.HOD != nil {
+		sql += fmt.Sprintf(`, hod=$%d`, argIndex)
+		args = append(args, *req.HOD)
+		argIndex++
+	}
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, args)
+	if err != nil {
+		return fmt.Errorf("failed to update department partially")
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("unable to update ")
+	}
+	return nil
 
+}
 func (r *departmentRepository) CountDepartmentsByCollege(ctx context.Context, collegeID int) (int, error) {
-	var count int
-	sql := `SELECT COUNT(*) FROM departments WHERE college_id = $1`
-	err := r.DB.Pool.QueryRow(ctx, sql, collegeID).Scan(&count)
+	sql := `SELECT COUNT(*) as count FROM departments WHERE college_id = $1`
+	var result struct {
+		Count int `db:"count"`
+	}
+	err := pgxscan.Get(ctx, r.DB.Pool, &result, sql, collegeID)
 	if err != nil {
 		return 0, fmt.Errorf("CountDepartmentsByCollege: exec/scan: %w", err)
 	}
-	return count, nil
+	return result.Count, nil
 }

@@ -40,12 +40,14 @@ func (r *lectureRepository) CreateLecture(ctx context.Context, lecture *models.L
 	lecture.CreatedAt = now
 	lecture.UpdatedAt = now
 
-	sql := `INSERT INTO lectures (course_id, college_id, title, description, start_time, end_time, meeting_link, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
-	err := r.DB.Pool.QueryRow(ctx, sql, lecture.CourseID, lecture.CollegeID, lecture.Title, lecture.Description, lecture.StartTime, lecture.EndTime, lecture.MeetingLink, lecture.CreatedAt, lecture.UpdatedAt).Scan(&lecture.ID)
+	sql := `INSERT INTO lectures (course_id, college_id, title, description, start_time, end_time, meeting_link, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, course_id, college_id, title, description, start_time, end_time, meeting_link, created_at, updated_at`
+	var result models.Lecture
+	err := pgxscan.Get(ctx, r.DB.Pool, &result, sql, lecture.CourseID, lecture.CollegeID, lecture.Title, lecture.Description, lecture.StartTime, lecture.EndTime, lecture.MeetingLink, lecture.CreatedAt, lecture.UpdatedAt)
 	if err != nil {
 		// Consider checking for specific DB errors like foreign key violations
-		return fmt.Errorf("CreateLecture: failed to execute query or scan ID: %w", err)
+		return fmt.Errorf("CreateLecture: failed to execute query or scan: %w", err)
 	}
+	*lecture = result
 	return nil
 }
 
@@ -103,13 +105,15 @@ func (r *lectureRepository) FindLecturesByCourse(ctx context.Context, collegeID 
 }
 
 func (r *lectureRepository) CountLecturesByCourse(ctx context.Context, collegeID int, courseID int) (int, error) {
-	sql := `SELECT COUNT(*) FROM lectures WHERE college_id = $1 AND course_id = $2`
-	var count int
-	err := r.DB.Pool.QueryRow(ctx, sql, collegeID, courseID).Scan(&count)
+	sql := `SELECT COUNT(*) as count FROM lectures WHERE college_id = $1 AND course_id = $2`
+	var result struct {
+		Count int `db:"count"`
+	}
+	err := pgxscan.Get(ctx, r.DB.Pool, &result, sql, collegeID, courseID)
 	if err != nil {
 		return 0, fmt.Errorf("CountLecturesByCourse: failed to execute query or scan: %w", err)
 	}
-	return count, nil
+	return result.Count, nil
 }
 
 func (r *lectureRepository) UpdateLecturePartial(ctx context.Context, collegeID int, lectureID int, req *models.UpdateLectureRequest) error {

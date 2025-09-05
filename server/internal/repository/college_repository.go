@@ -53,11 +53,13 @@ func (c *collegeRepository) CreateCollege(ctx context.Context, college *models.C
 	college.CreatedAt = now
 	college.UpdatedAt = now
 
-	sql := `INSERT INTO college (name, address, city, state, country, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
-	err := c.DB.Pool.QueryRow(ctx, sql, college.Name, college.Address, college.City, college.State, college.Country, college.CreatedAt, college.UpdatedAt).Scan(&college.ID)
+	sql := `INSERT INTO college (name, address, city, state, country, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, address, city, state, country, created_at, updated_at`
+	var result models.College
+	err := pgxscan.Get(ctx, c.DB.Pool, &result, sql, college.Name, college.Address, college.City, college.State, college.Country, college.CreatedAt, college.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreateCollege: failed to execute query: %w", err)
 	}
+	*college = result
 	return nil
 }
 
