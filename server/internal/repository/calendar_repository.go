@@ -44,10 +44,14 @@ func (r *calendarRepository) CreateCalendarBlock(ctx context.Context, block *mod
 
 	sql := `INSERT INTO calendar_blocks (college_id, title, description, event_type, date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
 
-	err := r.DB.Pool.QueryRow(ctx, sql, block.CollegeID, block.Title, block.Description, block.EventType, block.Date, block.CreatedAt, block.UpdatedAt).Scan(&block.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, block.CollegeID, block.Title, block.Description, block.EventType, block.Date, block.CreatedAt, block.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreateCalendarBlock: failed to execute query or scan ID: %w", err)
 	}
+	block.ID = temp.ID
 	return nil
 }
 
@@ -159,10 +163,12 @@ func (r *calendarRepository) CountCalendarBlocks(ctx context.Context, filter mod
 	whereClause, args := r.applyCalendarBlockFilter(filter)
 	sql := "SELECT COUNT(*) FROM calendar_blocks " + whereClause
 
-	var count int
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	temp := struct {
+		Count int `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return 0, fmt.Errorf("CountCalendarBlocks: failed to execute query or scan: %w", err)
 	}
-	return count, nil
+	return temp.Count, nil
 }

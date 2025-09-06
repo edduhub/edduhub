@@ -44,10 +44,14 @@ func (r *timetableRepository) CreateTimeTableBlock(ctx context.Context, block *m
 	block.UpdatedAt = now
 
 	sql := `INSERT INTO timetable_blocks (college_id, department_id, course_id, class_id, day_of_week, start_time, end_time, room_number, faculty_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`
-	err := r.DB.Pool.QueryRow(ctx, sql, block.CollegeID, block.DepartmentID, block.CourseID, block.ClassID, block.DayOfWeek, block.StartTime, block.EndTime, block.RoomNumber, block.FacultyID, block.CreatedAt, block.UpdatedAt).Scan(&block.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, block.CollegeID, block.DepartmentID, block.CourseID, block.ClassID, block.DayOfWeek, block.StartTime, block.EndTime, block.RoomNumber, block.FacultyID, block.CreatedAt, block.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreateTimeTableBlock: failed to execute query or scan ID: %w", err)
 	}
+	block.ID = temp.ID
 	return nil
 }
 
@@ -207,10 +211,12 @@ func (r *timetableRepository) CountTimeTableBlocks(ctx context.Context, filter m
 		args = append(args, *filter.EndTime)
 	}
 
-	var count int
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	temp := struct {
+		Count int `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return 0, fmt.Errorf("CountTimeTableBlocks: failed to execute query or scan: %w", err)
 	}
-	return count, nil
+	return temp.Count, nil
 }

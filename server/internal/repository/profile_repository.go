@@ -47,10 +47,14 @@ func (r *profileRepository) CreateProfile(ctx context.Context, profile *models.P
 	}
 
 	sql := `INSERT INTO profiles (user_id, college_id, bio, profile_image, phone_number, address, date_of_birth, joined_at, last_active, preferences, social_links, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`
-	err := r.DB.Pool.QueryRow(ctx, sql, profile.UserID, profile.CollegeID, profile.Bio, profile.ProfileImage, profile.PhoneNumber, profile.Address, profile.DateOfBirth, profile.JoinedAt, profile.LastActive, profile.Preferences, profile.SocialLinks, profile.CreatedAt, profile.UpdatedAt).Scan(&profile.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, profile.UserID, profile.CollegeID, profile.Bio, profile.ProfileImage, profile.PhoneNumber, profile.Address, profile.DateOfBirth, profile.JoinedAt, profile.LastActive, profile.Preferences, profile.SocialLinks, profile.CreatedAt, profile.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreateProfile: failed to execute query or scan ID: %w", err)
 	}
+	profile.ID = temp.ID
 	return nil
 }
 

@@ -129,13 +129,15 @@ func (s *studentRepository) CountStudentsByCollege(ctx context.Context, collegeI
 FROM students
 WHERE college_id = $1`
 
-	var count int64
-	err := s.Pool.QueryRow(ctx, sql, int32(collegeID)).Scan(&count)
+	temp := struct {
+		Count int64 `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, s.Pool, &temp, sql, int32(collegeID))
 	if err != nil {
 		return 0, fmt.Errorf("CountStudentsByCollege: failed to execute query: %w", err)
 	}
 
-	return int(count), nil
+	return int(temp.Count), nil
 }
 
 func (s *studentRepository) GetStudentByID(ctx context.Context, collegeID int, studentID int) (*models.Student, error) {

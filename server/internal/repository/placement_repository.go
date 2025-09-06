@@ -44,10 +44,14 @@ func (r *placementRepository) CreatePlacement(ctx context.Context, placement *mo
 	placement.UpdatedAt = now
 
 	sql := `INSERT INTO placements (college_id, student_id, company_name, job_title, package, placement_date, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
-	err := r.DB.Pool.QueryRow(ctx, sql, placement.CollegeID, placement.StudentID, placement.CompanyName, placement.JobTitle, placement.Package, placement.PlacementDate, placement.Status, placement.CreatedAt, placement.UpdatedAt).Scan(&placement.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, placement.CollegeID, placement.StudentID, placement.CompanyName, placement.JobTitle, placement.Package, placement.PlacementDate, placement.Status, placement.CreatedAt, placement.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreatePlacement: failed to execute query or scan ID: %w", err)
 	}
+	placement.ID = temp.ID
 	return nil
 }
 
@@ -122,12 +126,14 @@ func (r *placementRepository) FindPlacementsByCompany(ctx context.Context, colle
 }
 
 func (r *placementRepository) countPlacements(ctx context.Context, sql string, args []interface{}) (int, error) {
-	var count int
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	temp := struct {
+		Count int `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return 0, fmt.Errorf("countPlacements: failed to execute query or scan: %w", err)
 	}
-	return count, nil
+	return temp.Count, nil
 }
 
 func (r *placementRepository) CountPlacementsByStudent(ctx context.Context, collegeID int, studentID int) (int, error) {

@@ -49,11 +49,15 @@ func (r *gradeRepository) CreateGrade(ctx context.Context, grade *models.Grade) 
 	}
 
 	sql := `INSERT INTO grades (student_id, course_id, college_id, marks_obtained, total_marks, grade_letter, semester, academic_year, exam_type, graded_at, comments, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`
-	err := r.DB.Pool.QueryRow(ctx, sql, grade.StudentID, grade.CourseID, grade.CollegeID, grade.MarksObtained, grade.TotalMarks, grade.GradeLetter, grade.Semester, grade.AcademicYear, grade.ExamType, grade.GradedAt, grade.Comments, grade.CreatedAt, grade.UpdatedAt).Scan(&grade.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, grade.StudentID, grade.CourseID, grade.CollegeID, grade.MarksObtained, grade.TotalMarks, grade.GradeLetter, grade.Semester, grade.AcademicYear, grade.ExamType, grade.GradedAt, grade.Comments, grade.CreatedAt, grade.UpdatedAt)
 	if err != nil {
 		// Consider specific error handling for duplicate entries or foreign key violations
 		return fmt.Errorf("CreateGrade: failed to execute query or scan ID: %w", err)
 	}
+	grade.ID = temp.ID
 	return nil
 }
 

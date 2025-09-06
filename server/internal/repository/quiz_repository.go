@@ -89,10 +89,14 @@ func (r *quizRepository) CreateQuiz(ctx context.Context, quiz *models.Quiz) erro
 	sql := `INSERT INTO quizzes (college_id, course_id, title, description, time_limit_minutes, due_date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`
 	args := []any{quiz.CollegeID, quiz.CourseID, quiz.Title, quiz.Description, quiz.TimeLimitMinutes, quiz.DueDate, quiz.CreatedAt, quiz.UpdatedAt}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&quiz.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return fmt.Errorf("CreateQuiz: exec/scan: %w", err)
 	}
+	quiz.ID = temp.ID
 	return nil
 }
 
@@ -153,15 +157,17 @@ func (r *quizRepository) FindQuizzesByCourse(ctx context.Context, collegeID int,
 }
 
 func (r *quizRepository) CountQuizzesByCourse(ctx context.Context, collegeID int, courseID int) (int, error) {
-	var count int
 	sql := `SELECT COUNT(*) FROM quizzes WHERE college_id = $1 AND course_id = $2`
 	args := []any{collegeID, courseID}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	temp := struct {
+		Count int `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return 0, fmt.Errorf("CountQuizzesByCourse: exec/scan: %w", err)
 	}
-	return count, nil
+	return temp.Count, nil
 }
 
 // --- Question Methods ---
@@ -174,10 +180,14 @@ func (r *quizRepository) CreateQuestion(ctx context.Context, question *models.Qu
 	sql := `INSERT INTO questions (quiz_id, text, type, points, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	args := []any{question.QuizID, question.Text, question.Type, question.Points, question.CreatedAt, question.UpdatedAt}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&question.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return fmt.Errorf("CreateQuestion: exec/scan: %w", err)
 	}
+	question.ID = temp.ID
 	return nil
 }
 
@@ -238,15 +248,17 @@ func (r *quizRepository) FindQuestionsByQuiz(ctx context.Context, collegeID int,
 }
 
 func (r *quizRepository) CountQuestionsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
-	var count int
 	sql := `SELECT COUNT(q.id) FROM questions q JOIN quizzes qu ON q.quiz_id = qu.id WHERE q.quiz_id = $1 AND qu.college_id = $2`
 	args := []any{quizID, collegeID}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	temp := struct {
+		Count int `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return 0, fmt.Errorf("CountQuestionsByQuiz: exec/scan: %w", err)
 	}
-	return count, nil
+	return temp.Count, nil
 }
 
 // --- AnswerOption Methods ---
@@ -259,10 +271,14 @@ func (r *quizRepository) CreateAnswerOption(ctx context.Context, option *models.
 	sql := `INSERT INTO answer_options (question_id, text, is_correct, created_at, updated_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`
 	args := []any{option.QuestionID, option.Text, option.IsCorrect, option.CreatedAt, option.UpdatedAt}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&option.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return fmt.Errorf("CreateAnswerOption: exec/scan: %w", err)
 	}
+	option.ID = temp.ID
 	return nil
 }
 
@@ -338,10 +354,14 @@ func (r *quizRepository) CreateQuizAttempt(ctx context.Context, attempt *models.
 	sql := `INSERT INTO quiz_attempts (student_id, quiz_id, college_id, start_time, end_time, score, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
 	args := []any{attempt.StudentID, attempt.QuizID, attempt.CollegeID, attempt.StartTime, attempt.EndTime, attempt.Score, attempt.Status, attempt.CreatedAt, attempt.UpdatedAt}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&attempt.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return fmt.Errorf("CreateQuizAttempt: exec/scan: %w", err)
 	}
+	attempt.ID = temp.ID
 	return nil
 }
 
@@ -409,10 +429,14 @@ func (r *quizRepository) CreateStudentAnswer(ctx context.Context, answer *models
 	sql := `INSERT INTO student_answers (quiz_attempt_id, question_id, selected_option_id, answer_text, is_correct, points_awarded, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (quiz_attempt_id, question_id) DO UPDATE SET selected_option_id = EXCLUDED.selected_option_id, answer_text = EXCLUDED.answer_text, is_correct = EXCLUDED.is_correct, points_awarded = EXCLUDED.points_awarded, updated_at = EXCLUDED.updated_at RETURNING id`
 	args := []any{answer.QuizAttemptID, answer.QuestionID, answer.SelectedOptionID, answer.AnswerText, answer.IsCorrect, answer.PointsAwarded, answer.CreatedAt, answer.UpdatedAt}
 
-	err := r.DB.Pool.QueryRow(ctx, sql, args...).Scan(&answer.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return fmt.Errorf("CreateStudentAnswer: exec/scan: %w", err)
 	}
+	answer.ID = temp.ID
 	return nil
 }
 

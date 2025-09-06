@@ -59,10 +59,14 @@ func (e *enrollmentRepository) CreateEnrollment(ctx context.Context, enrollment 
 	args := []any{enrollment.StudentID, enrollment.CourseID, enrollment.CollegeID, enrollment.EnrollmentDate, enrollment.Status, enrollment.Grade, enrollment.CreatedAt, enrollment.UpdatedAt}
 
 	// Execute the query and scan the returned ID back into the struct
-	err := e.DB.Pool.QueryRow(ctx, sql, args...).Scan(&enrollment.ID)
+	temp := struct {
+		ID int `db:"id"`
+	}{}
+	err := pgxscan.Get(ctx, e.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return fmt.Errorf("CreateEnrollment: failed to execute query or scan ID: %w", err)
 	}
+	enrollment.ID = temp.ID
 
 	return nil // Success
 }
@@ -72,8 +76,10 @@ func (e *enrollmentRepository) IsStudentEnrolled(ctx context.Context, collegeID 
 	sql := `SELECT 1 FROM enrollments WHERE college_id = $1 AND student_id = $2 AND course_id = $3 LIMIT 1`
 	args := []any{collegeID, studentID, courseID}
 
-	var exists int
-	err := e.DB.Pool.QueryRow(ctx, sql, args...).Scan(&exists)
+	temp := struct {
+		Exists int `db:"1"`
+	}{}
+	err := pgxscan.Get(ctx, e.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return false, nil
@@ -179,13 +185,15 @@ func (e *enrollmentRepository) countEnrollments(ctx context.Context, collegeID i
 		args = append(args, courseID)
 	}
 
-	var count int
-	err := e.DB.Pool.QueryRow(ctx, sql, args...).Scan(&count)
+	temp := struct {
+		Count int `db:"count"`
+	}{}
+	err := pgxscan.Get(ctx, e.DB.Pool, &temp, sql, args...)
 	if err != nil {
 		return 0, fmt.Errorf("countEnrollments: failed to execute query or scan: %w", err)
 	}
 
-	return count, nil
+	return temp.Count, nil
 }
 
 // UpdateEnrollmentStatus updates the status of a specific enrollment record by ID.
