@@ -10,6 +10,7 @@ type Repository struct {
 	DepartmentRepository DepartmentRepository // Added Department
 	ProfileRepository    ProfileRepository    // Added Profile
 	CourseRepository     CourseRepository
+	AssignmentRepository AssignmentRepository // Added Assignment
 	LectureRepository    LectureRepository
 	CollegeRepository    CollegeRepository
 	GradeRepository      GradeRepository
@@ -28,6 +29,7 @@ func NewRepository(DB *DB) *Repository {
 	departmentRepo := NewDepartmentRepository(DB) // Instantiate Department
 	profileRepo := NewProfileRepository(DB)       // Instantiate Profile
 	courseRepo := NewCourseRepository(DB)
+	assignmentRepo := NewAssignmentRepository(DB) // Instantiate Assignment
 	lectureRepo := NewLectureRepository(DB)
 	collegeRepo := NewCollegeRepository(DB)
 	gradeRepo := NewGradeRepository(DB)
@@ -41,6 +43,7 @@ func NewRepository(DB *DB) *Repository {
 		DepartmentRepository: departmentRepo,
 		ProfileRepository:    profileRepo,
 		CourseRepository:     courseRepo,
+		AssignmentRepository: assignmentRepo,
 		LectureRepository:    lectureRepo,
 		CollegeRepository:    collegeRepo,
 		GradeRepository:      gradeRepo,
