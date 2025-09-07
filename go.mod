@@ -1,6 +1,6 @@
 module eduhub
 
-go 1.24.2
+go 1.25
 
 require (
 	github.com/georgysavva/scany/v2 v2.1.4
@@ -11,7 +11,6 @@ require (
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.13.3
-	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/pashagolub/pgxmock v1.8.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -56,7 +55,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/crc64nvme v1.0.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
