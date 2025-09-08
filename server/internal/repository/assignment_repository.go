@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"eduhub/server/internal/models"
+	"eduhub/server/internal/storage"
 	"errors"
 	"fmt"
 	"time"
@@ -31,11 +32,13 @@ type AssignmentRepository interface {
 }
 
 type assignmentRepository struct {
-	DB *DB
+	DB          *DB
+	minioClient *storage.MinioClient
 }
 
-func NewAssignmentRepository(db *DB) AssignmentRepository {
-	return &assignmentRepository{DB: db}
+func NewAssignmentRepository(db *DB, minioClient *storage.MinioClient) AssignmentRepository {
+	return &assignmentRepository{DB: db,
+		minioClient: minioClient}
 }
 
 // --- Assignment Methods ---

@@ -1,5 +1,7 @@
 package repository
 
+import "eduhub/server/internal/storage"
+
 type Repository struct {
 	AttendanceRepository AttendanceRepository
 	StudentRepository    StudentRepository
@@ -18,7 +20,7 @@ type Repository struct {
 
 // NewRepository creates a new repository with all required sub-repositories
 // It needs a bun.DB instance to create the base repositories
-func NewRepository(DB *DB) *Repository {
+func NewRepository(DB *DB, minioCient *storage.MinioClient) *Repository {
 	// Create type-specific database repositories
 	attendanceRepo := NewAttendanceRepository(DB.Pool)
 	studentRepo := NewStudentRepository(DB)
@@ -29,7 +31,7 @@ func NewRepository(DB *DB) *Repository {
 	departmentRepo := NewDepartmentRepository(DB) // Instantiate Department
 	profileRepo := NewProfileRepository(DB)       // Instantiate Profile
 	courseRepo := NewCourseRepository(DB)
-	assignmentRepo := NewAssignmentRepository(DB) // Instantiate Assignment
+	assignmentRepo := NewAssignmentRepository(DB, minioCient) // Instantiate Assignment
 	lectureRepo := NewLectureRepository(DB)
 	collegeRepo := NewCollegeRepository(DB)
 	gradeRepo := NewGradeRepository(DB)
