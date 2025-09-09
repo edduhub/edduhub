@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"eduhub/server/internal/models"
@@ -18,6 +19,7 @@ type QuizRepository interface {
 	CreateQuiz(ctx context.Context, quiz *models.Quiz) error
 	GetQuizByID(ctx context.Context, collegeID int, quizID int) (*models.Quiz, error)
 	UpdateQuiz(ctx context.Context, quiz *models.Quiz) error
+	UpdateQuizPartial(ctx context.Context, collegeID int, quizID int, req *models.UpdateQuizRequest) error
 	DeleteQuiz(ctx context.Context, collegeID int, quizID int) error
 	FindQuizzesByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Quiz, error)
 	CountQuizzesByCourse(ctx context.Context, collegeID int, courseID int) (int, error)
@@ -126,6 +128,80 @@ func (r *quizRepository) UpdateQuiz(ctx context.Context, quiz *models.Quiz) erro
 	}
 	if cmdTag.RowsAffected() == 0 {
 		return fmt.Errorf("UpdateQuiz: not found or no changes (id: %d, college: %d)", quiz.ID, quiz.CollegeID)
+	}
+	return nil
+}
+
+func (r *quizRepository) UpdateQuizPartial(ctx context.Context, collegeID int, quizID int, req *models.UpdateQuizRequest) error {
+	// Validate input parameters
+	if collegeID <= 0 {
+		return fmt.Errorf("collegeID must be greater than 0")
+	}
+	if quizID <= 0 {
+		return fmt.Errorf("quizID must be greater than 0")
+	}
+	if req == nil {
+		return fmt.Errorf("UpdateQuizRequest cannot be nil")
+	}
+
+	// Check if at least one field is being updated
+	hasUpdates := req.Title != nil || req.Description != nil || req.TimeLimitMinutes != nil || req.DueDate != nil || req.CollegeID != nil || req.CourseID != nil
+	if !hasUpdates {
+		return fmt.Errorf("at least one field must be provided for update")
+	}
+
+	// Build dynamic SQL for partial update
+	setClauses := []string{"updated_at = NOW()"}
+	args := []any{}
+	paramCount := 0
+
+	// Add fields conditionally
+	if req.CollegeID != nil {
+		paramCount++
+		setClauses = append(setClauses, fmt.Sprintf("college_id = $%d", paramCount))
+		args = append(args, *req.CollegeID)
+	}
+	if req.CourseID != nil {
+		paramCount++
+		setClauses = append(setClauses, fmt.Sprintf("course_id = $%d", paramCount))
+		args = append(args, *req.CourseID)
+	}
+	if req.Title != nil {
+		paramCount++
+		setClauses = append(setClauses, fmt.Sprintf("title = $%d", paramCount))
+		args = append(args, *req.Title)
+	}
+	if req.Description != nil {
+		paramCount++
+		setClauses = append(setClauses, fmt.Sprintf("description = $%d", paramCount))
+		args = append(args, *req.Description)
+	}
+	if req.TimeLimitMinutes != nil {
+		paramCount++
+		setClauses = append(setClauses, fmt.Sprintf("time_limit_minutes = $%d", paramCount))
+		args = append(args, *req.TimeLimitMinutes)
+	}
+	if req.DueDate != nil {
+		paramCount++
+		setClauses = append(setClauses, fmt.Sprintf("due_date = $%d", paramCount))
+		args = append(args, *req.DueDate)
+	}
+
+	// Add WHERE clause parameters
+	args = append(args, quizID, collegeID)
+
+	// Build the final SQL query
+	sql := fmt.Sprintf(`UPDATE quizzes SET %s WHERE id = $%d AND college_id = $%d`,
+		fmt.Sprintf(strings.Join(setClauses, ", ")),
+		len(setClauses)+1,
+		len(setClauses)+2)
+
+	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateQuizPartial: exec: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateQuizPartial: quiz not found or no changes (id: %d, college: %d)", quizID, collegeID)
 	}
 	return nil
 }

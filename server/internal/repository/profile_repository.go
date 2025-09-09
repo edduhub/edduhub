@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"eduhub/server/internal/models"
@@ -19,6 +20,7 @@ type ProfileRepository interface {
 	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
 	GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error)
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
+	UpdateProfilePartial(ctx context.Context, profileID string, req *models.UpdateProfileRequest) error
 	DeleteProfile(ctx context.Context, profile *models.Profile) error
 }
 
@@ -118,6 +120,84 @@ func (r *profileRepository) DeleteProfile(ctx context.Context, profile *models.P
 
 	if commandTag.RowsAffected() == 0 {
 		return fmt.Errorf("DeleteProfile: no profile found with ID %d", profile.ID)
+	}
+
+	return nil
+}
+
+func (r *profileRepository) UpdateProfilePartial(ctx context.Context, profileID string, req *models.UpdateProfileRequest) error {
+	if profileID == "" {
+		return fmt.Errorf("UpdateProfilePartial: profileID is required")
+	}
+
+	if req == nil {
+		return fmt.Errorf("UpdateProfilePartial: request cannot be nil")
+	}
+
+	// Check if at least one field is provided
+	hasUpdates := false
+	if req.UserID != nil || req.CollegeID != nil || req.Bio != nil || req.ProfileImage != nil || req.PhoneNumber != nil || req.Address != nil || req.DateOfBirth != nil || req.Preferences != nil || req.SocialLinks != nil {
+		hasUpdates = true
+	}
+
+	if !hasUpdates {
+		return fmt.Errorf("UpdateProfilePartial: at least one field must be provided for update")
+	}
+
+	// Build dynamic UPDATE query
+	var fields []string
+	args := []interface{}{}
+
+	if req.UserID != nil {
+		fields = append(fields, fmt.Sprintf("user_id = $%d", len(args)+1))
+		args = append(args, *req.UserID)
+	}
+	if req.CollegeID != nil {
+		fields = append(fields, fmt.Sprintf("college_id = $%d", len(args)+1))
+		args = append(args, *req.CollegeID)
+	}
+	if req.Bio != nil {
+		fields = append(fields, fmt.Sprintf("bio = $%d", len(args)+1))
+		args = append(args, *req.Bio)
+	}
+	if req.ProfileImage != nil {
+		fields = append(fields, fmt.Sprintf("profile_image = $%d", len(args)+1))
+		args = append(args, *req.ProfileImage)
+	}
+	if req.PhoneNumber != nil {
+		fields = append(fields, fmt.Sprintf("phone_number = $%d", len(args)+1))
+		args = append(args, *req.PhoneNumber)
+	}
+	if req.Address != nil {
+		fields = append(fields, fmt.Sprintf("address = $%d", len(args)+1))
+		args = append(args, *req.Address)
+	}
+	if req.DateOfBirth != nil {
+		fields = append(fields, fmt.Sprintf("date_of_birth = $%d", len(args)+1))
+		args = append(args, *req.DateOfBirth)
+	}
+	if req.Preferences != nil {
+		fields = append(fields, fmt.Sprintf("preferences = $%d", len(args)+1))
+		args = append(args, *req.Preferences)
+	}
+	if req.SocialLinks != nil {
+		fields = append(fields, fmt.Sprintf("social_links = $%d", len(args)+1))
+		args = append(args, *req.SocialLinks)
+	}
+
+	// Add WHERE clause placeholder
+	wherePlaceholder := fmt.Sprintf("$%d", len(args)+1)
+	args = append(args, profileID)
+
+	sql := fmt.Sprintf("UPDATE profiles SET %s, updated_at = NOW() WHERE id = %s", strings.Join(fields, ", "), wherePlaceholder)
+
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateProfilePartial: failed to execute query: %w", err)
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateProfilePartial: no profile found with ID %s", profileID)
 	}
 
 	return nil

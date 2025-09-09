@@ -17,6 +17,7 @@ type EnrollmentRepository interface {
 	GetEnrollmentByID(ctx context.Context, collegeID int, enrollmentID int) (*models.Enrollment, error) // Added collegeID for scoping
 	UpdateEnrollment(ctx context.Context, enrollment *models.Enrollment) error
 	UpdateEnrollmentStatus(ctx context.Context, collegeID int, enrollmentID int, status string) error // Added collegeID for scoping
+	UpdateEnrollmentPartial(ctx context.Context, collegeID int, enrollmentID int, req *models.UpdateEnrollmentRequest) error
 	DeleteEnrollment(ctx context.Context, collegeID int, enrollmentID int) error
 
 	// Find methods with pagination
@@ -227,9 +228,76 @@ func (e *enrollmentRepository) DeleteEnrollment(ctx context.Context, collegeID, 
 	if commandTag.RowsAffected() == 0 {
 		return fmt.Errorf("DeleteEnrollment: no enrollment found with ID %d for college ID %d, or already deleted", enrollmentID, collegeID)
 	}
-
-	return nil
+return nil
 }
+
+// UpdateEnrollmentPartial updates enrollment fields partially based on the provided request.
+func (e *enrollmentRepository) UpdateEnrollmentPartial(ctx context.Context, collegeID int, enrollmentID int, req *models.UpdateEnrollmentRequest) error {
+if enrollmentID <= 0 {
+	return fmt.Errorf("UpdateEnrollmentPartial: enrollmentID must be greater than 0")
+}
+if collegeID <= 0 {
+	return fmt.Errorf("UpdateEnrollmentPartial: collegeID must be greater than 0")
+}
+
+// Check if at least one field is provided for update
+hasUpdates := req.StudentID != nil || req.CourseID != nil || req.CollegeID != nil ||
+			  req.EnrollmentDate != nil || req.Status != nil || req.Grade != nil
+if !hasUpdates {
+	return fmt.Errorf("UpdateEnrollmentPartial: at least one field must be provided for update")
+}
+
+// Build dynamic query based on non-nil fields
+sql := `UPDATE enrollments SET updated_at = NOW()`
+args := []interface{}{}
+argIndex := 1
+
+if req.StudentID != nil {
+	sql += fmt.Sprintf(`, student_id = $%d`, argIndex)
+	args = append(args, *req.StudentID)
+	argIndex++
+}
+if req.CourseID != nil {
+	sql += fmt.Sprintf(`, course_id = $%d`, argIndex)
+	args = append(args, *req.CourseID)
+	argIndex++
+}
+if req.CollegeID != nil {
+	sql += fmt.Sprintf(`, college_id = $%d`, argIndex)
+	args = append(args, *req.CollegeID)
+	argIndex++
+}
+if req.EnrollmentDate != nil {
+	sql += fmt.Sprintf(`, enrollment_date = $%d`, argIndex)
+	args = append(args, *req.EnrollmentDate)
+	argIndex++
+}
+if req.Status != nil {
+	sql += fmt.Sprintf(`, status = $%d`, argIndex)
+	args = append(args, *req.Status)
+	argIndex++
+}
+if req.Grade != nil {
+	sql += fmt.Sprintf(`, grade = $%d`, argIndex)
+	args = append(args, *req.Grade)
+	argIndex++
+}
+
+sql += fmt.Sprintf(` WHERE id = $%d AND college_id = $%d`, argIndex, argIndex+1)
+args = append(args, enrollmentID, collegeID)
+
+commandTag, err := e.DB.Pool.Exec(ctx, sql, args...)
+if err != nil {
+	return fmt.Errorf("UpdateEnrollmentPartial: failed to execute query: %w", err)
+}
+
+if commandTag.RowsAffected() == 0 {
+	return fmt.Errorf("UpdateEnrollmentPartial: no enrollment found with ID %d for college ID %d, or no changes made", enrollmentID, collegeID)
+}
+
+return nil
+}
+
 
 // UpdateEnrollment updates mutable fields of an existing enrollment record.
 func (e *enrollmentRepository) UpdateEnrollment(ctx context.Context, enrollment *models.Enrollment) error {

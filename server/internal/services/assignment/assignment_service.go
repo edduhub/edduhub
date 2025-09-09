@@ -20,7 +20,6 @@ type AssignmentService interface {
 	CountAssignments(ctx context.Context, collegeID int) (int, error)
 
 	CreateSubmission(ctx context.Context, submission *models.AssignmentSubmission, file io.Reader, filePath string) error
-	
 }
 
 type assignmentService struct {
@@ -44,7 +43,20 @@ func (a *assignmentService) CreateAssignment(ctx context.Context, assignment *mo
 	}
 	return a.repo.CreateAssignment(ctx, assignment)
 }
+func (a *assignmentService) GetAssignment(ctx context.Context, collegeID, assignmentID int) (*models.Assignment, error) {
+	if collegeID == 0 || assignmentID == 0 {
+		return &models.Assignment{}, errors.New("invalid collegeID or assignmentID")
+	}
+	return a.repo.GetAssignmentByID(ctx, collegeID, assignmentID)
 
+}
+
+func (a *assignmentService) UpdateAssignment(ctx context.Context, collegeID int, assignment *models.Assignment) error {
+	if collegeID == 0 || assignment.ID == 0 {
+		return errors.New("invalid collegeID or assignmentID")
+	}
+	return a.repo.UpdateAssignment(ctx, assignment)
+}
 func (a *assignmentService) CreateSubmission(ctx context.Context, submission *models.AssignmentSubmission, file io.Reader, fileName string) error {
 	if submission.AssignmentID == 0 || submission.StudentID == 0 {
 		return errors.New("assignmentID and studentID are required ")

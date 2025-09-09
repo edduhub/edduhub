@@ -17,6 +17,18 @@ type Assignment struct {
 	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`                   // Timestamp of last update
 }
 
+type UpdateAssignmentRequest struct {
+	ID          *int
+	CourseID    *int
+	CollegeID   *int
+	Title       *string
+	Description *string
+	DueDate     *time.Time
+	MaxPoints   *int
+	CreatedAt   *time.Time
+	UpdatedAt   *time.Time
+}
+
 // AssignmentSubmission represents a student's submission for an assignment.
 type AssignmentSubmission struct {
 	ID             int       `db:"id" json:"id" validate:"omitempty,gte=0"`    // Primary Key

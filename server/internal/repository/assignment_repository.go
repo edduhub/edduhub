@@ -18,6 +18,7 @@ type AssignmentRepository interface {
 	CreateAssignment(ctx context.Context, assignment *models.Assignment) error
 	GetAssignmentByID(ctx context.Context, collegeID int, assignmentID int) (*models.Assignment, error)
 	UpdateAssignment(ctx context.Context, assignment *models.Assignment) error
+	UpdateAssignmentPartial(ctx context.Context, collegeID int, req *models.UpdateAssignmentRequest) error
 	DeleteAssignment(ctx context.Context, collegeID int, assignmentID int) error
 	FindAssignmentsByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Assignment, error)
 	CountAssignmentsByCourse(ctx context.Context, collegeID int, courseID int) (int, error)
@@ -103,6 +104,60 @@ func (r *assignmentRepository) UpdateAssignment(ctx context.Context, assignment 
 	return nil
 }
 
+// updates assignment partially
+
+func (r *assignmentRepository) UpdateAssignmentPartial(ctx context.Context, collegeID int, req *models.UpdateAssignmentRequest) error {
+	if req.ID == nil {
+		return fmt.Errorf("UpdateAssignmentPartial: assignment ID cannot be nil")
+	}
+
+	sql := `UPDATE assignments SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.CourseID != nil {
+		sql += fmt.Sprintf(`, course_id = $%d`, argIndex)
+		args = append(args, *req.CourseID)
+		argIndex++
+	}
+	if req.Title != nil {
+		sql += fmt.Sprintf(`, title = $%d`, argIndex)
+		args = append(args, *req.Title)
+		argIndex++
+	}
+	if req.Description != nil {
+		sql += fmt.Sprintf(`, description = $%d`, argIndex)
+		args = append(args, *req.Description)
+		argIndex++
+	}
+	if req.DueDate != nil {
+		sql += fmt.Sprintf(`, due_date = $%d`, argIndex)
+		args = append(args, *req.DueDate)
+		argIndex++
+	}
+	if req.MaxPoints != nil {
+		sql += fmt.Sprintf(`, max_points = $%d`, argIndex)
+		args = append(args, *req.MaxPoints)
+		argIndex++
+	}
+
+	if len(args) == 0 {
+		return fmt.Errorf("UpdateAssignmentPartial: no fields to update")
+	}
+
+	sql += fmt.Sprintf(` WHERE id = $%d AND college_id = $%d`, argIndex, argIndex+1)
+	args = append(args, *req.ID, collegeID)
+
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateAssignmentPartial: failed to execute query: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateAssignmentPartial: assignment with ID %d not found in college %d", *req.ID, collegeID)
+	}
+
+	return nil
+}
 func (r *assignmentRepository) DeleteAssignment(ctx context.Context, collegeID int, assignmentID int) error {
 	sql := `DELETE FROM assignments WHERE id = $1 AND college_id = $2`
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, assignmentID, collegeID)

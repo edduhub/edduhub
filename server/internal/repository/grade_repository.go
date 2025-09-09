@@ -24,6 +24,7 @@ type GradeRepository interface {
 	CreateGrade(ctx context.Context, grade *models.Grade) error
 	GetGradeByID(ctx context.Context, gradeID int, collegeID int) (*models.Grade, error)
 	UpdateGrade(ctx context.Context, grade *models.Grade) error
+	UpdateGradePartial(ctx context.Context, collegeID int, gradeID int, req *models.UpdateGradeRequest) error
 	DeleteGrade(ctx context.Context, gradeID int, collegeID int) error
 	GetGrades(ctx context.Context, filter models.GradeFilter) ([]*models.Grade, error)
 	// GetStudentProgress and GenerateStudentReport might be higher-level service methods
@@ -86,6 +87,104 @@ func (r *gradeRepository) UpdateGrade(ctx context.Context, grade *models.Grade) 
 	if commandTag.RowsAffected() == 0 {
 		return fmt.Errorf("UpdateGrade: no grade found with ID %d for college ID %d, or no changes made", grade.ID, grade.CollegeID)
 	}
+	return nil
+}
+
+func (r *gradeRepository) UpdateGradePartial(ctx context.Context, collegeID int, gradeID int, req *models.UpdateGradeRequest) error {
+	// Validate required parameters
+	if gradeID <= 0 || collegeID <= 0 {
+		return errors.New("UpdateGradePartial: gradeID and collegeID are required")
+	}
+
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE grades SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+	hasFieldsToUpdate := false
+
+	if req.StudentID != nil {
+		sql += fmt.Sprintf(", student_id = $%d", argIndex)
+		args = append(args, *req.StudentID)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.CourseID != nil {
+		sql += fmt.Sprintf(", course_id = $%d", argIndex)
+		args = append(args, *req.CourseID)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.CollegeID != nil {
+		sql += fmt.Sprintf(", college_id = $%d", argIndex)
+		args = append(args, *req.CollegeID)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.MarksObtained != nil {
+		sql += fmt.Sprintf(", marks_obtained = $%d", argIndex)
+		args = append(args, *req.MarksObtained)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.TotalMarks != nil {
+		sql += fmt.Sprintf(", total_marks = $%d", argIndex)
+		args = append(args, *req.TotalMarks)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.GradeLetter != nil {
+		sql += fmt.Sprintf(", grade_letter = $%d", argIndex)
+		args = append(args, *req.GradeLetter)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.Semester != nil {
+		sql += fmt.Sprintf(", semester = $%d", argIndex)
+		args = append(args, *req.Semester)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.AcademicYear != nil {
+		sql += fmt.Sprintf(", academic_year = $%d", argIndex)
+		args = append(args, *req.AcademicYear)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.ExamType != nil {
+		sql += fmt.Sprintf(", exam_type = $%d", argIndex)
+		args = append(args, *req.ExamType)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.GradedAt != nil {
+		sql += fmt.Sprintf(", graded_at = $%d", argIndex)
+		args = append(args, *req.GradedAt)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+	if req.Comments != nil {
+		sql += fmt.Sprintf(", comments = $%d", argIndex)
+		args = append(args, *req.Comments)
+		argIndex++
+		hasFieldsToUpdate = true
+	}
+
+	if !hasFieldsToUpdate {
+		return errors.New("UpdateGradePartial: at least one field must be provided for update")
+	}
+
+	sql += fmt.Sprintf(" WHERE id = $%d AND college_id = $%d", argIndex, argIndex+1)
+	args = append(args, gradeID, collegeID)
+
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateGradePartial: failed to execute query: %w", err)
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateGradePartial: grade with ID %d not found for college ID %d", gradeID, collegeID)
+	}
+
 	return nil
 }
 

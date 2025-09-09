@@ -24,6 +24,7 @@ type CalendarRepository interface {
 	CreateCalendarBlock(ctx context.Context, block *models.CalendarBlock) error
 	GetCalendarBlockByID(ctx context.Context, blockID int, collegeID int) (*models.CalendarBlock, error)
 	UpdateCalendarBlock(ctx context.Context, block *models.CalendarBlock) error
+	UpdateCalendarBlockPartial(ctx context.Context, collegeID int, calendarID int, req *models.UpdateCalendarRequest) error
 	DeleteCalendarBlock(ctx context.Context, blockID int, collegeID int) error
 	GetCalendarBlocks(ctx context.Context, filter models.CalendarBlockFilter) ([]*models.CalendarBlock, error)
 	CountCalendarBlocks(ctx context.Context, filter models.CalendarBlockFilter) (int, error)
@@ -82,6 +83,51 @@ func (r *calendarRepository) UpdateCalendarBlock(ctx context.Context, block *mod
 	if commandTag.RowsAffected() == 0 {
 		return fmt.Errorf("UpdateCalendarBlock: no block found with ID %d for college ID %d, or no changes made", block.ID, block.CollegeID)
 	}
+	return nil
+}
+
+func (r *calendarRepository) UpdateCalendarBlockPartial(ctx context.Context, collegeID int, calendarID int, req *models.UpdateCalendarRequest) error {
+	// Build dynamic query based on non-nil fields
+	sql := `UPDATE calendar_blocks SET updated_at = NOW()`
+	args := []interface{}{}
+	argIndex := 1
+
+	if req.Title != nil {
+		sql += fmt.Sprintf(`, title = $%d`, argIndex)
+		args = append(args, *req.Title)
+		argIndex++
+	}
+	if req.Description != nil {
+		sql += fmt.Sprintf(`, description = $%d`, argIndex)
+		args = append(args, *req.Description)
+		argIndex++
+	}
+	if req.EventType != nil {
+		sql += fmt.Sprintf(`, event_type = $%d`, argIndex)
+		args = append(args, *req.EventType)
+		argIndex++
+	}
+	if req.Date != nil {
+		sql += fmt.Sprintf(`, date = $%d`, argIndex)
+		args = append(args, *req.Date)
+		argIndex++
+	}
+
+	if len(args) == 0 {
+		return errors.New("UpdateCalendarBlockPartial: no fields to update")
+	}
+
+	sql += fmt.Sprintf(` WHERE id = $%d AND college_id = $%d`, argIndex, argIndex+1)
+	args = append(args, calendarID, collegeID)
+
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("UpdateCalendarBlockPartial: failed to execute query: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("UpdateCalendarBlockPartial: calendar block with ID %d not found in college %d", calendarID, collegeID)
+	}
+
 	return nil
 }
 

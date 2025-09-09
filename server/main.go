@@ -2,9 +2,9 @@
 package main
 
 import (
-	"log"
-
 	"eduhub/server/api/app"
+	"eduhub/server/logger"
+
 	// Use standard log for fatal startup errors before custom logger is ready
 
 	"github.com/joho/godotenv"
@@ -32,20 +32,20 @@ import (
 func main() {
 	// Load .env file FIRST
 	err := godotenv.Load()
+	logger := logger.NewZeroLogger(true)
+
 	if err != nil {
-		// Log a warning, don't necessarily stop if it might run with existing env vars
-		log.Println("Warning: Error loading .env file:", err)
+		logger.Logger.Warn().Msg("unable to load  env variables")
 	}
 
 	// Create the app instance (which loads config, logger, db, etc.)
 	setup := app.New()
-
+	logger.Logger.Debug().Msg("app instance created")
 	// Start the application
 	err = setup.Start()
 	if err != nil {
-		// Use log.Fatalf for fatal errors during startup
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Logger.Fatal().Msg("unable to start the application")
 	}
-	// If Start() returns successfully (e.g., graceful shutdown), log it.
-	log.Println("Server stopped gracefully.")
+
+	logger.Logger.Debug().Msg("server stopped successfully")
 }
