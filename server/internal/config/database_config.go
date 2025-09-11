@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"eduhub/server/internal/repository"
 
@@ -62,10 +63,20 @@ func LoadDatabase() *repository.DB {
 	}
 
 	dsn := buildDSN(*dbConfig)
-
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		fmt.Println("unable to parse config")
+	}
+	poolConfig.MaxConnIdleTime = 10 * time.Minute
+	poolConfig.MaxConnLifetime = 1 * time.Hour
+	poolConfig.MinConns = 4
+	poolConfig.MaxConns = 100
+	poolConfig.HealthCheckPeriod = 1 * time.Hour
 	// Use a context with timeout for connection attempts in production
 	// For this example, using context.Background() as in original
-	pool, err := pgxpool.New(context.Background(), dsn)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		// Same note about panic vs return error applies
 		panic(fmt.Errorf("failed to connect to database: %w", err))
@@ -79,7 +90,7 @@ func LoadDatabase() *repository.DB {
 
 	// --- Complete the return statement ---
 	return &repository.DB{
-		Pool: pool, // Assign the connected pool to the Pool field
+		Pool: pool,
 	}
 }
 

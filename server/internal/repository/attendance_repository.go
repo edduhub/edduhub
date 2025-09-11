@@ -19,8 +19,11 @@ type AttendanceRepository interface {
 	UnFreezeAttendance(ctx context.Context, collegeID int, studentID int) error
 
 	// Get methods with pagination
+	// get attendnace by course of all students 
 	GetAttendanceByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
+	// get attendnace of a particular student in a course 
 	GetAttendanceStudentInCourse(ctx context.Context, collegeID int, studentID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
+	// get attendance of a student across all courses 
 	GetAttendanceStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.Attendance, error)
 	GetAttendanceByLecture(ctx context.Context, collegeID int, lectureID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
 }

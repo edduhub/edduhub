@@ -67,9 +67,6 @@ func (a *attendanceService) ProcessQRCode(ctx context.Context, collegeID int, st
 		return fmt.Errorf("failed to mark attendance: %w", err)
 	}
 	if !marked {
-		// This case might indicate a specific condition like already marked,
-		// or student not enrolled, which might be better handled by MarkAttendance returning specific errors.
-		// Returning a generic error might be okay depending on requirements.
 		return errors.New("unable to mark attendance (check enrollment or if already marked)")
 	}
 
