@@ -5,8 +5,6 @@ import (
 	"eduhub/server/api/app"
 	"eduhub/server/logger"
 
-	// Use standard log for fatal startup errors before custom logger is ready
-
 	"github.com/joho/godotenv"
 )
 
@@ -44,7 +42,7 @@ func main() {
 	// Start the application
 	err = setup.Start()
 	if err != nil {
-		logger.Logger.Fatal().Msg("unable to start the application")
+		logger.Logger.Error().Msg("failed to start application")
 	}
 
 	logger.Logger.Debug().Msg("server stopped successfully")

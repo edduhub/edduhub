@@ -30,22 +30,33 @@ func NewServices(cfg *config.Config) *Services {
 	kratosService := auth.NewKratosService()
 	ketoService := auth.NewKetoService()
 	authService := auth.NewAuthService(kratosService, ketoService)
-	repo := repository.NewRepository(cfg.DB)
+
+	// Create individual repository instances using modular approach
+	studentRepo := repository.NewStudentRepository(cfg.DB)
+	attendanceRepo := repository.NewAttendanceRepository(cfg.DB.Pool)
+	enrollmentRepo := repository.NewEnrollmentRepository(cfg.DB)
+	profileRepo := repository.NewProfileRepository(cfg.DB)
+	gradeRepo := repository.NewGradeRepository(cfg.DB)
+	collegeRepo := repository.NewCollegeRepository(cfg.DB)
+	courseRepo := repository.NewCourseRepository(cfg.DB)
+	userRepo := repository.NewUserRepository(cfg.DB)
+	lectureRepo := repository.NewLectureRepository(cfg.DB)
+	quizRepo := repository.NewQuizRepository(cfg.DB)
 
 	studentService := student.NewstudentService(
-		repo.StudentRepository,
-		repo.AttendanceRepository,
-		repo.EnrollmentRepository,
-		repo.ProfileRepository, // Added ProfileRepository
-		repo.GradeRepository,   // Added GradeRepository
+		studentRepo,
+		attendanceRepo,
+		enrollmentRepo,
+		profileRepo,
+		gradeRepo,
 	)
 	// systemService := system.NewSystemService(cfg.DB)
-	attendanceService := attendance.NewAttendanceService(repo.AttendanceRepository, repo.StudentRepository, repo.EnrollmentRepository)
-	collegeService := college.NewCollegeService(repo.CollegeRepository)
-	courseService := course.NewCourseService(repo.CourseRepository)
-	gradeService := grades.NewGradeServices(repo.GradeRepository, repo.StudentRepository, repo.EnrollmentRepository, repo.CourseRepository)
-	lectureService := lecture.NewLectureService(repo.LectureRepository)
-	quizService := quiz.NewQuizService(repo.QuizRepository, repo.CourseRepository, repo.CollegeRepository, repo.EnrollmentRepository) // Initialize QuizService
+	attendanceService := attendance.NewAttendanceService(attendanceRepo, studentRepo, enrollmentRepo)
+	collegeService := college.NewCollegeService(collegeRepo)
+	courseService := course.NewCourseService(courseRepo, collegeRepo, userRepo)
+	gradeService := grades.NewGradeServices(gradeRepo, studentRepo, enrollmentRepo, courseRepo)
+	lectureService := lecture.NewLectureService(lectureRepo)
+	quizService := quiz.NewQuizService(quizRepo, courseRepo, collegeRepo, enrollmentRepo)
 
 	return &Services{
 		Auth:           authService,
@@ -55,6 +66,6 @@ func NewServices(cfg *config.Config) *Services {
 		CourseService:  courseService,
 		GradeService:   gradeService,
 		LectureService: lectureService,
-		QuizService:    quizService, // Add QuizService to the struct
+		QuizService:    quizService,
 	}
 }
