@@ -126,4 +126,12 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	calendar.POST("", a.Calendar.CreateEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	calendar.PATCH("/:eventID", a.Calendar.UpdateEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))    // PATCH: Allows partial updates to calendar event
 	calendar.DELETE("/:eventID", a.Calendar.DeleteEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Announcement management
+	announcements := apiGroup.Group("/announcements")
+	announcements.GET("", a.Announcement.ListAnnouncements)
+	announcements.POST("", a.Announcement.CreateAnnouncement, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	announcements.GET("/:id", a.Announcement.GetAnnouncement)
+	announcements.PATCH("/:id", a.Announcement.UpdateAnnouncement, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	announcements.DELETE("/:id", a.Announcement.DeleteAnnouncement, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 }

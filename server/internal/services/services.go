@@ -3,6 +3,7 @@ package services
 import (
 	"eduhub/server/internal/config"
 	"eduhub/server/internal/repository"
+	"eduhub/server/internal/services/announcement"
 	"eduhub/server/internal/services/attendance"
 	"eduhub/server/internal/services/auth"
 	"eduhub/server/internal/services/college"
@@ -14,14 +15,15 @@ import (
 )
 
 type Services struct {
-	Auth           auth.AuthService
-	Attendance     attendance.AttendanceService
-	StudentService student.StudentService
-	CollegeService college.CollegeService
-	CourseService  course.CourseService
-	GradeService   grades.GradeServices
-	LectureService lecture.LectureService
-	QuizService    quiz.QuizService // Added QuizService field
+	Auth               auth.AuthService
+	Attendance         attendance.AttendanceService
+	Announcement       announcement.AnnouncementService
+	StudentService     student.StudentService
+	CollegeService     college.CollegeService
+	CourseService      course.CourseService
+	GradeService       grades.GradeServices
+	LectureService     lecture.LectureService
+	QuizService        quiz.QuizService // Added QuizService field
 
 	// Fee *Fee.FeeService
 }
@@ -42,6 +44,7 @@ func NewServices(cfg *config.Config) *Services {
 	userRepo := repository.NewUserRepository(cfg.DB)
 	lectureRepo := repository.NewLectureRepository(cfg.DB)
 	quizRepo := repository.NewQuizRepository(cfg.DB)
+	announcementRepo := repository.NewAnnouncementRepository(cfg.DB)
 
 	studentService := student.NewstudentService(
 		studentRepo,
@@ -57,15 +60,17 @@ func NewServices(cfg *config.Config) *Services {
 	gradeService := grades.NewGradeServices(gradeRepo, studentRepo, enrollmentRepo, courseRepo)
 	lectureService := lecture.NewLectureService(lectureRepo)
 	quizService := quiz.NewQuizService(quizRepo, courseRepo, collegeRepo, enrollmentRepo)
+	announcementService := announcement.NewService(announcementRepo, collegeRepo, userRepo)
 
 	return &Services{
-		Auth:           authService,
-		Attendance:     attendanceService,
-		StudentService: studentService,
-		CollegeService: collegeService,
-		CourseService:  courseService,
-		GradeService:   gradeService,
-		LectureService: lectureService,
-		QuizService:    quizService,
+		Auth:               authService,
+		Attendance:         attendanceService,
+		Announcement:       announcementService,
+		StudentService:     studentService,
+		CollegeService:     collegeService,
+		CourseService:      courseService,
+		GradeService:       gradeService,
+		LectureService:     lectureService,
+		QuizService:        quizService,
 	}
 }

@@ -3,6 +3,8 @@
 .env
 .envrc
 
-.env.*.local 
-.vscode / 
-.out 
+.env.*.local
+.vscode/
+.out
+/server/bin
+/bin
