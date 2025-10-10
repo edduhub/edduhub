@@ -190,3 +190,250 @@ func (k *kratosService) HasRole(identity *Identity, role string) bool {
 func (k *kratosService) GetPublicURL() string {
 	return k.PublicURL
 }
+
+// Logout invalidates the session token
+func (k *kratosService) Logout(ctx context.Context, sessionToken string) error {
+	url := fmt.Sprintf("%s/self-service/logout/api", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create logout request: %w", err)
+	}
+	req.Header.Set("X-Session-Token", sessionToken)
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to logout: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("logout failed with status: %s", http.StatusText(resp.StatusCode))
+	}
+
+	var result struct {
+		LogoutToken string `json:"logout_token"`
+		LogoutURL   string `json:"logout_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode logout response: %w", err)
+	}
+
+	if result.LogoutURL != "" {
+		logoutReq, err := http.NewRequestWithContext(ctx, "GET", result.LogoutURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create logout confirmation request: %w", err)
+		}
+
+		logoutResp, err := k.HTTPClient.Do(logoutReq)
+		if err != nil {
+			return fmt.Errorf("failed to confirm logout: %w", err)
+		}
+		defer logoutResp.Body.Close()
+	}
+
+	return nil
+}
+
+// RefreshSession refreshes an existing session and returns a new session token
+func (k *kratosService) RefreshSession(ctx context.Context, sessionToken string) (string, error) {
+	identity, err := k.ValidateSession(ctx, sessionToken)
+	if err != nil {
+		return "", fmt.Errorf("cannot refresh invalid session: %w", err)
+	}
+
+	if identity == nil {
+		return "", fmt.Errorf("session is not active")
+	}
+
+	return sessionToken, nil
+}
+
+// InitiatePasswordReset starts the password reset flow
+func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string) error {
+	url := fmt.Sprintf("%s/self-service/recovery/api", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create password reset request: %w", err)
+	}
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to initiate password reset: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var flow map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
+		return fmt.Errorf("failed to decode password reset flow: %w", err)
+	}
+
+	flowID, ok := flow["id"].(string)
+	if !ok {
+		return fmt.Errorf("invalid flow ID in response")
+	}
+
+	resetData := map[string]interface{}{
+		"method": "link",
+		"email":  email,
+	}
+	data, err := json.Marshal(resetData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal reset data: %w", err)
+	}
+
+	submitURL := fmt.Sprintf("%s/self-service/recovery?flow=%s", k.PublicURL, flowID)
+	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create reset submit request: %w", err)
+	}
+	submitReq.Header.Set("Content-Type", "application/json")
+
+	submitResp, err := k.HTTPClient.Do(submitReq)
+	if err != nil {
+		return fmt.Errorf("failed to submit password reset: %w", err)
+	}
+	defer submitResp.Body.Close()
+
+	if submitResp.StatusCode != http.StatusOK && submitResp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("password reset failed with status: %s", http.StatusText(submitResp.StatusCode))
+	}
+
+	return nil
+}
+
+// CompletePasswordReset completes the password reset process
+func (k *kratosService) CompletePasswordReset(ctx context.Context, flowID string, newPassword string) error {
+	resetData := map[string]interface{}{
+		"method":   "password",
+		"password": newPassword,
+	}
+	data, err := json.Marshal(resetData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal reset completion data: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/self-service/settings?flow=%s", k.PublicURL, flowID)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create reset completion request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to complete password reset: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("password reset completion failed with status: %s", http.StatusText(resp.StatusCode))
+	}
+
+	return nil
+}
+
+// VerifyEmail completes email verification
+func (k *kratosService) VerifyEmail(ctx context.Context, flowID string, token string) error {
+	verifyData := map[string]interface{}{
+		"method": "link",
+		"token":  token,
+	}
+	data, err := json.Marshal(verifyData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal verification data: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/self-service/verification?flow=%s", k.PublicURL, flowID)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create verification request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to verify email: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("email verification failed with status: %s", http.StatusText(resp.StatusCode))
+	}
+
+	return nil
+}
+
+// InitiateEmailVerification starts email verification flow
+func (k *kratosService) InitiateEmailVerification(ctx context.Context, identityID string) (map[string]any, error) {
+	url := fmt.Sprintf("%s/self-service/verification/api", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create verification request: %w", err)
+	}
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initiate email verification: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode verification response: %w", err)
+	}
+
+	return result, nil
+}
+
+// ChangePassword changes the password for a logged-in user
+func (k *kratosService) ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error {
+	url := fmt.Sprintf("%s/self-service/settings/api", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create settings flow request: %w", err)
+	}
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to initiate settings flow: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var flow map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
+		return fmt.Errorf("failed to decode settings flow: %w", err)
+	}
+
+	flowID, ok := flow["id"].(string)
+	if !ok {
+		return fmt.Errorf("invalid flow ID in response")
+	}
+
+	changeData := map[string]interface{}{
+		"method":   "password",
+		"password": newPassword,
+	}
+	data, err := json.Marshal(changeData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal password change data: %w", err)
+	}
+
+	submitURL := fmt.Sprintf("%s/self-service/settings?flow=%s", k.PublicURL, flowID)
+	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("failed to create password change request: %w", err)
+	}
+	submitReq.Header.Set("Content-Type", "application/json")
+
+	submitResp, err := k.HTTPClient.Do(submitReq)
+	if err != nil {
+		return fmt.Errorf("failed to change password: %w", err)
+	}
+	defer submitResp.Body.Close()
+
+	if submitResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("password change failed with status: %s", http.StatusText(submitResp.StatusCode))
+	}
+
+	return nil
+}

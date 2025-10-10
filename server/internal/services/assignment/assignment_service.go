@@ -2,24 +2,22 @@ package assignment
 
 import (
 	"context"
+	"errors"
+	"time"
+
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
 	"eduhub/server/internal/storage"
-	"errors"
-	"fmt"
-	"io"
-	"time"
 )
 
 type AssignmentService interface {
 	CreateAssignment(ctx context.Context, assignment *models.Assignment) error
 	GetAssignment(ctx context.Context, collegeID, assignmentID int) (*models.Assignment, error)
-	UpdateAssignment(ctx context.Context, collegeID, assignment *models.Assignment) error
+	GetAssignmentsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.Assignment, error)
+	UpdateAssignment(ctx context.Context, collegeID, assignmentID int, req *models.UpdateAssignmentRequest) error
 	DeleteAssignment(ctx context.Context, collegeID, assignmentID int) error
-	ListAssignmentsByCourse(ctx context.Context, collegeID, courseID int, limit, offset uint64) ([]*models.Assignment, error)
-	CountAssignments(ctx context.Context, collegeID int) (int, error)
-
-	CreateSubmission(ctx context.Context, submission *models.AssignmentSubmission, file io.Reader, filePath string) error
+	SubmitAssignment(ctx context.Context, submission *models.AssignmentSubmission) error
+	GradeSubmission(ctx context.Context, collegeID, submissionID int, grade *int, feedback *string) error
 }
 
 type assignmentService struct {
@@ -51,27 +49,41 @@ func (a *assignmentService) GetAssignment(ctx context.Context, collegeID, assign
 
 }
 
-func (a *assignmentService) UpdateAssignment(ctx context.Context, collegeID int, assignment *models.Assignment) error {
-	if collegeID == 0 || assignment.ID == 0 {
+func (a *assignmentService) GetAssignmentsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.Assignment, error) {
+	return a.repo.FindAssignmentsByCourse(ctx, collegeID, courseID, 100, 0)
+}
+
+func (a *assignmentService) UpdateAssignment(ctx context.Context, collegeID, assignmentID int, req *models.UpdateAssignmentRequest) error {
+	if collegeID == 0 || assignmentID == 0 {
 		return errors.New("invalid collegeID or assignmentID")
 	}
-	return a.repo.UpdateAssignment(ctx, assignment)
+	return a.repo.UpdateAssignmentPartial(ctx, collegeID, req)
 }
-func (a *assignmentService) CreateSubmission(ctx context.Context, submission *models.AssignmentSubmission, file io.Reader, fileName string) error {
+
+func (a *assignmentService) DeleteAssignment(ctx context.Context, collegeID, assignmentID int) error {
+	return a.repo.DeleteAssignment(ctx, collegeID, assignmentID)
+}
+
+func (a *assignmentService) SubmitAssignment(ctx context.Context, submission *models.AssignmentSubmission) error {
 	if submission.AssignmentID == 0 || submission.StudentID == 0 {
-		return errors.New("assignmentID and studentID are required ")
+		return errors.New("assignmentID and studentID are required")
 	}
 	submission.SubmissionTime = time.Now()
-	bucket := a.minioClient.GetBucketName()
+	return a.repo.CreateSubmission(ctx, submission)
+}
 
-	fileSize, err := a.minioClient.GetFileSize(ctx, bucket, fileName)
+func (a *assignmentService) GradeSubmission(ctx context.Context, collegeID, submissionID int, grade *int, feedback *string) error {
+	submission, err := a.repo.GetSubmissionByID(ctx, submissionID)
 	if err != nil {
-		return fmt.Errorf("failed to get file size: %w", err)
+		return err
 	}
-
-	err = a.minioClient.UploadFromReader(ctx, file, bucket, fileName, int64(fileSize), "application/octet-stream")
-	if err != nil {
-		return fmt.Errorf("failed to upload file: %w", err)
+	
+	if grade != nil {
+		submission.Grade = grade
 	}
-	return nil
+	if feedback != nil {
+		submission.Feedback = feedback
+	}
+	
+	return a.repo.UpdateSubmission(ctx, submission)
 }

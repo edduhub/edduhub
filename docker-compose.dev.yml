@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: edduhub-postgres
+    environment:
+      POSTGRES_USER: keto
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: keto
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keto -d keto"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - edduhub-postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: edduhub-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  minio:
+    image: minio/minio:RELEASE.2024-08-17T01-24-12Z
+    container_name: edduhub-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - edduhub-minio-data:/data
+
+  keto:
+    image: oryd/keto:v0.11.1
+    container_name: edduhub-keto
+    command: serve
+    environment:
+      - DSN=memory
+    ports:
+      - "4466:4466" # write
+      - "4467:4467" # read
+
+  kratos-db:
+    image: postgres:15
+    container_name: edduhub-kratos-postgres
+    environment:
+      POSTGRES_USER: kratos
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: kratos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos -d kratos"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - edduhub-kratos-data:/var/lib/postgresql/data
+
+  kratos:
+    image: oryd/kratos:v1.2.0
+    container_name: edduhub-kratos
+    depends_on:
+      kratos-db:
+        condition: service_healthy
+    environment:
+      - DSN=postgres://kratos:secret@kratos-db:5432/kratos?sslmode=disable
+    command: serve -c /etc/config/kratos.yml --dev
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+    volumes:
+      - ./build/kratos.yml:/etc/config/kratos.yml:ro
+      - ./build/identity.schema.json:/etc/config/identity.schema.json:ro
+
+volumes:
+  edduhub-postgres-data:
+  edduhub-minio-data:
+  edduhub-kratos-data:

@@ -6,17 +6,27 @@ import (
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/services/course"
+	"eduhub/server/internal/services/enrollment"
+	"eduhub/server/internal/services/student"
 
 	"github.com/labstack/echo/v4"
 )
 
 type CourseHandler struct {
-	courseService course.CourseService
+	courseService     course.CourseService
+	enrollmentService enrollment.EnrollmentService
+	studentService    student.StudentService
 }
 
-func NewCourseHandler(courseService course.CourseService) *CourseHandler {
+func NewCourseHandler(
+	courseService course.CourseService,
+	enrollmentService enrollment.EnrollmentService,
+	studentService student.StudentService,
+) *CourseHandler {
 	return &CourseHandler{
-		courseService: courseService,
+		courseService:     courseService,
+		enrollmentService: enrollmentService,
+		studentService:    studentService,
 	}
 }
 
@@ -96,4 +106,219 @@ func (h *CourseHandler) GetCourse(c echo.Context) error {
 	}
 
 	return helpers.Success(c, course, 200)
+}
+
+func (h *CourseHandler) CreateCourse(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	var course models.Course
+	if err := c.Bind(&course); err != nil {
+		return helpers.Error(c, "invalid request body", 400)
+	}
+
+	course.CollegeID = collegeID
+
+	err = h.courseService.CreateCourse(c.Request().Context(), &course)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 400)
+	}
+
+	return helpers.Success(c, course, 201)
+}
+
+func (h *CourseHandler) DeleteCourse(c echo.Context) error {
+	courseIDStr := c.Param("courseID")
+	courseID, err := strconv.Atoi(courseIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid course ID", 400)
+	}
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	err = h.courseService.DeleteCourse(c.Request().Context(), collegeID, courseID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	return helpers.Success(c, "Course deleted successfully", 204)
+}
+
+func (h *CourseHandler) EnrollStudents(c echo.Context) error {
+	courseIDStr := c.Param("courseID")
+	courseID, err := strconv.Atoi(courseIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid course ID", 400)
+	}
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	var req struct {
+		StudentIDs []int `json:"student_ids" validate:"required,min=1"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		return helpers.Error(c, "invalid request body", 400)
+	}
+
+	if len(req.StudentIDs) == 0 {
+		return helpers.Error(c, "at least one student ID is required", 400)
+	}
+
+	_, err = h.courseService.FindCourseByID(c.Request().Context(), collegeID, courseID)
+	if err != nil {
+		return helpers.Error(c, "course not found", 404)
+	}
+
+	successCount := 0
+	failedEnrollments := []map[string]interface{}{}
+
+	for _, studentID := range req.StudentIDs {
+		enrolled, err := h.enrollmentService.IsStudentEnrolled(c.Request().Context(), collegeID, studentID, courseID)
+		if err != nil {
+			failedEnrollments = append(failedEnrollments, map[string]interface{}{
+				"student_id": studentID,
+				"error":      "failed to check enrollment status",
+			})
+			continue
+		}
+
+		if enrolled {
+			failedEnrollments = append(failedEnrollments, map[string]interface{}{
+				"student_id": studentID,
+				"error":      "already enrolled",
+			})
+			continue
+		}
+
+		enrollment := &models.Enrollment{
+			StudentID: studentID,
+			CourseID:  courseID,
+			CollegeID: collegeID,
+			Status:    models.Active,
+		}
+
+		err = h.enrollmentService.CreateEnrollment(c.Request().Context(), enrollment)
+		if err != nil {
+			failedEnrollments = append(failedEnrollments, map[string]interface{}{
+				"student_id": studentID,
+				"error":      err.Error(),
+			})
+			continue
+		}
+		successCount++
+	}
+
+	return helpers.Success(c, map[string]interface{}{
+		"message":       "enrollment processed",
+		"success_count": successCount,
+		"failed":        failedEnrollments,
+	}, 200)
+}
+
+func (h *CourseHandler) RemoveStudent(c echo.Context) error {
+	courseIDStr := c.Param("courseID")
+	courseID, err := strconv.Atoi(courseIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid course ID", 400)
+	}
+
+	studentIDStr := c.Param("studentID")
+	studentID, err := strconv.Atoi(studentIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid student ID", 400)
+	}
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	enrollments, err := h.enrollmentService.FindEnrollmentsByStudent(c.Request().Context(), collegeID, studentID, 100, 0)
+	if err != nil {
+		return helpers.Error(c, "failed to find enrollments", 500)
+	}
+
+	var enrollmentID int
+	found := false
+	for _, enrollment := range enrollments {
+		if enrollment.CourseID == courseID {
+			enrollmentID = enrollment.ID
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return helpers.Error(c, "student not enrolled in this course", 404)
+	}
+
+	err = h.enrollmentService.DeleteEnrollment(c.Request().Context(), collegeID, enrollmentID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	return helpers.Success(c, "Student removed from course successfully", 204)
+}
+
+func (h *CourseHandler) ListEnrolledStudents(c echo.Context) error {
+	courseIDStr := c.Param("courseID")
+	courseID, err := strconv.Atoi(courseIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid course ID", 400)
+	}
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	limit := uint64(50)
+	offset := uint64(0)
+
+	if limitParam := c.QueryParam("limit"); limitParam != "" {
+		if parsedLimit, err := strconv.ParseUint(limitParam, 10, 64); err == nil {
+			limit = parsedLimit
+		}
+	}
+
+	if offsetParam := c.QueryParam("offset"); offsetParam != "" {
+		if parsedOffset, err := strconv.ParseUint(offsetParam, 10, 64); err == nil {
+			offset = parsedOffset
+		}
+	}
+
+	enrollments, err := h.enrollmentService.FindEnrollmentsByStudent(c.Request().Context(), collegeID, courseID, limit, offset)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	studentIDs := make([]int, 0, len(enrollments))
+	for _, enrollment := range enrollments {
+		studentIDs = append(studentIDs, enrollment.StudentID)
+	}
+
+	students := []map[string]interface{}{}
+	for _, enrollment := range enrollments {
+		profile, err := h.studentService.GetStudentDetailedProfile(c.Request().Context(), collegeID, enrollment.StudentID)
+		if err == nil && profile != nil {
+			students = append(students, map[string]interface{}{
+				"student_id":      profile.Student.StudentID,
+				"roll_no":         profile.Student.RollNo,
+				"user_id":         profile.Student.UserID,
+				"enrollment_date": enrollment.EnrollmentDate,
+				"status":          enrollment.Status,
+			})
+		}
+	}
+
+	return helpers.Success(c, students, 200)
 }

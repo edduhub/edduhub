@@ -29,6 +29,6 @@ func NewZeroLogger(debug bool) *ZeroLogger {
 	}
 
 	return &ZeroLogger{
-		Logger: logger,
+		Logger: &logger,
 	}
 }

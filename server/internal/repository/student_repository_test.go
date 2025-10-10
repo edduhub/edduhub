@@ -1,36 +1,38 @@
+//go:build integration
+// +build integration
+
 package repository
 
 import (
 	"context"
+	"errors"
+	"regexp"
 	"testing"
 	"time"
 
 	"eduhub/server/internal/models"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func setupStudentTest(t *testing.T) (*pgxpool.Pool, *DB, StudentRepository, context.Context) {
-	databaseURL := "postgres://your_db_user:your_db_password@localhost:5432/edduhub"
-
-	pool, err := pgxpool.New(context.Background(), databaseURL)
+func setupStudentTest(t *testing.T) (pgxmock.PgxPoolIface, *DB, StudentRepository, context.Context) {
+	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		pool.Close()
+		mock.Close()
 	})
 
 	db := &DB{
-		Pool: pool,
+		Pool: mock,
 	}
 
 	repo := NewStudentRepository(db)
 	ctx := context.Background()
 
-	return pool, db, repo, ctx
+	return mock, db, repo, ctx
 }
 
 func TestCreateStudent(t *testing.T) {

@@ -22,10 +22,10 @@ type StudentService interface {
 	FindByKratosID(ctx context.Context, kratosID string) (*models.Student, error)
 	GetStudentDetailedProfile(ctx context.Context, collegeID int, studentID int) (*StudentDetailedProfile, error)
 	UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error
-	// Add other student-specific business logic methods here
-	// For example:
-	// GetStudentDashboardData(ctx context.Context, collegeID int, studentID int) (*StudentDashboard, error)
-	// UpdateStudentAcademicInfo(ctx context.Context, student *models.Student, academicDetails models.AcademicDetails) error
+	ListStudents(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Student, error)
+	CreateStudent(ctx context.Context, student *models.Student) error
+	DeleteStudent(ctx context.Context, collegeID int, studentID int) error
+	FreezeStudent(ctx context.Context, collegeID int, studentID int) error
 }
 
 type studentService struct {
@@ -101,4 +101,23 @@ func (s *studentService) GetStudentDetailedProfile(ctx context.Context, collegeI
 
 func (s *studentService) UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error {
 	return s.studentRepo.UpdateStudentPartial(ctx, collegeID, studentID, req)
+}
+
+func (s *studentService) ListStudents(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Student, error) {
+	if limit > 100 {
+		limit = 100
+	}
+	return s.studentRepo.FindAllStudentsByCollege(ctx, collegeID, limit, offset)
+}
+
+func (s *studentService) CreateStudent(ctx context.Context, student *models.Student) error {
+	return s.studentRepo.CreateStudent(ctx, student)
+}
+
+func (s *studentService) DeleteStudent(ctx context.Context, collegeID int, studentID int) error {
+	return s.studentRepo.DeleteStudent(ctx, collegeID, studentID)
+}
+
+func (s *studentService) FreezeStudent(ctx context.Context, collegeID int, studentID int) error {
+	return s.attendanceRepo.FreezeAttendance(ctx, collegeID, studentID)
 }

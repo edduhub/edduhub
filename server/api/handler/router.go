@@ -9,8 +9,9 @@ import (
 
 func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Public routes
-	// e.GET("/health", a.System.HealthCheck)
-	// e.GET("/docs/*", a.System.SwaggerDocs)
+	e.GET("/health", a.System.HealthCheck)
+	e.GET("/ready", a.System.ReadinessCheck)
+	e.GET("/alive", a.System.LivenessCheck)
 
 	// Register Swagger routes - make sure these are registered correctly
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
@@ -18,25 +19,36 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 		return c.Redirect(302, "/docs/index.html")
 	})
 	e.GET("/docs/*", echoSwagger.WrapHandler)
-	// Auth routes
+	// Auth routes (public)
 	auth := e.Group("/auth")
 	auth.GET("/register", a.Auth.InitiateRegistration)
 	auth.POST("/register/complete", a.Auth.HandleRegistration)
 	auth.POST("/login", a.Auth.HandleLogin)
 	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateJWT)
-	// auth.POST("/logout", a.Auth.HandleLogout)
-	// auth.POST("/refresh", a.Auth.RefreshToken)
-	// auth.POST("/password/reset/request", a.Auth.RequestPasswordReset)
-	// auth.POST("/password/reset/complete", a.Auth.CompletePasswordReset)
+	
+	// Auth routes (require authentication)
+	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateJWT)
+	auth.POST("/refresh", a.Auth.RefreshToken)
+	
+	// Password management (public)
+	auth.POST("/password-reset", a.Auth.RequestPasswordReset)
+	auth.POST("/password-reset/complete", a.Auth.CompletePasswordReset)
+	
+	// Email verification (public)
+	auth.GET("/verify-email", a.Auth.VerifyEmail)
+	auth.POST("/verify-email/initiate", a.Auth.InitiateEmailVerification, m.ValidateJWT)
+	
+	// Password change (authenticated)
+	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT)
 
 	// Protected API routes
 	apiGroup := e.Group("/api", m.ValidateJWT, m.RequireCollege)
 
 	// User profile management
 	profile := apiGroup.Group("/profile")
-	// profile.GET("", a.User.GetProfile)
-	// profile.PATCH("", a.User.UpdateProfile)    // PATCH: Allows partial updates to user profile
-	// profile.PATCH("/password", a.User.ChangePassword)    // PATCH: Allows partial updates to password
+	profile.GET("", a.Profile.GetUserProfile)
+	profile.PATCH("", a.Profile.UpdateUserProfile)
+	profile.GET("/:profileID", a.Profile.GetProfile, m.RequireRole(middleware.RoleAdmin))
 
 	// College management
 	college := apiGroup.Group("/college", m.RequireRole(middleware.RoleAdmin))
@@ -45,14 +57,14 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	college.GET("/stats", a.College.GetCollegeStats)
 
 	// User management
-	// users := apiGroup.Group("/users", m.RequireRole(middleware.RoleAdmin))
-	// users.GET("", a.User.ListUsers)
-	// users.POST("", a.User.CreateUser)
-	// users.GET("/:userID", a.User.GetUser)
-	// users.PATCH("/:userID", a.User.UpdateUser)    // PATCH: Allows partial updates to user details
-	// users.DELETE("/:userID", a.User.DeleteUser)
-	// users.PATCH("/:userID/role", a.User.UpdateUserRole)    // PATCH: Allows partial updates to user role
-	// users.PATCH("/:userID/status", a.User.UpdateUserStatus)    // PATCH: Allows partial updates to user status
+	users := apiGroup.Group("/users", m.RequireRole(middleware.RoleAdmin))
+	users.GET("", a.User.ListUsers)
+	users.POST("", a.User.CreateUser)
+	users.GET("/:userID", a.User.GetUser)
+	users.PATCH("/:userID", a.User.UpdateUser)
+	users.DELETE("/:userID", a.User.DeleteUser)
+	users.PATCH("/:userID/role", a.User.UpdateUserRole)
+	users.PATCH("/:userID/status", a.User.UpdateUserStatus)
 
 	// Student management
 	students := apiGroup.Group("/students", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
@@ -65,16 +77,16 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 
 	// Course management
 	courses := apiGroup.Group("/courses")
-	// courses.GET("", a.Course.ListCourses)
-	// courses.POST("", a.Course.CreateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	// courses.GET("/:courseID", a.Course.GetCourse)
-	courses.PATCH("/:courseID", a.Course.UpdateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))    // PATCH: Allows partial updates to course details
-	// courses.DELETE("/:courseID", a.Course.DeleteCourse, m.RequireRole(middleware.RoleAdmin))
+	courses.GET("", a.Course.ListCourses)
+	courses.POST("", a.Course.CreateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	courses.GET("/:courseID", a.Course.GetCourse)
+	courses.PATCH("/:courseID", a.Course.UpdateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	courses.DELETE("/:courseID", a.Course.DeleteCourse, m.RequireRole(middleware.RoleAdmin))
 
-	// // Course enrollment
-	// courses.POST("/:courseID/enroll", a.Course.EnrollStudents, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	// courses.DELETE("/:courseID/students/:studentID", a.Course.RemoveStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	// courses.GET("/:courseID/students", a.Course.ListEnrolledStudents)
+	// Course enrollment
+	courses.POST("/:courseID/enroll", a.Course.EnrollStudents, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	courses.DELETE("/:courseID/students/:studentID", a.Course.RemoveStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	courses.GET("/:courseID/students", a.Course.ListEnrolledStudents)
 
 	// Lecture management
 	lectures := apiGroup.Group("/courses/:courseID/lectures")
@@ -118,12 +130,118 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	grades.GET("/student/:studentID", a.Grade.GetStudentGrades,
 		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty, middleware.RoleStudent),
 		m.LoadStudentProfile,
-		m.VerifyStudentOwnership)
+		m.VerifyStudentOwnership())
 
 	// Calendar/Schedule management
 	calendar := apiGroup.Group("/calendar")
 	calendar.GET("", a.Calendar.GetEvents)
 	calendar.POST("", a.Calendar.CreateEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	calendar.PATCH("/:eventID", a.Calendar.UpdateEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))    // PATCH: Allows partial updates to calendar event
+	calendar.PATCH("/:eventID", a.Calendar.UpdateEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	calendar.DELETE("/:eventID", a.Calendar.DeleteEvent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Department management
+	departments := apiGroup.Group("/departments", m.RequireRole(middleware.RoleAdmin))
+	departments.GET("", a.Department.GetDepartments)
+	departments.POST("", a.Department.CreateDepartment)
+	departments.GET("/:departmentID", a.Department.GetDepartment)
+	departments.PATCH("/:departmentID", a.Department.UpdateDepartment)
+	departments.DELETE("/:departmentID", a.Department.DeleteDepartment)
+
+	// Assignment management
+	assignments := apiGroup.Group("/courses/:courseID/assignments")
+	assignments.GET("", a.Assignment.ListAssignments)
+	assignments.POST("", a.Assignment.CreateAssignment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	assignments.GET("/:assignmentID", a.Assignment.GetAssignment)
+	assignments.PATCH("/:assignmentID", a.Assignment.UpdateAssignment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	assignments.DELETE("/:assignmentID", a.Assignment.DeleteAssignment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	assignments.POST("/:assignmentID/submit", a.Assignment.SubmitAssignment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	assignments.POST("/submissions/:submissionID/grade", a.Assignment.GradeSubmission, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Quiz management
+	quizzes := apiGroup.Group("/courses/:courseID/quizzes")
+	quizzes.GET("", a.Quiz.ListQuizzes)
+	quizzes.POST("", a.Quiz.CreateQuiz, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	quizzes.GET("/:quizID", a.Quiz.GetQuiz)
+	quizzes.PATCH("/:quizID", a.Quiz.UpdateQuiz, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	quizzes.DELETE("/:quizID", a.Quiz.DeleteQuiz, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Announcement management
+	announcements := apiGroup.Group("/announcements")
+	announcements.GET("", a.Announcement.ListAnnouncements)
+	announcements.POST("", a.Announcement.CreateAnnouncement, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	announcements.GET("/:announcementID", a.Announcement.GetAnnouncement)
+	announcements.PATCH("/:announcementID", a.Announcement.UpdateAnnouncement, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	announcements.DELETE("/:announcementID", a.Announcement.DeleteAnnouncement, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Question Bank management
+	questions := apiGroup.Group("/quizzes/:quizID/questions")
+	questions.GET("", a.Question.ListQuestions)
+	questions.POST("", a.Question.CreateQuestion, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	questions.GET("/:questionID", a.Question.GetQuestion)
+	questions.PATCH("/:questionID", a.Question.UpdateQuestion, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	questions.DELETE("/:questionID", a.Question.DeleteQuestion, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Quiz Attempts management
+	quizAttempts := apiGroup.Group("/quizzes/:quizID/attempts")
+	quizAttempts.POST("/start", a.QuizAttempt.StartQuizAttempt, m.RequireRole(middleware.RoleStudent))
+	quizAttempts.GET("", a.QuizAttempt.ListQuizAttempts, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	
+	attemptRoutes := apiGroup.Group("/attempts")
+	attemptRoutes.GET("/:attemptID", a.QuizAttempt.GetQuizAttempt)
+	attemptRoutes.POST("/:attemptID/submit", a.QuizAttempt.SubmitQuizAttempt, m.RequireRole(middleware.RoleStudent))
+	attemptRoutes.GET("/student/:studentID", a.QuizAttempt.ListStudentAttempts)
+
+	// File Upload management
+	files := apiGroup.Group("/files")
+	files.POST("/upload", a.FileUpload.UploadFile)
+	files.DELETE("", a.FileUpload.DeleteFile)
+	files.GET("/url", a.FileUpload.GetFileURL)
+
+	// Notification management
+	notifications := apiGroup.Group("/notifications")
+	notifications.GET("", a.Notification.GetNotifications)
+	notifications.POST("", a.Notification.SendNotification, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	notifications.GET("/unread/count", a.Notification.GetUnreadCount)
+	notifications.PATCH("/:notificationID/read", a.Notification.MarkAsRead)
+	notifications.POST("/mark-all-read", a.Notification.MarkAllAsRead)
+	notifications.DELETE("/:notificationID", a.Notification.DeleteNotification)
+
+	// Analytics management
+	analytics := apiGroup.Group("/analytics", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	analytics.GET("/dashboard", a.Analytics.GetCollegeDashboard)
+	analytics.GET("/students/:studentID/performance", a.Analytics.GetStudentPerformance)
+	analytics.GET("/courses/:courseID/analytics", a.Analytics.GetCourseAnalytics)
+	analytics.GET("/courses/:courseID/grades/distribution", a.Analytics.GetGradeDistribution)
+	analytics.GET("/attendance/trends", a.Analytics.GetAttendanceTrends)
+
+	// Batch Operations management
+	batch := apiGroup.Group("/batch", m.RequireRole(middleware.RoleAdmin))
+	batch.POST("/students/import", a.Batch.ImportStudents)
+	batch.GET("/students/export", a.Batch.ExportStudents)
+	batch.POST("/grades/import", a.Batch.ImportGrades)
+	batch.GET("/grades/export", a.Batch.ExportGrades)
+	batch.POST("/enroll", a.Batch.BulkEnroll)
+
+	// Report Generation management
+	reports := apiGroup.Group("/reports", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	reports.GET("/students/:studentID/gradecard", a.Report.GenerateGradeCard)
+	reports.GET("/students/:studentID/transcript", a.Report.GenerateTranscript)
+	reports.GET("/courses/:courseID/attendance", a.Report.GenerateAttendanceReport)
+	reports.GET("/courses/:courseID/report", a.Report.GenerateCourseReport)
+
+	// Webhook management
+	webhooks := apiGroup.Group("/webhooks", m.RequireRole(middleware.RoleAdmin))
+	webhooks.GET("", a.Webhook.ListWebhooks)
+	webhooks.POST("", a.Webhook.CreateWebhook)
+	webhooks.GET("/:webhookID", a.Webhook.GetWebhook)
+	webhooks.PATCH("/:webhookID", a.Webhook.UpdateWebhook)
+	webhooks.DELETE("/:webhookID", a.Webhook.DeleteWebhook)
+	webhooks.POST("/:webhookID/test", a.Webhook.TestWebhook)
+
+	// Audit Logging management
+	audit := apiGroup.Group("/audit", m.RequireRole(middleware.RoleAdmin))
+	audit.GET("/logs", a.Audit.GetAuditLogs)
+	audit.GET("/users/:userID/activity", a.Audit.GetUserActivity)
+	audit.GET("/entities/:entityType/:entityID/history", a.Audit.GetEntityHistory)
+	audit.GET("/stats", a.Audit.GetAuditStats)
 }

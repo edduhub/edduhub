@@ -62,3 +62,12 @@ type UpdateLectureRequest struct {
 	// Optional meeting link update
 	MeetingLink *string `json:"meeting_link" validate:"omitempty,url"`
 }
+
+// CreateLectureRequest provides fields for creating a new Lecture
+type CreateLectureRequest struct {
+	Title       string    `json:"title" validate:"required,min=3,max=100"`
+	Description string    `json:"description" validate:"omitempty,max=200"`
+	StartTime   time.Time `json:"start_time" validate:"required"`
+	EndTime     time.Time `json:"end_time" validate:"required"`
+	MeetingLink string    `json:"meeting_link" validate:"omitempty,url"`
+}

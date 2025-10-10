@@ -54,41 +54,52 @@ func LoadDatabaseConfig() (*DBConfig, error) {
 }
 
 func LoadDatabase() *repository.DB {
+	if os.Getenv("DB_SKIP_CONNECT") == "1" {
+		return &repository.DB{}
+	}
+
 	dbConfig, err := LoadDatabaseConfig()
 	if err != nil {
-		// It's generally better to return an error from LoadDatabase
-		// and handle panics at a higher level (e.g., main), but matching
-		// the original panic behavior.
 		panic(fmt.Errorf("failed to load database config: %w", err))
 	}
 
 	dsn := buildDSN(*dbConfig)
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		fmt.Println("unable to parse config")
+		panic(fmt.Errorf("unable to parse config: %w", err))
 	}
-	poolConfig.MaxConnIdleTime = 10 * time.Minute
-	poolConfig.MaxConnLifetime = 1 * time.Hour
-	poolConfig.MinConns = 4
-	poolConfig.MaxConns = 100
-	poolConfig.HealthCheckPeriod = 1 * time.Hour
-	// Use a context with timeout for connection attempts in production
-	// For this example, using context.Background() as in original
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	// OPTIMIZED: Low-resource configuration for better performance on limited hardware
+	// Reduce connection overhead and memory usage
+	poolConfig.MaxConnIdleTime = 5 * time.Minute    // Reduced from 10 minutes - close idle connections faster
+	poolConfig.MaxConnLifetime = 30 * time.Minute   // Reduced from 1 hour - prevent connection buildup
+	poolConfig.MinConns = 2                         // Reduced from 4 - lower baseline memory usage
+	poolConfig.MaxConns = 20                        // Reduced from 100 - prevent resource exhaustion
+	poolConfig.HealthCheckPeriod = 30 * time.Second // Reduced from 1 hour - faster detection of failed connections
+
+	// OPTIMIZED: Connection timeouts for better resource management
+	poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second
+	poolConfig.ConnConfig.RuntimeParams = map[string]string{
+		// Optimize for faster queries on low-end hardware
+		"statement_timeout": "30000", // 30 seconds max per query
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
-		// Same note about panic vs return error applies
 		panic(fmt.Errorf("failed to connect to database: %w", err))
 	}
 
 	// ping the database to ensure the connection is healthy
-	err = pool.Ping(context.Background())
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer pingCancel()
+	err = pool.Ping(pingCtx)
 	if err != nil {
 		panic(fmt.Errorf("failed to ping database: %w", err))
 	}
 
-	// --- Complete the return statement ---
 	return &repository.DB{
 		Pool: pool,
 	}

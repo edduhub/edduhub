@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"eduhub/server/internal/models"
 )
@@ -30,23 +30,16 @@ type AttendanceRepository interface {
 
 const attendanceTable = "attendance"
 
-type attendanceRepository struct {
-	Pool *pgxpool.Pool // Direct pgxpool connection
+type PoolExecutor interface {
+	pgxscan.Querier
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 }
 
-// Assuming models.Attendance struct with db tags is defined in models package:
-// type Attendance struct {
-//     ID        int       `db:"id"`
-//     StudentID int       `db:"student_id"`
-//     CourseID  int       `db:"course_id"`
-//     CollegeID int       `db:"college_id"`
-//     Date      time.Time `db:"date"`
-//     Status    string    `db:"status"`
-//     ScannedAt time.Time `db:"scanned_at"`
-//     LectureID int       `db:"lecture_id"`
-// }
+type attendanceRepository struct {
+	Pool PoolExecutor
+}
 
-func NewAttendanceRepository(pool *pgxpool.Pool) AttendanceRepository {
+func NewAttendanceRepository(pool PoolExecutor) AttendanceRepository {
 	return &attendanceRepository{
 		Pool: pool,
 	}

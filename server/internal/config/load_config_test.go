@@ -21,6 +21,8 @@ func TestLoadConfig(t *testing.T) {
 				"DB_NAME":           "testdb",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
+				"KRATOS_DOMAIN":     "example.com",
+				"PORT":              "3000",
 				"APP_PORT":          "3000",
 			},
 			expectError: false,
@@ -56,6 +58,8 @@ func TestLoadConfig(t *testing.T) {
 				"DB_NAME":           "testdb",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
+				"KRATOS_DOMAIN":     "example.com",
+				"PORT":              "3000",
 			},
 			expectError: false,
 		},
@@ -67,6 +71,7 @@ func TestLoadConfig(t *testing.T) {
 			for k, v := range tt.envVars {
 				os.Setenv(k, v)
 			}
+			os.Setenv("DB_SKIP_CONNECT", "1")
 
 			config, err := LoadConfig()
 

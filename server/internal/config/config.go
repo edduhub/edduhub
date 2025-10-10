@@ -27,6 +27,10 @@ type Config struct {
 	// Loaded via LoadAppConfig() from the application configuration module.
 	AppConfig *AppConfig
 
+	// RedisConfig contains Redis cache configuration.
+	// Loaded via LoadRedisConfig() from the cache configuration module.
+	RedisConfig *RedisConfig
+
 	// AppPort is the port for the application server (deprecated, use AppConfig.Port).
 	// Kept for backward compatibility.
 	AppPort string
@@ -70,12 +74,20 @@ func NewConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to load app config: %w", err)
 	}
 
+	// Load Redis configuration (optional)
+	redisConfig, err := LoadRedisConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load redis config: %w", err)
+	}
+
 	// Create the main config
 	cfg := &Config{
-		DB:         db,
-		DBConfig:   dbConfig,
-		AuthConfig: authConfig,
-		AppConfig:  appConfig,
+		DB:          db,
+		DBConfig:    dbConfig,
+		AuthConfig:  authConfig,
+		AppConfig:   appConfig,
+		RedisConfig: redisConfig,
+		AppPort:     appConfig.Port,
 	}
 
 	// Perform comprehensive validation
@@ -123,6 +135,11 @@ func (c *Config) Validate() error {
 	}
 	if err := c.AppConfig.Validate(); err != nil {
 		return fmt.Errorf("AppConfig validation failed: %w", err)
+	}
+	if c.RedisConfig != nil {
+		if err := c.RedisConfig.Validate(); err != nil {
+			return fmt.Errorf("RedisConfig validation failed: %w", err)
+		}
 	}
 
 	return nil

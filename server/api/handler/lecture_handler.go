@@ -100,3 +100,58 @@ func (h *LectureHandler) GetLecture(c echo.Context) error {
 
 	return helpers.Success(c, lecture, 200)
 }
+
+func (h *LectureHandler) CreateLecture(c echo.Context) error {
+	courseIDStr := c.Param("courseID")
+	courseID, err := strconv.Atoi(courseIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid course ID", 400)
+	}
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	var req models.CreateLectureRequest
+	if err := c.Bind(&req); err != nil {
+		return helpers.Error(c, "invalid request body", 400)
+	}
+
+	lecture := &models.Lecture{
+		CourseID:    courseID,
+		CollegeID:   collegeID,
+		Title:       req.Title,
+		Description: req.Description,
+		StartTime:   req.StartTime,
+		EndTime:     req.EndTime,
+		MeetingLink: req.MeetingLink,
+	}
+
+	err = h.lectureService.CreateLecture(c.Request().Context(), lecture)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	return helpers.Success(c, lecture, 201)
+}
+
+func (h *LectureHandler) DeleteLecture(c echo.Context) error {
+	lectureIDStr := c.Param("lectureID")
+	lectureID, err := strconv.Atoi(lectureIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid lecture ID", 400)
+	}
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	err = h.lectureService.DeleteLecture(c.Request().Context(), collegeID, lectureID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	return helpers.Success(c, "Lecture deleted successfully", 204)
+}

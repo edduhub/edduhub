@@ -19,6 +19,13 @@ type AuthService interface {
 	RemovePermission(ctx context.Context, identityID, action, resource string) error
 	GetPublicURL() string
 	ExtractStudentID(identity *Identity) (int, error)
+	Logout(ctx context.Context, sessionToken string) error
+	RefreshSession(ctx context.Context, sessionToken string) (string, error)
+	InitiatePasswordReset(ctx context.Context, email string) error
+	CompletePasswordReset(ctx context.Context, flowID string, newPassword string) error
+	VerifyEmail(ctx context.Context, flowID string, token string) error
+	InitiateEmailVerification(ctx context.Context, identityID string) (map[string]any, error)
+	ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error
 }
 
 type authService struct {
@@ -87,4 +94,32 @@ func (a *authService) RemovePermission(ctx context.Context, identityID, action, 
 
 func (a *authService) GetPublicURL() string {
 	return a.Auth.GetPublicURL()
+}
+
+func (a *authService) Logout(ctx context.Context, sessionToken string) error {
+	return a.Auth.Logout(ctx, sessionToken)
+}
+
+func (a *authService) RefreshSession(ctx context.Context, sessionToken string) (string, error) {
+	return a.Auth.RefreshSession(ctx, sessionToken)
+}
+
+func (a *authService) InitiatePasswordReset(ctx context.Context, email string) error {
+	return a.Auth.InitiatePasswordReset(ctx, email)
+}
+
+func (a *authService) CompletePasswordReset(ctx context.Context, flowID string, newPassword string) error {
+	return a.Auth.CompletePasswordReset(ctx, flowID, newPassword)
+}
+
+func (a *authService) VerifyEmail(ctx context.Context, flowID string, token string) error {
+	return a.Auth.VerifyEmail(ctx, flowID, token)
+}
+
+func (a *authService) InitiateEmailVerification(ctx context.Context, identityID string) (map[string]any, error) {
+	return a.Auth.InitiateEmailVerification(ctx, identityID)
+}
+
+func (a *authService) ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error {
+	return a.Auth.ChangePassword(ctx, identityID, oldPassword, newPassword)
 }
