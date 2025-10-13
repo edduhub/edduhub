@@ -1,0 +1,2 @@
+-- Profile history table - depends on profiles table which should be created separately
+-- This migration is skipped as profiles table doesn't exist yet

@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     CONSTRAINT valid_time_range CHECK (end_time > start_time)
 );
 
-CREATE INDEX idx_calendar_events_college ON calendar_events(college_id);
-CREATE INDEX idx_calendar_events_course ON calendar_events(course_id);
-CREATE INDEX idx_calendar_events_type ON calendar_events(event_type);
-CREATE INDEX idx_calendar_events_time ON calendar_events(start_time, end_time);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_college ON calendar_events(college_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_course ON calendar_events(course_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_type ON calendar_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_time ON calendar_events(start_time, end_time);

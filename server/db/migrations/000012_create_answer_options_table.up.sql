@@ -8,4 +8,4 @@ CREATE TABLE IF NOT EXISTS answer_options (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_answer_options_question ON answer_options(question_id);
+CREATE INDEX IF NOT EXISTS idx_answer_options_question ON answer_options(question_id);

@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS announcements (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_announcements_college ON announcements(college_id);
-CREATE INDEX idx_announcements_course ON announcements(course_id);
-CREATE INDEX idx_announcements_published ON announcements(is_published);
-CREATE INDEX idx_announcements_priority ON announcements(priority);
+CREATE INDEX IF NOT EXISTS idx_announcements_college ON announcements(college_id);
+CREATE INDEX IF NOT EXISTS idx_announcements_course ON announcements(course_id);
+CREATE INDEX IF NOT EXISTS idx_announcements_published ON announcements(is_published);
+CREATE INDEX IF NOT EXISTS idx_announcements_priority ON announcements(priority);

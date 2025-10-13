@@ -11,6 +11,6 @@ CREATE TABLE IF NOT EXISTS departments (
     UNIQUE(college_id, code)
 );
 
-CREATE INDEX idx_departments_college ON departments(college_id);
-CREATE INDEX idx_departments_head ON departments(head_user_id);
-CREATE INDEX idx_departments_active ON departments(is_active);
+CREATE INDEX IF NOT EXISTS idx_departments_college ON departments(college_id);
+CREATE INDEX IF NOT EXISTS idx_departments_head ON departments(head_user_id);
+CREATE INDEX IF NOT EXISTS idx_departments_active ON departments(is_active);

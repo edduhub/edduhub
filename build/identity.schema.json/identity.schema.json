@@ -1,0 +1,99 @@
+{
+  "$id": "https://example.com/kratos/identity.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "User Identity",
+  "type": "object",
+  "properties": {
+    "traits": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "title": "E-Mail",
+          "ory.sh/kratos": {
+            "credentials": {
+              "password": {
+                "identifier": true
+              }
+            }
+          }
+        },
+        "name": {
+          "type": "object",
+          "properties": {
+            "first": {
+              "title": "First Name",
+              "type": "string"
+            },
+            "last": {
+              "title": "Last Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "first",
+            "last"
+          ]
+        },
+        "college": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "College ID",
+              "type": "string"
+            },
+            "name": {
+              "title": "College Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "role": {
+          "title": "User Role",
+          "type": "string",
+          "enum": [
+            "admin",
+            "faculty",
+            "student"
+          ]
+        },
+        "rollNo": {
+          "title": "Roll Number",
+          "description": "The student's unique roll number within their college.",
+          "type": "string",
+          "ory.sh/kratos": {
+            "credentials": {
+              "password": {
+                "identifier": false
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "email",
+        "name",
+        "college",
+        "role",
+        "rollNo"
+      ],
+      "ory.sh/kratos": {
+        "access_token": {
+          "fields": [
+            "traits.email",
+            "traits.name.first",
+            "traits.name.last",
+            "traits.role"
+          ]
+        }
+      }
+    }
+  },
+  "required": [
+    "traits"
+  ]
+}

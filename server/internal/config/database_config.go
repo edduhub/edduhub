@@ -116,3 +116,26 @@ func buildDSN(config DBConfig) string {
 		config.SSLMode,
 	)
 }
+
+// Validate is a method on DBConfig for validation.
+func (c *DBConfig) Validate() error {
+	if c.Host == "" {
+		return fmt.Errorf("DBConfig.Host cannot be empty")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("DBConfig.Port cannot be empty")
+	}
+	if c.User == "" {
+		return fmt.Errorf("DBConfig.User cannot be empty")
+	}
+	if c.Password == "" {
+		return fmt.Errorf("DBConfig.Password cannot be empty")
+	}
+	if c.DBName == "" {
+		return fmt.Errorf("DBConfig.DBName cannot be empty")
+	}
+	if c.SSLMode == "" {
+		return fmt.Errorf("DBConfig.SSLMode cannot be empty")
+	}
+	return nil
+}

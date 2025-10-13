@@ -25,29 +25,31 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.POST("/register/complete", a.Auth.HandleRegistration)
 	auth.POST("/login", a.Auth.HandleLogin)
 	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateJWT)
-	
+
 	// Auth routes (require authentication)
 	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateJWT)
 	auth.POST("/refresh", a.Auth.RefreshToken)
-	
+
 	// Password management (public)
 	auth.POST("/password-reset", a.Auth.RequestPasswordReset)
 	auth.POST("/password-reset/complete", a.Auth.CompletePasswordReset)
-	
+
 	// Email verification (public)
 	auth.GET("/verify-email", a.Auth.VerifyEmail)
 	auth.POST("/verify-email/initiate", a.Auth.InitiateEmailVerification, m.ValidateJWT)
-	
+
 	// Password change (authenticated)
 	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT)
 
-	// Protected API routes
+	// Protected API routes with audit logging
 	apiGroup := e.Group("/api", m.ValidateJWT, m.RequireCollege)
 
 	// User profile management
 	profile := apiGroup.Group("/profile")
 	profile.GET("", a.Profile.GetUserProfile)
 	profile.PATCH("", a.Profile.UpdateUserProfile)
+	profile.POST("/upload-image", a.Profile.UploadProfileImage)
+	profile.GET("/history", a.Profile.GetProfileHistory)
 	profile.GET("/:profileID", a.Profile.GetProfile, m.RequireRole(middleware.RoleAdmin))
 
 	// College management
@@ -191,11 +193,35 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	attemptRoutes.POST("/:attemptID/submit", a.QuizAttempt.SubmitQuizAttempt, m.RequireRole(middleware.RoleStudent))
 	attemptRoutes.GET("/student/:studentID", a.QuizAttempt.ListStudentAttempts)
 
-	// File Upload management
+	// File Upload management (legacy)
 	files := apiGroup.Group("/files")
 	files.POST("/upload", a.FileUpload.UploadFile)
 	files.DELETE("", a.FileUpload.DeleteFile)
 	files.GET("/url", a.FileUpload.GetFileURL)
+
+	// Advanced File Management with versioning
+	fileGroup := apiGroup.Group("/file-management")
+	fileGroup.POST("/upload", a.File.UploadFile)
+	fileGroup.GET("", a.File.ListFiles)
+	fileGroup.GET("/:fileID", a.File.GetFile)
+	fileGroup.PATCH("/:fileID", a.File.UpdateFile)
+	fileGroup.DELETE("/:fileID", a.File.DeleteFile)
+	fileGroup.GET("/:fileID/versions", a.File.GetFileVersions)
+	fileGroup.POST("/:fileID/versions", a.File.UploadNewVersion)
+	fileGroup.PATCH("/:fileID/versions/:versionID/current", a.File.SetCurrentVersion)
+	fileGroup.GET("/:fileID/download", a.File.GetFileURL)
+
+	// Folder management
+	folders := apiGroup.Group("/folders")
+	folders.POST("", a.File.CreateFolder)
+	folders.GET("", a.File.ListFolders)
+	folders.GET("/:folderID", a.File.GetFolder)
+	folders.PATCH("/:folderID", a.File.UpdateFolder)
+	folders.DELETE("/:folderID", a.File.DeleteFolder)
+
+	// File search and tagging
+	fileGroup.GET("/search", a.File.SearchFiles)
+	fileGroup.GET("/tags", a.File.GetFilesByTags)
 
 	// Notification management
 	notifications := apiGroup.Group("/notifications")
@@ -205,6 +231,9 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	notifications.PATCH("/:notificationID/read", a.Notification.MarkAsRead)
 	notifications.POST("/mark-all-read", a.Notification.MarkAllAsRead)
 	notifications.DELETE("/:notificationID", a.Notification.DeleteNotification)
+
+	// WebSocket connection for real-time notifications
+	notifications.GET("/ws", a.WebSocket.HandleWebSocket)
 
 	// Analytics management
 	analytics := apiGroup.Group("/analytics", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))

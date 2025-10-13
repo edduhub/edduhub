@@ -8,6 +8,7 @@ import (
 	"eduhub/server/internal/middleware"
 	"eduhub/server/internal/repository"
 	"eduhub/server/internal/services"
+	"eduhub/server/internal/services/audit"
 
 	"github.com/labstack/echo/v4"
 	echomid "github.com/labstack/echo/v4/middleware"
@@ -83,6 +84,9 @@ func (a *App) Start() error {
 	// OPTIMIZED: Rate limiting for resource protection (optional, can be configured per environment)
 	// Uncomment in production:
 	// a.e.Use(echomid.RateLimiter(echomid.NewRateLimiterMemoryStore(20))) // 20 requests per second
+
+	// Add audit logging middleware for API routes
+	a.e.Use(audit.AuditMiddleware(a.services.AuditService))
 
 	// Setup routes
 	handler.SetupRoutes(a.e, a.handlers, a.middleware.Auth)

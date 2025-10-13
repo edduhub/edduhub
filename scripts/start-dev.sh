@@ -47,16 +47,16 @@ start_backend() {
 start_frontend() {
   echo "Starting Next.js frontend..."
   if [ ! -d "$ROOT_DIR/client/node_modules" ]; then
-    (cd "$ROOT_DIR/client" && npm install)
+    (cd "$ROOT_DIR/client" && bun install)
   fi
-  (cd "$ROOT_DIR/client" && npm run dev) >/tmp/edduhub-frontend.log 2>&1 &
+  (cd "$ROOT_DIR/client" && bun run dev) >/tmp/edduhub-frontend.log 2>&1 &
   FRONTEND_PID=$!
   echo $FRONTEND_PID
 }
 
 ensure_command docker
 ensure_command go
-ensure_command npm
+ensure_command bun
 
 start_containers
 run_migrations

@@ -158,3 +158,4 @@ func (a *attendanceService) FreezeAttendance(ctx context.Context, collegeID, stu
 	}
 	return true, nil
 }
+

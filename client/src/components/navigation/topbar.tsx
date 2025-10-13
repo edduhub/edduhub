@@ -38,52 +38,55 @@ export function Topbar() {
     : 'U';
 
   return (
-    <header className="flex items-center justify-between gap-4 border-b bg-card/50 px-6 py-4">
-      <div className="flex flex-1 items-center gap-3">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search courses, students..."
-          className="max-w-md border-0 bg-transparent shadow-none focus-visible:ring-0"
-        />
+    <header className="flex h-16 items-center justify-between border-b bg-background/80 backdrop-blur-sm px-4 md:px-6">
+      <div className="flex flex-1 items-center gap-4">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search courses, students..."
+            className="w-full border-0 bg-muted/50 pl-10 pr-4 focus-visible:bg-background focus-visible:ring-1"
+          />
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {mounted && (
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="h-9 w-9"
           >
             {theme === "dark" ? (
-              <Sun className="h-5 w-5" />
+              <Sun className="h-4 w-4" />
             ) : (
-              <Moon className="h-5 w-5" />
+              <Moon className="h-4 w-4" />
             )}
           </Button>
         )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="relative rounded-full p-2 hover:bg-accent">
-              <Bell className="h-5 w-5 text-muted-foreground" />
+            <Button variant="ghost" size="icon" className="relative h-9 w-9">
+              <Bell className="h-4 w-4" />
               <Badge className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full p-0 text-xs">
                 3
               </Badge>
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel>Notifications</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <div className="space-y-1">
-              <div className="p-2 text-sm hover:bg-accent rounded-sm cursor-pointer">
+              <div className="p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors">
                 <p className="font-medium">New assignment posted</p>
                 <p className="text-xs text-muted-foreground">Data Structures - Due in 3 days</p>
               </div>
-              <div className="p-2 text-sm hover:bg-accent rounded-sm cursor-pointer">
+              <div className="p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors">
                 <p className="font-medium">Grades updated</p>
                 <p className="text-xs text-muted-foreground">Your quiz results are available</p>
               </div>
-              <div className="p-2 text-sm hover:bg-accent rounded-sm cursor-pointer">
+              <div className="p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors">
                 <p className="font-medium">Attendance marked</p>
                 <p className="text-xs text-muted-foreground">Present in today's lecture</p>
               </div>
@@ -97,12 +100,12 @@ export function Topbar() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 rounded-lg p-1 hover:bg-accent">
-              <Avatar className="h-9 w-9">
+            <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
+              <Avatar className="h-8 w-8">
                 <AvatarImage src={user?.avatar} alt={user?.firstName} />
-                <AvatarFallback>{userInitials}</AvatarFallback>
+                <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
               </Avatar>
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>

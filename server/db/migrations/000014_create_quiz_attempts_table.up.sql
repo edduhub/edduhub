@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
     UNIQUE(quiz_id, student_id)
 );
 
-CREATE INDEX idx_quiz_attempts_quiz ON quiz_attempts(quiz_id);
-CREATE INDEX idx_quiz_attempts_student ON quiz_attempts(student_id);
-CREATE INDEX idx_quiz_attempts_status ON quiz_attempts(status);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz ON quiz_attempts(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_student ON quiz_attempts(student_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_status ON quiz_attempts(status);

@@ -139,50 +139,8 @@ func (c *Config) Validate() error {
 	if c.RedisConfig != nil {
 		if err := c.RedisConfig.Validate(); err != nil {
 			return fmt.Errorf("RedisConfig validation failed: %w", err)
-		}
+	}
 	}
 
-	return nil
-}
-
-// Validate is a method on DBConfig for validation.
-// Since DBConfig doesn't have a Validate method in the existing code, we add it here for consistency.
-func (c *DBConfig) Validate() error {
-	if c.Host == "" {
-		return fmt.Errorf("DBConfig.Host cannot be empty")
-	}
-	if c.Port == "" {
-		return fmt.Errorf("DBConfig.Port cannot be empty")
-	}
-	if c.User == "" {
-		return fmt.Errorf("DBConfig.User cannot be empty")
-	}
-	if c.Password == "" {
-		return fmt.Errorf("DBConfig.Password cannot be empty")
-	}
-	if c.DBName == "" {
-		return fmt.Errorf("DBConfig.DBName cannot be empty")
-	}
-	if c.SSLMode == "" {
-		return fmt.Errorf("DBConfig.SSLMode cannot be empty")
-	}
-	return nil
-}
-
-// Validate is a method on AuthConfig for validation.
-// Since AuthConfig doesn't have a Validate method in the existing code, we add it here for consistency.
-func (c *AuthConfig) Validate() error {
-	if c.PublicURL == "" {
-		return fmt.Errorf("AuthConfig.PublicURL cannot be empty")
-	}
-	if c.AdminURL == "" {
-		return fmt.Errorf("AuthConfig.AdminURL cannot be empty")
-	}
-	if c.Domain == "" {
-		return fmt.Errorf("AuthConfig.Domain cannot be empty")
-	}
-	if c.Port == "" {
-		return fmt.Errorf("AuthConfig.Port cannot be empty")
-	}
 	return nil
 }

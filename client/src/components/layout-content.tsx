@@ -33,14 +33,14 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
 
   // Show full layout for authenticated users
   return (
-    <div className="grid min-h-screen md:grid-cols-[240px_1fr]">
+    <div className="flex min-h-screen bg-background">
       <div className="hidden md:flex">
         <Sidebar />
       </div>
-      <div className="flex flex-col">
+      <div className="flex flex-1 flex-col">
         <Topbar />
-        <main className="flex-1 overflow-y-auto bg-background p-6">
-          <div className="mx-auto w-full max-w-7xl space-y-6">{children}</div>
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
     </div>

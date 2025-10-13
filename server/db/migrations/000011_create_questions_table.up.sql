@@ -10,5 +10,5 @@ CREATE TABLE IF NOT EXISTS questions (
     CONSTRAINT valid_marks CHECK (marks > 0)
 );
 
-CREATE INDEX idx_questions_quiz ON questions(quiz_id);
-CREATE INDEX idx_questions_type ON questions(question_type);
+CREATE INDEX IF NOT EXISTS idx_questions_quiz ON questions(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_questions_type ON questions(question_type);

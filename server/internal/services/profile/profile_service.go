@@ -13,6 +13,8 @@ type ProfileService interface {
 	GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error)
 	UpdateProfile(ctx context.Context, userID int, req *models.UpdateProfileRequest) error
 	CreateProfile(ctx context.Context, profile *models.Profile) error
+	GetProfileHistory(ctx context.Context, profileID int, limit, offset int) ([]*models.ProfileHistory, error)
+	CreateProfileHistory(ctx context.Context, history *models.ProfileHistory) error
 }
 
 type profileService struct {
@@ -45,4 +47,12 @@ func (s *profileService) UpdateProfile(ctx context.Context, userID int, req *mod
 
 func (s *profileService) CreateProfile(ctx context.Context, profile *models.Profile) error {
 	return s.profileRepo.CreateProfile(ctx, profile)
+}
+
+func (s *profileService) GetProfileHistory(ctx context.Context, profileID int, limit, offset int) ([]*models.ProfileHistory, error) {
+	return s.profileRepo.GetProfileHistory(ctx, profileID, limit, offset)
+}
+
+func (s *profileService) CreateProfileHistory(ctx context.Context, history *models.ProfileHistory) error {
+	return s.profileRepo.CreateProfileHistory(ctx, history)
 }

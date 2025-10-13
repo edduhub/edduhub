@@ -17,6 +17,6 @@ CREATE TABLE IF NOT EXISTS quizzes (
     CONSTRAINT valid_time_range CHECK (end_time > start_time)
 );
 
-CREATE INDEX idx_quizzes_course ON quizzes(course_id);
-CREATE INDEX idx_quizzes_college ON quizzes(college_id);
-CREATE INDEX idx_quizzes_active ON quizzes(is_active);
+CREATE INDEX IF NOT EXISTS idx_quizzes_course ON quizzes(course_id);
+CREATE INDEX IF NOT EXISTS idx_quizzes_college ON quizzes(college_id);
+CREATE INDEX IF NOT EXISTS idx_quizzes_active ON quizzes(is_active);

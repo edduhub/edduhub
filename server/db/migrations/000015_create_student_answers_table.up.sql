@@ -11,5 +11,5 @@ CREATE TABLE IF NOT EXISTS student_answers (
     UNIQUE(attempt_id, question_id)
 );
 
-CREATE INDEX idx_student_answers_attempt ON student_answers(attempt_id);
-CREATE INDEX idx_student_answers_question ON student_answers(question_id);
+CREATE INDEX IF NOT EXISTS idx_student_answers_attempt ON student_answers(attempt_id);
+CREATE INDEX IF NOT EXISTS idx_student_answers_question ON student_answers(question_id);

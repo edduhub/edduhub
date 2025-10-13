@@ -22,6 +22,8 @@ type ProfileRepository interface {
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
 	UpdateProfilePartial(ctx context.Context, profileID string, req *models.UpdateProfileRequest) error
 	DeleteProfile(ctx context.Context, profile *models.Profile) error
+	CreateProfileHistory(ctx context.Context, history *models.ProfileHistory) error
+	GetProfileHistory(ctx context.Context, profileID int, limit, offset int) ([]*models.ProfileHistory, error)
 }
 
 type profileRepository struct {
@@ -108,6 +110,47 @@ func (r *profileRepository) UpdateProfile(ctx context.Context, profile *models.P
 		return fmt.Errorf("UpdateProfile: no profile found with ID %d, or no changes made", profile.ID)
 	}
 	return nil
+}
+
+func (r *profileRepository) CreateProfileHistory(ctx context.Context, history *models.ProfileHistory) error {
+	sql := `INSERT INTO profile_history (profile_id, user_id, action, field, old_value, new_value, ip_address, user_agent, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
+
+	var id int
+	err := r.DB.Pool.QueryRow(ctx, sql,
+		history.ProfileID,
+		history.UserID,
+		history.Action,
+		history.Field,
+		history.OldValue,
+		history.NewValue,
+		history.IPAddress,
+		history.UserAgent,
+		history.CreatedAt,
+	).Scan(&id)
+
+	if err != nil {
+		return fmt.Errorf("CreateProfileHistory: failed to execute query: %w", err)
+	}
+
+	history.ID = id
+	return nil
+}
+
+func (r *profileRepository) GetProfileHistory(ctx context.Context, profileID int, limit, offset int) ([]*models.ProfileHistory, error) {
+	sql := `SELECT id, profile_id, user_id, action, field, old_value, new_value, ip_address, user_agent, created_at
+			FROM profile_history
+			WHERE profile_id = $1
+			ORDER BY created_at DESC
+			LIMIT $2 OFFSET $3`
+
+	var history []*models.ProfileHistory
+	err := pgxscan.Select(ctx, r.DB.Pool, &history, sql, profileID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("GetProfileHistory: failed to execute query: %w", err)
+	}
+
+	return history, nil
 }
 
 

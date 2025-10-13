@@ -180,7 +180,7 @@ func (a *AttendanceHandler) UpdateAttendance(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "invalid lectureID", 400)
 	}
-	studentID, err := helpers.ExtractStudentID(c)
+	studentID, err := helpers.GetIDFromParam(c, "studentID")
 	if err != nil {
 		return helpers.Error(c, "invalid studentID", 400)
 	}

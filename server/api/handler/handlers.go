@@ -23,7 +23,9 @@ type Handlers struct {
 	Question     *QuestionHandler
 	QuizAttempt  *QuizAttemptHandler
 	FileUpload   *FileUploadHandler
+	File         *FileHandler
 	Notification *NotificationHandler
+	WebSocket    *WebSocketHandler
 	Analytics    *AnalyticsHandler
 	Batch        *BatchHandler
 	Report       *ReportHandler
@@ -46,12 +48,14 @@ func NewHandlers(services *services.Services) *Handlers {
 		Assignment:   NewAssignmentHandler(services.AssignmentService),
 		User:         NewUserHandler(services.UserService),
 		Announcement: NewAnnouncementHandler(services.AnnouncementService),
-		Profile:      NewProfileHandler(services.ProfileService),
+		Profile:      NewProfileHandler(services.ProfileService, services.AuditService, services.StorageService),
 		System:       NewSystemHandler(services.DB),
 		Question:     NewQuestionHandler(services.QuestionService),
 		QuizAttempt:  NewQuizAttemptHandler(services.QuizAttemptService),
 		FileUpload:   NewFileUploadHandler(services.StorageService),
+		File:         NewFileHandler(services.FileService),
 		Notification: NewNotificationHandler(services.NotificationService),
+		WebSocket:    NewWebSocketHandler(services.WebSocketService),
 		Analytics:    NewAnalyticsHandler(services.AnalyticsService),
 		Batch:        NewBatchHandler(services.BatchService),
 		Report:       NewReportHandler(services.ReportService),

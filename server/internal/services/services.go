@@ -16,6 +16,7 @@ import (
 	"eduhub/server/internal/services/department"
 	"eduhub/server/internal/services/email"
 	"eduhub/server/internal/services/enrollment"
+	"eduhub/server/internal/services/file"
 	"eduhub/server/internal/services/grades"
 	"eduhub/server/internal/services/lecture"
 	"eduhub/server/internal/services/notification"
@@ -47,7 +48,9 @@ type Services struct {
 	QuestionService     quiz.QuestionServiceSimple
 	QuizAttemptService  quiz.QuizAttemptServiceSimple
 	StorageService      storage.StorageService
+	FileService         file.FileService
 	NotificationService notification.NotificationService
+	WebSocketService    notification.WebSocketService
 	AnalyticsService    analytics.AnalyticsService
 	BatchService        batch.BatchService
 	ReportService       report.ReportService
@@ -110,8 +113,11 @@ func NewServices(cfg *config.Config) *Services {
 
 	questionService := quiz.NewSimpleQuestionService(questionRepo)
 	quizAttemptService := quiz.NewSimpleQuizAttemptService(quizAttemptRepo, studentAnswerRepo, quizRepo)
+	fileRepo := repository.NewFileRepository(cfg.DB)
 	storageService := storage.NewStorageService(nil, "eduhub", "localhost:9000", false) // MinioClient will be nil for now
-	notificationService := notification.NewNotificationService(notificationRepo)
+	fileService := file.NewFileService(fileRepo, storageService)
+	websocketService := notification.NewWebSocketService(notificationRepo)
+	notificationService := notification.NewNotificationService(notificationRepo, websocketService)
 	analyticsService := analytics.NewAnalyticsService(studentRepo, attendanceRepo, gradeRepo, courseRepo, assignmentRepo, cfg.DB)
 	batchService := batch.NewBatchService(studentRepo, enrollmentRepo, gradeRepo)
 	reportService := report.NewReportService(studentRepo, gradeRepo, attendanceRepo, enrollmentRepo, courseRepo)
@@ -138,7 +144,9 @@ func NewServices(cfg *config.Config) *Services {
 		QuestionService:     questionService,
 		QuizAttemptService:  quizAttemptService,
 		StorageService:      storageService,
+		FileService:         fileService,
 		NotificationService: notificationService,
+		WebSocketService:    websocketService,
 		AnalyticsService:    analyticsService,
 		BatchService:        batchService,
 		ReportService:       reportService,

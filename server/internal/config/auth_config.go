@@ -37,3 +37,20 @@ func LoadAuthConfig() (*AuthConfig, error) {
 
 	return config, nil
 }
+
+// Validate is a method on AuthConfig for validation.
+func (c *AuthConfig) Validate() error {
+	if c.PublicURL == "" {
+		return fmt.Errorf("AuthConfig.PublicURL cannot be empty")
+	}
+	if c.AdminURL == "" {
+		return fmt.Errorf("AuthConfig.AdminURL cannot be empty")
+	}
+	if c.Domain == "" {
+		return fmt.Errorf("AuthConfig.Domain cannot be empty")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("AuthConfig.Port cannot be empty")
+	}
+	return nil
+}

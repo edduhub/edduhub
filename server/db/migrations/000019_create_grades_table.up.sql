@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS grades (
     CONSTRAINT valid_marks CHECK (obtained_marks <= total_marks AND obtained_marks >= 0)
 );
 
-CREATE INDEX idx_grades_student ON grades(student_id);
-CREATE INDEX idx_grades_course ON grades(course_id);
-CREATE INDEX idx_grades_college ON grades(college_id);
-CREATE INDEX idx_grades_type ON grades(assessment_type);
+CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id);
+CREATE INDEX IF NOT EXISTS idx_grades_course ON grades(course_id);
+CREATE INDEX IF NOT EXISTS idx_grades_college ON grades(college_id);
+CREATE INDEX IF NOT EXISTS idx_grades_type ON grades(assessment_type);
