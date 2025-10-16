@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Search, Users, BookOpen, Clock, Calendar } from "lucide-react";
+import { Plus, Search, Users, BookOpen, Clock, Calendar, Loader2 } from "lucide-react";
 
 type Course = {
   id: number;
@@ -27,64 +28,26 @@ type Course = {
 export default function CoursesPage() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [courses] = useState<Course[]>([
-    {
-      id: 1,
-      code: "CS201",
-      name: "Data Structures & Algorithms",
-      instructor: "Dr. Rajesh Kumar",
-      semester: "Spring 2024",
-      credits: 4,
-      enrolledStudents: 82,
-      maxStudents: 100,
-      progress: 65,
-      nextLecture: "Tomorrow, 10:00 AM",
-      description: "Fundamental data structures and algorithm design techniques",
-      department: "Computer Science"
-    },
-    {
-      id: 2,
-      code: "CS305",
-      name: "Database Management Systems",
-      instructor: "Prof. Priya Sharma",
-      semester: "Spring 2024",
-      credits: 4,
-      enrolledStudents: 76,
-      maxStudents: 80,
-      progress: 55,
-      nextLecture: "Today, 2:00 PM",
-      description: "Design and implementation of database systems",
-      department: "Computer Science"
-    },
-    {
-      id: 3,
-      code: "CS401",
-      name: "Machine Learning",
-      instructor: "Dr. Amit Patel",
-      semester: "Spring 2024",
-      credits: 4,
-      enrolledStudents: 65,
-      maxStudents: 70,
-      progress: 45,
-      nextLecture: "Friday, 11:00 AM",
-      description: "Introduction to machine learning algorithms and applications",
-      department: "Computer Science"
-    },
-    {
-      id: 4,
-      code: "CS302",
-      name: "Web Development",
-      instructor: "Prof. Neha Singh",
-      semester: "Spring 2024",
-      credits: 3,
-      enrolledStudents: 90,
-      maxStudents: 100,
-      progress: 70,
-      nextLecture: "Monday, 3:00 PM",
-      description: "Modern web development with React and Node.js",
-      department: "Computer Science"
-    }
-  ]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/courses');
+        setCourses(Array.isArray(response) ? response : []);
+      } catch (err) {
+        console.error('Failed to fetch courses:', err);
+        setError('Failed to load courses');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
 
   const filteredCourses = courses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"eduhub/server/internal/helpers"
@@ -215,6 +216,85 @@ func (a *AttendanceHandler) FreezeAttendance(c echo.Context) error {
 		return helpers.Error(c, "unable to freeze attendance", 500)
 	}
 	return helpers.Success(c, "Freezed Attendance", 200)
+}
+
+// GetMyAttendance gets attendance for the currently authenticated student
+func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return helpers.Error(c, "invalid collegeID", 400)
+	}
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "invalid studentID", 400)
+	}
+
+	attendance, err := a.attendanceService.GetAttendanceByStudent(ctx, collegeID, studentID, 100, 0)
+	if err != nil {
+		return helpers.Error(c, "unable to get attendance by student", http.StatusInternalServerError)
+	}
+	return helpers.Success(c, attendance, http.StatusOK)
+}
+
+// GetMyCourseStats gets course-wise attendance stats for current student
+func (a *AttendanceHandler) GetMyCourseStats(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return helpers.Error(c, "invalid collegeID", 400)
+	}
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "invalid studentID", 400)
+	}
+
+	// Get all attendance records for the student
+	attendance, err := a.attendanceService.GetAttendanceByStudent(ctx, collegeID, studentID, 1000, 0)
+	if err != nil {
+		return helpers.Error(c, "unable to get attendance", http.StatusInternalServerError)
+	}
+
+	// Group by course and calculate stats
+	courseStats := make(map[int]struct {
+		CourseName string
+		CourseCode string
+		Present    int
+		Total      int
+		Percentage float64
+	})
+
+	for _, record := range attendance {
+		stats := courseStats[record.CourseID]
+		stats.Total++
+		if record.Status == "Present" {
+			stats.Present++
+		}
+		// Note: CourseCode and CourseName would need to be fetched from course service
+		// For now, using courseID as placeholder
+		stats.CourseCode = fmt.Sprintf("COURSE-%d", record.CourseID)
+		stats.CourseName = fmt.Sprintf("Course %d", record.CourseID)
+		if stats.Total > 0 {
+			stats.Percentage = float64(stats.Present) / float64(stats.Total) * 100
+		}
+		courseStats[record.CourseID] = stats
+	}
+
+	// Convert map to slice
+	result := []map[string]interface{}{}
+	for _, stats := range courseStats {
+		result = append(result, map[string]interface{}{
+			"courseName": stats.CourseName,
+			"courseCode": stats.CourseCode,
+			"present":    stats.Present,
+			"total":      stats.Total,
+			"percentage": stats.Percentage,
+		})
+	}
+
+	return helpers.Success(c, result, http.StatusOK)
 }
 
 func (a *AttendanceHandler) MarkBulkAttendance(c echo.Context) error {

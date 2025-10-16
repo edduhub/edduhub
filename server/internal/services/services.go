@@ -1,6 +1,8 @@
 package services
 
 import (
+	"time"
+
 	"eduhub/server/internal/config"
 	"eduhub/server/internal/repository"
 	"eduhub/server/internal/services/analytics"
@@ -27,6 +29,7 @@ import (
 	"eduhub/server/internal/services/student"
 	"eduhub/server/internal/services/user"
 	"eduhub/server/internal/services/webhook"
+	"eduhub/server/pkg/jwt"
 )
 
 type Services struct {
@@ -63,7 +66,15 @@ type Services struct {
 func NewServices(cfg *config.Config) *Services {
 	kratosService := auth.NewKratosService()
 	ketoService := auth.NewKetoService()
-	authService := auth.NewAuthService(kratosService, ketoService)
+
+	// Initialize JWT manager
+	jwtManager := jwt.NewJWTManager(
+		cfg.AuthConfig.JWTSecret,
+		24*time.Hour, // Token valid for 24 hours
+	)
+
+	// Create auth service with JWT manager
+	authService := auth.NewAuthService(kratosService, ketoService, jwtManager)
 
 	// Create individual repository instances using modular approach
 	studentRepo := repository.NewStudentRepository(cfg.DB)
@@ -76,6 +87,8 @@ func NewServices(cfg *config.Config) *Services {
 	userRepo := repository.NewUserRepository(cfg.DB)
 	lectureRepo := repository.NewLectureRepository(cfg.DB)
 	quizRepo := repository.NewQuizRepository(cfg.DB)
+	// Create quizAttemptRepo early for quiz service
+	quizAttemptRepo := repository.NewQuizAttemptRepository(cfg.DB)
 	calendarRepo := repository.NewCalendarRepository(cfg.DB)
 	departmentRepo := repository.NewDepartmentRepository(cfg.DB)
 	assignmentRepo := repository.NewAssignmentRepository(cfg.DB, nil)
@@ -95,7 +108,7 @@ func NewServices(cfg *config.Config) *Services {
 	courseService := course.NewCourseService(courseRepo, collegeRepo, userRepo)
 	gradeService := grades.NewGradeServices(gradeRepo, studentRepo, enrollmentRepo, courseRepo)
 	lectureService := lecture.NewLectureService(lectureRepo)
-	quizService := quiz.NewQuizService(quizRepo, courseRepo, collegeRepo, enrollmentRepo)
+	quizService := quiz.NewQuizService(quizRepo, quizAttemptRepo, courseRepo, collegeRepo, enrollmentRepo)
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	departmentService := department.NewDepartmentService(departmentRepo)
 	assignmentService := assignment.NewAssignmentService(assignmentRepo, nil)
@@ -105,7 +118,7 @@ func NewServices(cfg *config.Config) *Services {
 
 	// New services
 	questionRepo := repository.NewQuestionRepository(cfg.DB)
-	quizAttemptRepo := repository.NewQuizAttemptRepository(cfg.DB)
+	// quizAttemptRepo already created earlier
 	studentAnswerRepo := repository.NewStudentAnswerRepository(cfg.DB)
 	notificationRepo := repository.NewNotificationRepository(cfg.DB)
 	webhookRepo := repository.NewWebhookRepository(cfg.DB)
@@ -114,7 +127,12 @@ func NewServices(cfg *config.Config) *Services {
 	questionService := quiz.NewSimpleQuestionService(questionRepo)
 	quizAttemptService := quiz.NewSimpleQuizAttemptService(quizAttemptRepo, studentAnswerRepo, quizRepo)
 	fileRepo := repository.NewFileRepository(cfg.DB)
-	storageService := storage.NewStorageService(nil, "eduhub", "localhost:9000", false) // MinioClient will be nil for now
+	storageService := storage.NewStorageService(
+		nil, // Use default MinioClient later when storage config is available
+		cfg.StorageConfig.Bucket,
+		cfg.StorageConfig.Endpoint,
+		cfg.StorageConfig.UseSSL,
+	)
 	fileService := file.NewFileService(fileRepo, storageService)
 	websocketService := notification.NewWebSocketService(notificationRepo)
 	notificationService := notification.NewNotificationService(notificationRepo, websocketService)
@@ -123,7 +141,13 @@ func NewServices(cfg *config.Config) *Services {
 	reportService := report.NewReportService(studentRepo, gradeRepo, attendanceRepo, enrollmentRepo, courseRepo)
 	webhookService := webhook.NewWebhookService(webhookRepo)
 	auditService := audit.NewAuditService(auditRepo)
-	emailService := email.NewEmailService("", "", "", "", "")
+	emailService := email.NewEmailService(
+		cfg.EmailConfig.Host,
+		cfg.EmailConfig.Port,
+		cfg.EmailConfig.Username,
+		cfg.EmailConfig.Password,
+		cfg.EmailConfig.FromAddress,
+	)
 
 	return &Services{
 		Auth:                authService,

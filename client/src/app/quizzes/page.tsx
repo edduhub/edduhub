@@ -1,13 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Clock, BookOpen, Trophy, Play } from "lucide-react";
+import { fetchQuizzes } from "@/lib/api-client";
 
 type Quiz = {
+  id: number;
+  title: string;
+  description: string;
+  course_id: number;
+  time_limit_minutes: number;
+  due_date: string;
+  created_at: string;
+  updated_at: string;
+  course?: {
+    id: number;
+    name: string;
+  };
+  questions?: any[];
+};
+
+type DisplayQuiz = {
   id: number;
   title: string;
   courseName: string;
@@ -24,45 +41,28 @@ type Quiz = {
 
 export default function QuizzesPage() {
   const { user } = useAuth();
-  const [quizzes] = useState<Quiz[]>([
-    {
-      id: 1,
-      title: "Data Structures Midterm",
-      courseName: "CS201",
-      duration: 60,
-      totalMarks: 50,
-      questionsCount: 25,
-      status: 'not_started',
-      attempts: 0,
-      maxAttempts: 2,
-      startTime: new Date().toISOString(),
-      endTime: new Date(Date.now() + 7 * 86400000).toISOString()
-    },
-    {
-      id: 2,
-      title: "SQL Queries Quiz",
-      courseName: "CS305",
-      duration: 45,
-      totalMarks: 40,
-      questionsCount: 20,
-      status: 'completed',
-      score: 36,
-      attempts: 1,
-      maxAttempts: 1
-    },
-    {
-      id: 3,
-      title: "ML Algorithms Assessment",
-      courseName: "CS401",
-      duration: 90,
-      totalMarks: 100,
-      questionsCount: 40,
-      status: 'not_started',
-      attempts: 0,
-      maxAttempts: 1,
-      startTime: new Date(Date.now() + 2 * 86400000).toISOString()
-    }
-  ]);
+  const [quizzes, setQuizzes] = useState<DisplayQuiz[]>([]);
+
+  useEffect(() => {
+    const loadQuizzes = async () => {
+      const data = await fetchQuizzes();
+      const displayQuizzes: DisplayQuiz[] = data.map((quiz: Quiz) => ({
+        id: quiz.id,
+        title: quiz.title,
+        courseName: quiz.course?.name || `Course ${quiz.course_id}`,
+        duration: quiz.time_limit_minutes,
+        totalMarks: (quiz.questions?.length || 0) * 10,
+        questionsCount: quiz.questions?.length || 0,
+        status: 'not_started' as const,
+        attempts: 0,
+        maxAttempts: 1,
+        endTime: quiz.due_date,
+      }));
+      setQuizzes(displayQuizzes);
+    };
+
+    loadQuizzes();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const styles = {

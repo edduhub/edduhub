@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
+      const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -77,11 +77,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Login failed');
+        throw new Error(error.message || error.error || 'Login failed');
       }
 
-      const data = await response.json();
-      saveSession(data);
+      const result = await response.json();
+      // Backend returns {data: {token, user, expiresAt}, message}
+      const data = result.data || result;
+      
+      const authSession: AuthSession = {
+        token: data.token,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+          firstName: data.user.firstName,
+          lastName: data.user.lastName,
+          role: data.user.role,
+          collegeId: data.user.collegeId,
+          collegeName: data.user.collegeName,
+          verified: data.user.verified || false,
+        },
+        expiresAt: data.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      
+      saveSession(authSession);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -90,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (data: RegisterData) => {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/register`, {
+      const response = await fetch(`${API_BASE}/auth/register/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -98,11 +116,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Registration failed');
+        throw new Error(error.message || error.error || 'Registration failed');
       }
 
-      const authData = await response.json();
-      saveSession(authData);
+      const result = await response.json();
+      const responseData = result.data || result;
+      
+      const authSession: AuthSession = {
+        token: responseData.token,
+        user: {
+          id: responseData.user.id,
+          email: responseData.user.email,
+          firstName: responseData.user.firstName,
+          lastName: responseData.user.lastName,
+          role: responseData.user.role,
+          collegeId: responseData.user.collegeId,
+          collegeName: responseData.user.collegeName,
+          verified: responseData.user.verified || false,
+        },
+        expiresAt: responseData.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      
+      saveSession(authSession);
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
@@ -112,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       if (session?.token) {
-        await fetch(`${API_BASE}/api/auth/logout`, {
+        await fetch(`${API_BASE}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${session.token}`,
@@ -130,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!session?.token) return;
 
     try {
-      const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+      const response = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.token}`,
@@ -138,8 +173,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        saveSession(data);
+        const result = await response.json();
+        const data = result.data || result;
+        if (data.session_token) {
+          // Update token
+          const updatedSession = {
+            ...session,
+            token: data.session_token,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          };
+          saveSession(updatedSession);
+        }
       } else {
         clearSession();
       }

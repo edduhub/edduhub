@@ -36,6 +36,10 @@ type QuizAttemptRepository interface {
 	// FindQuizAttemptsByQuiz retrieves quiz attempts for a specific quiz with pagination.
 	// Results are ordered by student ID then start time (descending).
 	FindQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.QuizAttempt, error)
+
+	// CountQuizAttemptsByQuiz returns the total number of attempts for a quiz.
+	// Used for pagination calculations.
+	CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error)
 }
 
 // quizAttemptRepository implements the QuizAttemptRepository interface.
@@ -180,4 +184,21 @@ func (r *quizAttemptRepository) FindQuizAttemptsByQuiz(ctx context.Context, coll
 	}
 
 	return attempts, nil
+}
+
+// CountQuizAttemptsByQuiz returns the total count of quiz attempts for a quiz.
+// Ensures college isolation.
+func (r *quizAttemptRepository) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
+	var count int
+
+	// Query to count quiz attempts for a specific quiz within a college
+	sql := `SELECT COUNT(*) FROM quiz_attempts WHERE college_id = $1 AND quiz_id = $2`
+	args := []any{collegeID, quizID}
+
+	err := pgxscan.Get(ctx, r.DB.Pool, &count, sql, args...)
+	if err != nil {
+		return 0, fmt.Errorf("CountQuizAttemptsByQuiz: failed to count quiz attempts: %w", err)
+	}
+
+	return count, nil
 }

@@ -188,3 +188,29 @@ func (h *AssignmentHandler) GradeSubmission(c echo.Context) error {
 
 	return helpers.Success(c, "Submission graded successfully", 200)
 }
+
+// GetMyAssignments returns all assignments across all enrolled courses for current student
+func (h *AssignmentHandler) GetMyAssignments(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "student ID required", 400)
+	}
+
+	// This would need enrollment service to get all courses
+	// For now, return empty or implement full logic
+	// Placeholder implementation
+	_ = collegeID
+	_ = studentID
+
+	// TODO: Implement full logic with enrollment service
+	// 1. Get all enrolled courses for student
+	// 2. For each course, get assignments
+	// 3. Combine and return
+
+	return helpers.Success(c, []interface{}{}, 200)
+}

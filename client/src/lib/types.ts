@@ -14,6 +14,23 @@ export type User = {
   verified: boolean;
 };
 
+export type Profile = {
+  id: number;
+  user_id: string;
+  college_id: string;
+  bio: string;
+  profile_image: string;
+  phone_number: string;
+  address: string;
+  date_of_birth: string;
+  joined_at: string;
+  last_active: string;
+  preferences: Record<string, any>;
+  social_links: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuthSession = {
   token: string;
   user: User;

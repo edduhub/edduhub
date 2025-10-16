@@ -23,6 +23,20 @@ start_containers() {
     sleep 2
   done
 
+  echo "Waiting for Kratos to become ready..."
+  until curl -sf http://localhost:4434/health/ready >/dev/null 2>&1; do
+    sleep 2
+  done
+
+  echo "Checking Keto status..."
+  if ! docker ps --filter "name=edduhub-keto" --filter "status=running" | grep -q edduhub-keto; then
+    echo "WARNING: Keto container is not running. Checking logs..."
+    docker logs edduhub-keto 2>&1 | tail -n 10
+    echo "Attempting to restart Keto..."
+    docker compose -f "$COMPOSE_FILE" restart keto
+    sleep 3
+  fi
+
   echo "Infrastructure ready."
 }
 
@@ -37,23 +51,6 @@ run_migrations() {
   echo "Migrations applied."
 }
 
-start_backend() {
-  echo "Starting Go backend..."
-  (cd "$ROOT_DIR" && go run ./server/main.go) >/tmp/edduhub-backend.log 2>&1 &
-  BACKEND_PID=$!
-  echo $BACKEND_PID
-}
-
-start_frontend() {
-  echo "Starting Next.js frontend..."
-  if [ ! -d "$ROOT_DIR/client/node_modules" ]; then
-    (cd "$ROOT_DIR/client" && bun install)
-  fi
-  (cd "$ROOT_DIR/client" && bun run dev) >/tmp/edduhub-frontend.log 2>&1 &
-  FRONTEND_PID=$!
-  echo $FRONTEND_PID
-}
-
 ensure_command docker
 ensure_command go
 ensure_command bun
@@ -61,8 +58,21 @@ ensure_command bun
 start_containers
 run_migrations
 
-BACKEND_PID=$(start_backend)
-FRONTEND_PID=$(start_frontend)
+echo "Starting Go backend..."
+# Load environment variables
+set -a
+source "$ROOT_DIR/.env"
+set +a
+(cd "$ROOT_DIR" && go run ./server/main.go) >/tmp/edduhub-backend.log 2>&1 &
+BACKEND_PID=$!
+
+echo "Starting Next.js frontend..."
+if [ ! -d "$ROOT_DIR/client/node_modules" ]; then
+  (cd "$ROOT_DIR/client" && bun install)
+fi
+# Unset PORT to avoid conflict with backend
+(cd "$ROOT_DIR/client" && unset PORT && bun run dev) >/tmp/edduhub-frontend.log 2>&1 &
+FRONTEND_PID=$!
 
 echo "Backend logs: tail -f /tmp/edduhub-backend.log"
 echo "Frontend logs: tail -f /tmp/edduhub-frontend.log"

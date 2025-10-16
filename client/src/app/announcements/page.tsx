@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Plus, Search, Pin, Clock, AlertCircle } from "lucide-react";
+import { Plus, Search, Pin, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 type Announcement = {
@@ -28,64 +29,26 @@ export default function AnnouncementsPage() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [announcements] = useState<Announcement[]>([
-    {
-      id: 1,
-      title: "Campus-wide Internet Maintenance",
-      content: "The campus internet will undergo scheduled maintenance on Saturday, March 23rd from 2 AM to 6 AM. Services will be unavailable during this time.",
-      priority: 'urgent',
-      author: "IT Department",
-      authorRole: "Admin",
-      publishedAt: new Date().toISOString(),
-      targetAudience: ['all'],
-      isPinned: true
-    },
-    {
-      id: 2,
-      title: "Guest Lecture on AI Ethics",
-      content: "Dr. Sarah Johnson from MIT will be delivering a guest lecture on AI Ethics and Responsible Computing. All students are encouraged to attend.",
-      priority: 'high',
-      author: "Dr. Rajesh Kumar",
-      authorRole: "Faculty",
-      publishedAt: new Date(Date.now() - 3600000).toISOString(),
-      courseName: "CS401 - Machine Learning",
-      targetAudience: ['students', 'faculty']
-    },
-    {
-      id: 3,
-      title: "Assignment Submission Deadline Extended",
-      content: "The submission deadline for Assignment 3 has been extended to March 25th due to technical issues with the submission portal.",
-      priority: 'normal',
-      author: "Prof. Priya Sharma",
-      authorRole: "Faculty",
-      publishedAt: new Date(Date.now() - 7200000).toISOString(),
-      courseName: "CS201 - Data Structures",
-      targetAudience: ['students']
-    },
-    {
-      id: 4,
-      title: "Hackathon Registration Open",
-      content: "Annual college hackathon registration is now open! Team size 2-4 members. Amazing prizes to be won. Register before March 30th.",
-      priority: 'normal',
-      author: "Student Council",
-      authorRole: "Student",
-      publishedAt: new Date(Date.now() - 86400000).toISOString(),
-      departmentName: "Computer Science",
-      targetAudience: ['students'],
-      isPinned: true
-    },
-    {
-      id: 5,
-      title: "Library Timings Update",
-      content: "The library will now be open until 11 PM on weekdays starting next week. Weekend timings remain unchanged.",
-      priority: 'low',
-      author: "Library Administration",
-      authorRole: "Admin",
-      publishedAt: new Date(Date.now() - 172800000).toISOString(),
-      targetAudience: ['all']
-    }
-  ]);
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/announcements');
+        setAnnouncements(Array.isArray(response) ? response : []);
+      } catch (err) {
+        console.error('Failed to fetch announcements:', err);
+        setError('Failed to load announcements');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnnouncements();
+  }, []);
 
   const getPriorityBadge = (priority: string) => {
     const config = {

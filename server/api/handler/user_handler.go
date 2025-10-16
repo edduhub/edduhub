@@ -5,6 +5,7 @@ import (
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/models"
+	"eduhub/server/internal/services/auth"
 	"eduhub/server/internal/services/user"
 
 	"github.com/labstack/echo/v4"
@@ -212,7 +213,7 @@ func (h *UserHandler) UpdateUserStatus(c echo.Context) error {
 
 // ChangePassword allows user to change their own password
 func (h *UserHandler) ChangePassword(c echo.Context) error {
-	userID, err := helpers.ExtractUserID(c)
+	_, err := helpers.ExtractUserID(c)
 	if err != nil {
 		return helpers.Error(c, "user ID required", 401)
 	}
@@ -226,10 +227,36 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 		return helpers.Error(c, "invalid request body", 400)
 	}
 
-	// TODO: Implement password change through Kratos or your auth system
-	// This is a placeholder - actual implementation depends on your auth setup
-	_ = userID
-	_ = req
+	// Get services from context
+	services := c.Get("services")
 
-	return helpers.Success(c, "Password change initiated - check your email", 200)
+	// Type assert to get our services
+	allServices, ok := services.(*interface{})
+	if !ok {
+		return helpers.Error(c, "internal server error", 500)
+	}
+
+	servicesMap, ok := (*allServices).(map[string]interface{})
+	if !ok {
+		return helpers.Error(c, "internal server error", 500)
+	}
+
+	authService, ok := servicesMap["Auth"].(auth.AuthService)
+	if !ok {
+		return helpers.Error(c, "internal server error", 500)
+	}
+
+	// Get user's identity from context to extract identity ID
+	identity, ok := c.Get("identity").(*auth.Identity)
+	if !ok {
+		return helpers.Error(c, "authentication required", 401)
+	}
+
+	// Use the auth service's ChangePassword method
+	err = authService.ChangePassword(c.Request().Context(), identity.ID, req.OldPassword, req.NewPassword)
+	if err != nil {
+		return helpers.Error(c, "Password change failed: "+err.Error(), 400)
+	}
+
+	return helpers.Success(c, "Password changed successfully", 200)
 }

@@ -39,12 +39,14 @@ services:
   keto:
     image: oryd/keto:latest
     container_name: edduhub-keto
-    command: serve
+    command: serve -c /etc/config/keto.yml
     environment:
       - DSN=memory
     ports:
       - "4466:4466" # write
       - "4467:4467" # read
+    volumes:
+      - ./auth/keto/keto.yml:/etc/config/keto.yml:ro
 
   kratos-db:
     image: postgres:17-alpine

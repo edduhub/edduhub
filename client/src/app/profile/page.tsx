@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchProfile } from "@/lib/api-client";
+import { Profile } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,15 +16,33 @@ import { Camera, Mail, Phone, MapPin, Calendar, Edit2 } from "lucide-react";
 export default function ProfilePage() {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [profileData, setProfileData] = useState({
     firstName: user?.firstName || "",
     lastName: user?.lastName || "",
     email: user?.email || "",
-    phone: "+91 9876543210",
-    dateOfBirth: "1998-05-15",
-    address: "123 College Street, Mumbai, Maharashtra",
-    bio: "Computer Science student passionate about AI and Machine Learning."
+    phone: "",
+    dateOfBirth: "",
+    address: "",
+    bio: ""
   });
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const data = await fetchProfile();
+      setProfile(data);
+      setProfileData({
+        firstName: user?.firstName || "",
+        lastName: user?.lastName || "",
+        email: user?.email || "",
+        phone: data.phone_number || "",
+        dateOfBirth: data.date_of_birth ? new Date(data.date_of_birth).toISOString().split('T')[0] : "",
+        address: data.address || "",
+        bio: data.bio || ""
+      });
+    };
+    loadProfile();
+  }, [user]);
 
   const userInitials = user
     ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
@@ -89,7 +109,9 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Joined 2023</span>
+                  <span className="text-muted-foreground">
+                    Joined {profile?.joined_at ? new Date(profile.joined_at).getFullYear() : 'N/A'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -218,19 +240,19 @@ export default function ProfilePage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">College ID</p>
-                <p className="font-medium">{user.collegeId}</p>
+                <p className="font-medium">{profile?.college_id || user.collegeId}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Department</p>
-                <p className="font-medium">Computer Science</p>
+                <p className="font-medium">N/A</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Semester</p>
-                <p className="font-medium">6th Semester</p>
+                <p className="font-medium">N/A</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">GPA</p>
-                <p className="font-medium">3.85/4.0</p>
+                <p className="font-medium">N/A</p>
               </div>
             </div>
           </CardContent>

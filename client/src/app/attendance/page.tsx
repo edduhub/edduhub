@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { QrCode, CheckCircle, XCircle, Clock, Calendar } from "lucide-react";
+import { QrCode, CheckCircle, XCircle, Clock, Calendar, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 type AttendanceRecord = {
@@ -29,47 +30,40 @@ type CourseAttendance = {
 
 export default function AttendancePage() {
   const { user } = useAuth();
-  const [records] = useState<AttendanceRecord[]>([
-    {
-      id: 1,
-      courseName: "Data Structures",
-      courseCode: "CS201",
-      date: new Date().toISOString(),
-      status: 'present',
-      markedBy: 'Dr. Kumar'
-    },
-    {
-      id: 2,
-      courseName: "Database Systems",
-      courseCode: "CS305",
-      date: new Date(Date.now() - 86400000).toISOString(),
-      status: 'present',
-      markedBy: 'Prof. Sharma'
-    },
-    {
-      id: 3,
-      courseName: "Machine Learning",
-      courseCode: "CS401",
-      date: new Date(Date.now() - 2 * 86400000).toISOString(),
-      status: 'absent',
-      markedBy: 'Dr. Patel'
-    },
-    {
-      id: 4,
-      courseName: "Data Structures",
-      courseCode: "CS201",
-      date: new Date(Date.now() - 3 * 86400000).toISOString(),
-      status: 'late',
-      markedBy: 'Dr. Kumar'
-    }
-  ]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [courseStats, setCourseStats] = useState<CourseAttendance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [courseStats] = useState<CourseAttendance[]>([
-    { courseName: "Data Structures", courseCode: "CS201", present: 18, total: 20, percentage: 90 },
-    { courseName: "Database Systems", courseCode: "CS305", present: 22, total: 24, percentage: 91.7 },
-    { courseName: "Machine Learning", courseCode: "CS401", present: 15, total: 18, percentage: 83.3 },
-    { courseName: "Web Development", courseCode: "CS302", present: 20, total: 22, percentage: 90.9 }
-  ]);
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      try {
+        setLoading(true);
+        // Fetch individual attendance records
+        try {
+          const recordsResponse = await api.get('/api/attendance/student/me');
+          setRecords(Array.isArray(recordsResponse) ? recordsResponse : []);
+        } catch (err) {
+          console.warn('Failed to fetch attendance records:', err);
+        }
+
+        // Try to fetch course attendance stats
+        try {
+          const statsResponse = await api.get('/api/attendance/stats/courses');
+          setCourseStats(Array.isArray(statsResponse) ? statsResponse : []);
+        } catch (err) {
+          console.warn('Failed to fetch attendance stats:', err);
+        }
+      } catch (err) {
+        console.error('Failed to fetch attendance:', err);
+        setError('Failed to load attendance data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttendance();
+  }, []);
 
   const overallAttendance = Math.round(
     (courseStats.reduce((acc, c) => acc + c.present, 0) / 

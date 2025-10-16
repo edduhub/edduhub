@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, UserPlus, Download, Filter } from "lucide-react";
+import { Plus, Search, UserPlus, Download, Filter, Loader2 } from "lucide-react";
 
 type Student = {
   id: number;
@@ -26,69 +27,26 @@ type Student = {
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
-  
-  const [students] = useState<Student[]>([
-    {
-      id: 1,
-      name: "Aarav Kumar",
-      rollNo: "CS-2023-001",
-      email: "aarav.kumar@college.edu",
-      department: "Computer Science",
-      semester: 6,
-      gpa: 3.85,
-      attendance: 92,
-      enrolledCourses: 5,
-      status: 'active'
-    },
-    {
-      id: 2,
-      name: "Mira Singh",
-      rollNo: "CS-2023-002",
-      email: "mira.singh@college.edu",
-      department: "Computer Science",
-      semester: 6,
-      gpa: 3.92,
-      attendance: 95,
-      enrolledCourses: 5,
-      status: 'active'
-    },
-    {
-      id: 3,
-      name: "Rahul Patel",
-      rollNo: "EC-2023-015",
-      email: "rahul.patel@college.edu",
-      department: "Electronics",
-      semester: 4,
-      gpa: 3.65,
-      attendance: 88,
-      enrolledCourses: 6,
-      status: 'active'
-    },
-    {
-      id: 4,
-      name: "Priya Sharma",
-      rollNo: "ME-2023-022",
-      email: "priya.sharma@college.edu",
-      department: "Mechanical",
-      semester: 8,
-      gpa: 3.78,
-      attendance: 90,
-      enrolledCourses: 4,
-      status: 'active'
-    },
-    {
-      id: 5,
-      name: "Arjun Verma",
-      rollNo: "CS-2023-010",
-      email: "arjun.verma@college.edu",
-      department: "Computer Science",
-      semester: 2,
-      gpa: 3.45,
-      attendance: 75,
-      enrolledCourses: 6,
-      status: 'active'
-    }
-  ]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/students');
+        setStudents(Array.isArray(response) ? response : []);
+      } catch (err) {
+        console.error('Failed to fetch students:', err);
+        setError('Failed to load students');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const styles = {

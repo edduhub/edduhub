@@ -31,6 +31,14 @@ type Config struct {
 	// Loaded via LoadRedisConfig() from the cache configuration module.
 	RedisConfig *RedisConfig
 
+	// EmailConfig contains SMTP email configuration.
+	// Loaded via LoadEmailConfig() from the email configuration module.
+	EmailConfig *EmailConfig
+
+	// StorageConfig contains file storage configuration.
+	// Loaded via LoadStorageConfig() from the storage configuration module.
+	StorageConfig *StorageConfig
+
 	// AppPort is the port for the application server (deprecated, use AppConfig.Port).
 	// Kept for backward compatibility.
 	AppPort string
@@ -47,6 +55,8 @@ type Config struct {
 //   - Database configuration (DB and DBConfig)
 //   - Authentication configuration (AuthConfig)
 //   - General application configuration (AppConfig)
+//   - Email configuration (EmailConfig)
+//   - Storage configuration (StorageConfig)
 //
 // Security Considerations:
 //   - All configurations are validated before returning
@@ -80,14 +90,30 @@ func NewConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to load redis config: %w", err)
 	}
 
+	// Load email configuration (optional - will use defaults if not configured)
+	emailConfig, err := LoadEmailConfig()
+	if err != nil {
+		// Make email config optional by not failing if it's missing
+		emailConfig = nil
+	}
+
+	// Load storage configuration (optional - will use defaults if not configured)
+	storageConfig, err := LoadStorageConfig()
+	if err != nil {
+		// Make storage config optional by not failing if it's missing
+		storageConfig = nil
+	}
+
 	// Create the main config
 	cfg := &Config{
-		DB:          db,
-		DBConfig:    dbConfig,
-		AuthConfig:  authConfig,
-		AppConfig:   appConfig,
-		RedisConfig: redisConfig,
-		AppPort:     appConfig.Port,
+		DB:            db,
+		DBConfig:      dbConfig,
+		AuthConfig:    authConfig,
+		AppConfig:     appConfig,
+		RedisConfig:   redisConfig,
+		EmailConfig:   emailConfig,
+		StorageConfig: storageConfig,
+		AppPort:       appConfig.Port,
 	}
 
 	// Perform comprehensive validation
@@ -110,6 +136,7 @@ func LoadConfig() (*Config, error) {
 
 // Validate performs comprehensive validation on the entire Config.
 // It calls Validate() on each sub-configuration module to ensure consistency and correctness.
+// Optional configurations (EmailConfig, StorageConfig) are only validated if present.
 //
 // Returns an error if any validation fails.
 func (c *Config) Validate() error {
@@ -126,7 +153,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("Config.AppConfig cannot be nil")
 	}
 
-	// Validate sub-configurations
+	// Validate required configurations
 	if err := c.DBConfig.Validate(); err != nil {
 		return fmt.Errorf("DBConfig validation failed: %w", err)
 	}
@@ -136,10 +163,22 @@ func (c *Config) Validate() error {
 	if err := c.AppConfig.Validate(); err != nil {
 		return fmt.Errorf("AppConfig validation failed: %w", err)
 	}
+
+	// Validate optional configurations if present
 	if c.RedisConfig != nil {
 		if err := c.RedisConfig.Validate(); err != nil {
 			return fmt.Errorf("RedisConfig validation failed: %w", err)
+		}
 	}
+	if c.EmailConfig != nil {
+		if err := c.EmailConfig.Validate(); err != nil {
+			return fmt.Errorf("EmailConfig validation failed: %w", err)
+		}
+	}
+	if c.StorageConfig != nil {
+		if err := c.StorageConfig.Validate(); err != nil {
+			return fmt.Errorf("StorageConfig validation failed: %w", err)
+		}
 	}
 
 	return nil

@@ -22,6 +22,16 @@ func NewSystemHandler(db *repository.DB) *SystemHandler {
 
 // HealthCheck performs a health check on the system
 func (h *SystemHandler) HealthCheck(c echo.Context) error {
+	if h.db == nil {
+		return helpers.Success(c, map[string]interface{}{
+			"status":    "unhealthy",
+			"timestamp": time.Now().Format(time.RFC3339),
+			"service":   "eduhub-api",
+			"database":  "unavailable",
+			"error":     "database connection not initialized",
+		}, 503)
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
 	defer cancel()
 
@@ -32,16 +42,21 @@ func (h *SystemHandler) HealthCheck(c echo.Context) error {
 	}
 
 	// Check database connection
-	if h.db != nil && h.db.Pool != nil {
-		err := h.db.Pool.Ping(ctx)
-		if err != nil {
-			status["status"] = "unhealthy"
-			status["database"] = "unavailable"
-			status["error"] = err.Error()
-			return helpers.Success(c, status, 503)
-		}
-		status["database"] = "connected"
+	if h.db.Pool == nil {
+		status["status"] = "unhealthy"
+		status["database"] = "unavailable"
+		status["error"] = "database pool not initialized"
+		return helpers.Success(c, status, 503)
 	}
+
+	err := h.db.Pool.Ping(ctx)
+	if err != nil {
+		status["status"] = "unhealthy"
+		status["database"] = "unavailable"
+		status["error"] = err.Error()
+		return helpers.Success(c, status, 503)
+	}
+	status["database"] = "connected"
 
 	return helpers.Success(c, status, 200)
 }
@@ -52,11 +67,16 @@ func (h *SystemHandler) ReadinessCheck(c echo.Context) error {
 	defer cancel()
 
 	// Check if database is ready
-	if h.db != nil && h.db.Pool != nil {
-		err := h.db.Pool.Ping(ctx)
-		if err != nil {
-			return helpers.Error(c, "service not ready", 503)
-		}
+	if h.db == nil {
+		return helpers.Error(c, "service not ready: database not initialized", 503)
+	}
+	if h.db.Pool == nil {
+		return helpers.Error(c, "service not ready: database pool not initialized", 503)
+	}
+
+	err := h.db.Pool.Ping(ctx)
+	if err != nil {
+		return helpers.Error(c, "service not ready: "+err.Error(), 503)
 	}
 
 	return helpers.Success(c, map[string]string{"status": "ready"}, 200)

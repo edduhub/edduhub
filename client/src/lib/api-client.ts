@@ -82,7 +82,13 @@ export async function apiClient<T>(
     return {} as T;
   }
 
-  return response.json();
+  const data = await response.json();
+  // Backend returns {data: ..., message: ...} format
+  // Extract the actual data
+  if (data && typeof data === 'object' && 'data' in data) {
+    return data.data as T;
+  }
+  return data;
 }
 
 // Convenience methods
@@ -236,6 +242,17 @@ export const endpoints = {
     update: (id: number) => `/api/departments/${id}`,
     delete: (id: number) => `/api/departments/${id}`,
   },
+
+  // Users
+  users: {
+    list: '/api/users',
+    get: (id: number) => `/api/users/${id}`,
+    create: '/api/users',
+    update: (id: number) => `/api/users/${id}`,
+    delete: (id: number) => `/api/users/${id}`,
+    updateRole: (id: number) => `/api/users/${id}/role`,
+    updateStatus: (id: number) => `/api/users/${id}/status`,
+  },
   
   // File Upload
   files: {
@@ -253,3 +270,15 @@ export const endpoints = {
     courseReport: (courseId: number) => `/api/reports/course/${courseId}`,
   },
 };
+
+export async function fetchQuizzes() {
+  return api.get<any[]>(endpoints.quizzes.list);
+}
+
+export async function fetchProfile() {
+  return api.get<any>(endpoints.auth.profile);
+}
+
+export async function fetchUsers() {
+  return api.get<any[]>(endpoints.users.list);
+}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar as CalendarIcon, Clock, MapPin, BookOpen } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, Clock, MapPin, BookOpen, Loader2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO } from "date-fns";
 
 type CalendarEvent = {
@@ -23,51 +24,26 @@ export default function CalendarPage() {
   const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [events] = useState<CalendarEvent[]>([
-    {
-      id: 1,
-      title: "Data Structures Lecture",
-      type: 'lecture',
-      start: new Date().toISOString(),
-      end: new Date(Date.now() + 5400000).toISOString(),
-      courseName: "CS201",
-      location: "Room 301"
-    },
-    {
-      id: 2,
-      title: "Database Systems Midterm",
-      type: 'exam',
-      start: new Date(Date.now() + 2 * 86400000).toISOString(),
-      end: new Date(Date.now() + 2 * 86400000 + 7200000).toISOString(),
-      courseName: "CS305",
-      location: "Exam Hall A"
-    },
-    {
-      id: 3,
-      title: "ML Assignment Due",
-      type: 'deadline',
-      start: new Date(Date.now() + 3 * 86400000).toISOString(),
-      end: new Date(Date.now() + 3 * 86400000).toISOString(),
-      courseName: "CS401"
-    },
-    {
-      id: 4,
-      title: "Tech Fest 2024",
-      type: 'event',
-      start: new Date(Date.now() + 7 * 86400000).toISOString(),
-      end: new Date(Date.now() + 9 * 86400000).toISOString(),
-      location: "Main Campus"
-    },
-    {
-      id: 5,
-      title: "Guest Lecture: AI Ethics",
-      type: 'event',
-      start: new Date(Date.now() + 5 * 86400000).toISOString(),
-      end: new Date(Date.now() + 5 * 86400000 + 3600000).toISOString(),
-      location: "Auditorium"
-    }
-  ]);
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/calendar');
+        setEvents(Array.isArray(response) ? response : []);
+      } catch (err) {
+        console.error('Failed to fetch calendar events:', err);
+        setError('Failed to load calendar events');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);

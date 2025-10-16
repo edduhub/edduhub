@@ -6,6 +6,7 @@ import (
 )
 
 type AuthService interface {
+	Login(ctx context.Context, email, password string) (string, *Identity, error)
 	InitiateRegistrationFlow(ctx context.Context) (map[string]any, error)
 	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
@@ -29,23 +30,65 @@ type AuthService interface {
 }
 
 type authService struct {
-	Auth  *kratosService
-	AuthZ *ketoService
+	Auth       *kratosService
+	AuthZ      *ketoService
+	JWTManager JWTManager
 }
 
-func NewAuthService(kratos *kratosService, keto *ketoService) AuthService {
+type JWTManager interface {
+	Generate(kratosID, email, role, collegeID, firstName, lastName string) (string, error)
+	Verify(token string) (*JWTClaims, error)
+}
+
+type JWTClaims struct {
+	KratosID  string
+	Email     string
+	Role      string
+	CollegeID string
+	FirstName string
+	LastName  string
+}
+
+func NewAuthService(kratos *kratosService, keto *ketoService, jwtManager JWTManager) AuthService {
 	return &authService{
-		Auth:  kratos,
-		AuthZ: keto,
+		Auth:       kratos,
+		AuthZ:      keto,
+		JWTManager: jwtManager,
 	}
 }
 
+func (a *authService) Login(ctx context.Context, email, password string) (string, *Identity, error) {
+	// Authenticate with Kratos
+	identity, err := a.Auth.Login(ctx, email, password)
+	if err != nil {
+		return "", nil, fmt.Errorf("authentication failed: %w", err)
+	}
+
+	// Generate JWT token
+	token, err := a.JWTManager.Generate(
+		identity.ID,
+		identity.Traits.Email,
+		identity.Traits.Role,
+		identity.Traits.College.ID,
+		identity.Traits.Name.First,
+		identity.Traits.Name.Last,
+	)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	return token, identity, nil
+}
+
 func (a *authService) ExtractStudentID(identity *Identity) (int, error) {
-	// In JWT-based authentication, the student ID lookup is handled by middleware
-	// and stored in Echo context under "student_id"
-	// This method cannot access Echo context directly
-	// For proper JWT integration, use helpers.ExtractStudentID(c) instead
-	return 0, fmt.Errorf("ExtractStudentID from identity not implemented - student ID should be extracted from Echo context after LoadStudentProfile middleware")
+	// In JWT-based authentication, the student ID can be extracted directly from JWT claims
+	// without needing middleware context. However, we need to implement the logic to
+	// find the student by kratos ID.
+
+	// We cannot access services from this layer, so this method signature should be
+	// changed to accept the student service, or the logic should be moved to middleware.
+	// For now, return error indicating this should be handled by middleware.
+	return 0, fmt.Errorf("ExtractStudentID requires service dependencies - use helpers.ExtractStudentID(c) with LoadStudentProfile middleware instead")
 }
 
 func (a *authService) InitiateRegistrationFlow(ctx context.Context) (map[string]any, error) {

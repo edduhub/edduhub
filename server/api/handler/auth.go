@@ -33,29 +33,104 @@ func (h *AuthHandler) InitiateRegistration(c echo.Context) error {
 
 // HandleRegistration processes the registration
 func (h *AuthHandler) HandleRegistration(c echo.Context) error {
-	flowID := c.QueryParam("flow")
-	if flowID == "" {
-		return helpers.Error(c, "empty flowID", 400)
+	var req struct {
+		Email       string `json:"email" validate:"required,email"`
+		Password    string `json:"password" validate:"required,min=8"`
+		FirstName   string `json:"firstName" validate:"required"`
+		LastName    string `json:"lastName" validate:"required"`
+		Role        string `json:"role" validate:"required"`
+		CollegeId   string `json:"collegeId" validate:"required"`
+		CollegeName string `json:"collegeName" validate:"required"`
 	}
 
-	var req auth.RegistrationRequest
 	if err := c.Bind(&req); err != nil {
-		return helpers.Error(c, "Invalid Registration Request", 400)
+		return helpers.Error(c, "Invalid Registration Request", http.StatusBadRequest)
 	}
 
-	identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, req)
+	// Create Kratos registration request
+	var kratosReq auth.RegistrationRequest
+	kratosReq.Method = "password"
+	kratosReq.Password = req.Password
+	kratosReq.Traits.Email = req.Email
+	kratosReq.Traits.Name.First = req.FirstName
+	kratosReq.Traits.Name.Last = req.LastName
+	kratosReq.Traits.Role = req.Role
+	kratosReq.Traits.College.ID = req.CollegeId
+	kratosReq.Traits.College.Name = req.CollegeName
+
+	// Initiate flow first
+	flow, err := h.authService.InitiateRegistrationFlow(c.Request().Context())
 	if err != nil {
-		helpers.Error(c, "unable to complete registration", http.StatusNotFound)
+		return helpers.Error(c, "unable to initiate registration: "+err.Error(), http.StatusInternalServerError)
 	}
 
-	return helpers.Success(c, identity, http.StatusOK)
+	flowID, ok := flow["id"].(string)
+	if !ok {
+		return helpers.Error(c, "invalid flow response", http.StatusInternalServerError)
+	}
+
+	// Complete registration
+	identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
+	if err != nil {
+		return helpers.Error(c, "unable to complete registration: "+err.Error(), http.StatusBadRequest)
+	}
+
+	// Login the user automatically after registration
+	token, _, err := h.authService.Login(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		// Registration succeeded but auto-login failed
+		return helpers.Success(c, map[string]interface{}{
+			"message":  "Registration successful. Please login.",
+			"identity": identity,
+		}, http.StatusCreated)
+	}
+
+	return helpers.Success(c, map[string]interface{}{
+		"token": token,
+		"user": map[string]interface{}{
+			"id":          identity.ID,
+			"email":       identity.Traits.Email,
+			"firstName":   identity.Traits.Name.First,
+			"lastName":    identity.Traits.Name.Last,
+			"role":        identity.Traits.Role,
+			"collegeId":   identity.Traits.College.ID,
+			"collegeName": identity.Traits.College.Name,
+		},
+		"expiresAt": fmt.Sprintf("%v", c.Request().Context().Value("token_expiry")),
+	}, http.StatusCreated)
 }
 
 // HandleLogin processes login
 func (h *AuthHandler) HandleLogin(c echo.Context) error {
-	// Will be redirected to Kratos UI
-	loginURL := fmt.Sprintf("%s/self-service/login/browser", h.authService.GetPublicURL())
-	return c.Redirect(http.StatusTemporaryRedirect, loginURL)
+	var req struct {
+		Email    string `json:"email" validate:"required,email"`
+		Password string `json:"password" validate:"required"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		return helpers.Error(c, "invalid request body", http.StatusBadRequest)
+	}
+
+	// Authenticate and generate JWT
+	token, identity, err := h.authService.Login(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		return helpers.Error(c, "authentication failed: "+err.Error(), http.StatusUnauthorized)
+	}
+
+	// Return token and user info
+	return helpers.Success(c, map[string]interface{}{
+		"token": token,
+		"user": map[string]interface{}{
+			"id":          identity.ID,
+			"email":       identity.Traits.Email,
+			"firstName":   identity.Traits.Name.First,
+			"lastName":    identity.Traits.Name.Last,
+			"role":        identity.Traits.Role,
+			"collegeId":   identity.Traits.College.ID,
+			"collegeName": identity.Traits.College.Name,
+		},
+		"expiresAt": fmt.Sprintf("%v", c.Request().Context().Value("token_expiry")),
+	}, http.StatusOK)
 }
 
 // HandleCallback processes the login callback

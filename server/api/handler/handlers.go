@@ -6,6 +6,7 @@ import (
 
 type Handlers struct {
 	Auth         *AuthHandler
+	Dashboard    *DashboardHandler
 	Attendance   *AttendanceHandler
 	Student      *StudentHandler
 	College      *CollegeHandler
@@ -35,7 +36,16 @@ type Handlers struct {
 
 func NewHandlers(services *services.Services) *Handlers {
 	return &Handlers{
-		Auth:         NewAuthHandler(services.Auth),
+		Auth: NewAuthHandler(services.Auth),
+		Dashboard: NewDashboardHandler(
+			services.StudentService,
+			services.CourseService,
+			services.Attendance,
+			services.AnnouncementService,
+			services.CalendarService,
+			services.AnalyticsService,
+			services.AuditService,
+		),
 		Attendance:   NewAttendanceHandler(services.Attendance),
 		Student:      NewStudentHandler(services.StudentService),
 		College:      NewCollegeHandler(services.CollegeService),

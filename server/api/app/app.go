@@ -30,7 +30,7 @@ func New() *App {
 		panic(err)
 	}
 	if cfg.DB == nil || cfg.DB.Pool == nil {
-		panic("database connection pool is nil ")
+		panic("database connection pool is nil")
 	}
 	// Initialize auth service
 	services := services.NewServices(cfg)

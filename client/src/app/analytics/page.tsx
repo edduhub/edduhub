@@ -1,9 +1,46 @@
-import { fetchAnalytics } from "@/lib/api";
+"use client";
+
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Loader2 } from "lucide-react";
 
-export default async function AnalyticsPage() {
-  const metrics = await fetchAnalytics();
+type AnalyticsMetric = {
+  label: string;
+  value: number;
+  delta?: number;
+};
+
+export default function AnalyticsPage() {
+  const [metrics, setMetrics] = useState<AnalyticsMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/analytics');
+        setMetrics(Array.isArray(response) ? response : []);
+      } catch (err) {
+        console.error('Failed to fetch analytics:', err);
+        setError('Failed to load analytics data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

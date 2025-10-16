@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,13 +19,34 @@ import {
   Award,
   CheckCircle,
   AlertCircle,
-  FileText
+  FileText,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
+import { DashboardResponse } from "@/lib/api";
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user) {
+        try {
+          const data = await api.get<DashboardResponse>('/api/dashboard');
+          setDashboardData(data);
+        } catch (error) {
+          console.error('Failed to fetch dashboard:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+  }, [user]);
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -125,21 +147,14 @@ export default function DashboardPage() {
               <CardDescription>Don't miss these!</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {[
-                { title: "Assignment 3", course: "CS201", due: new Date(Date.now() + 2 * 86400000), priority: "high" },
-                { title: "Quiz 2", course: "CS305", due: new Date(Date.now() + 3 * 86400000), priority: "medium" },
-                { title: "Project Submission", course: "CS401", due: new Date(Date.now() + 5 * 86400000), priority: "high" }
-              ].map((item, idx) => (
-                <div key={idx} className="rounded-lg border p-3 space-y-1">
+              {dashboardData?.upcomingEvents?.map((item) => (
+                <div key={item.id} className="rounded-lg border p-3 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">{item.title}</span>
-                    <Badge variant="secondary" className="text-xs">
-                      {item.priority}
-                    </Badge>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
-                    {format(item.due, 'MMM dd, yyyy')}
+                    {format(new Date(item.start), 'MMM dd, yyyy')}
                   </div>
                   <div className="text-xs text-muted-foreground">{item.course}</div>
                 </div>
@@ -363,7 +378,7 @@ export default function DashboardPage() {
               <GraduationCap className="h-4 w-4" />
               Total Students
             </CardDescription>
-            <CardTitle className="text-2xl">2,145</CardTitle>
+            <CardTitle className="text-2xl">{dashboardData?.metrics.totalStudents ?? 'N/A'}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-1 text-xs text-green-600">
@@ -393,7 +408,7 @@ export default function DashboardPage() {
               <BookOpen className="h-4 w-4" />
               Active Courses
             </CardDescription>
-            <CardTitle className="text-2xl">186</CardTitle>
+            <CardTitle className="text-2xl">{dashboardData?.metrics.totalCourses ?? 'N/A'}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -402,7 +417,7 @@ export default function DashboardPage() {
               <CheckCircle className="h-4 w-4" />
               Avg Attendance
             </CardDescription>
-            <CardTitle className="text-2xl">89%</CardTitle>
+            <CardTitle className="text-2xl">{dashboardData?.metrics.attendanceRate ?? 'N/A'}%</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -477,19 +492,14 @@ export default function DashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[
-                { activity: "New student registration", user: "Aarav Kumar", type: "enrollment", time: "5 minutes ago" },
-                { activity: "Course CS401 updated", user: "Dr. Rajesh Kumar", type: "course", time: "15 minutes ago" },
-                { activity: "Attendance marked for CS201", user: "Prof. Priya Sharma", type: "attendance", time: "30 minutes ago" },
-                { activity: "Grades submitted for CS305", user: "Dr. Amit Patel", type: "grades", time: "1 hour ago" }
-              ].map((item, idx) => (
-                <TableRow key={idx}>
-                  <TableCell className="font-medium">{item.activity}</TableCell>
-                  <TableCell>{item.user}</TableCell>
+              {dashboardData?.recentActivity?.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-medium">{item.message}</TableCell>
+                  <TableCell>System</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="capitalize">{item.type}</Badge>
+                    <Badge variant="outline" className="capitalize">{item.entity}</Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{item.time}</TableCell>
+                  <TableCell className="text-muted-foreground">{format(new Date(item.timestamp), 'PPpp')}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

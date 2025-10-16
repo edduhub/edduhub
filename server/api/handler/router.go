@@ -44,6 +44,9 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Protected API routes with audit logging
 	apiGroup := e.Group("/api", m.ValidateJWT, m.RequireCollege)
 
+	// Dashboard
+	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)
+
 	// User profile management
 	profile := apiGroup.Group("/profile")
 	profile.GET("", a.Profile.GetUserProfile)
@@ -55,7 +58,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// College management
 	college := apiGroup.Group("/college", m.RequireRole(middleware.RoleAdmin))
 	college.GET("", a.College.GetCollegeDetails)
-	college.PATCH("", a.College.UpdateCollegeDetails)    // PATCH: Allows partial updates to college details
+	college.PATCH("", a.College.UpdateCollegeDetails) // PATCH: Allows partial updates to college details
 	college.GET("/stats", a.College.GetCollegeStats)
 
 	// User management
@@ -73,7 +76,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	students.GET("", a.Student.ListStudents)
 	students.POST("", a.Student.CreateStudent, m.RequireRole(middleware.RoleAdmin))
 	students.GET("/:studentID", a.Student.GetStudent)
-	students.PATCH("/:studentID", a.Student.UpdateStudent, m.RequireRole(middleware.RoleAdmin))    // PATCH: Allows partial updates to student details
+	students.PATCH("/:studentID", a.Student.UpdateStudent, m.RequireRole(middleware.RoleAdmin)) // PATCH: Allows partial updates to student details
 	students.DELETE("/:studentID", a.Student.DeleteStudent, m.RequireRole(middleware.RoleAdmin))
 	students.PUT("/:studentID/freeze", a.Student.FreezeStudent, m.RequireRole(middleware.RoleAdmin))
 
@@ -95,7 +98,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	lectures.GET("", a.Lecture.ListLectures)
 	lectures.POST("", a.Lecture.CreateLecture, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	lectures.GET("/:lectureID", a.Lecture.GetLecture)
-	lectures.PATCH("/:lectureID", a.Lecture.UpdateLecture, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))    // PATCH: Allows partial updates to lecture details
+	lectures.PATCH("/:lectureID", a.Lecture.UpdateLecture, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty)) // PATCH: Allows partial updates to lecture details
 	lectures.DELETE("/:lectureID", a.Lecture.DeleteLecture, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	// Attendance management
@@ -110,6 +113,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	attendance.GET("/course/:courseID", a.Attendance.GetAttendanceByCourse,
 		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	// Add convenience endpoint for current user
+	attendance.GET("/student/me", a.Attendance.GetMyAttendance,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
 	attendance.GET("/student/:studentID", a.Attendance.GetAttendanceForStudent,
 		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty, middleware.RoleStudent),
 		m.LoadStudentProfile,
@@ -119,14 +126,25 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 		m.LoadStudentProfile,
 		m.VerifyStudentOwnership())
 	attendance.PUT("/course/:courseID/lecture/:lectureID/student/:studentID", a.Attendance.UpdateAttendance,
-		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))    // PUT retained: Updates attendance status (full update, not partial update pattern)
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty)) // PUT retained: Updates attendance status (full update, not partial update pattern)
 	attendance.GET("/report/:studentID", a.Attendance.GetAttendanceForStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleStudent), m.VerifyStudentOwnership())
 	attendance.POST("/process-qr", a.Attendance.ProcessAttendance, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	// Add stats endpoint
+	attendance.GET("/stats/courses", a.Attendance.GetMyCourseStats,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
 	// Grades/Assessment management
 	grades := apiGroup.Group("/grades")
+	// Add convenience endpoints for current user
+	grades.GET("", a.Grade.GetMyGrades,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
+	grades.GET("/courses", a.Grade.GetMyCourseGrades,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
 	grades.GET("/course/:courseID", a.Grade.GetGradesByCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	grades.POST("/course/:courseID", a.Grade.CreateAssessment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	grades.PATCH("/course/:courseID/assessment/:assessmentID", a.Grade.UpdateAssessment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))    // PATCH: Allows partial updates to assessment
+	grades.PATCH("/course/:courseID/assessment/:assessmentID", a.Grade.UpdateAssessment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty)) // PATCH: Allows partial updates to assessment
 	grades.DELETE("/course/:courseID/assessment/:assessmentID", a.Grade.DeleteAssessment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	grades.POST("/course/:courseID/assessment/:assessmentID/scores", a.Grade.SubmitScores, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	grades.GET("/student/:studentID", a.Grade.GetStudentGrades,
@@ -159,6 +177,12 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	assignments.POST("/:assignmentID/submit", a.Assignment.SubmitAssignment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	assignments.POST("/submissions/:submissionID/grade", a.Assignment.GradeSubmission, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
+	// Convenience endpoint for all assignments (current user)
+	assignmentsAll := apiGroup.Group("/assignments")
+	assignmentsAll.GET("", a.Assignment.GetMyAssignments,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
+
 	// Quiz management
 	quizzes := apiGroup.Group("/courses/:courseID/quizzes")
 	quizzes.GET("", a.Quiz.ListQuizzes)
@@ -166,6 +190,12 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	quizzes.GET("/:quizID", a.Quiz.GetQuiz)
 	quizzes.PATCH("/:quizID", a.Quiz.UpdateQuiz, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	quizzes.DELETE("/:quizID", a.Quiz.DeleteQuiz, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Convenience endpoint for all quizzes (current user)
+	quizzesAll := apiGroup.Group("/quizzes")
+	quizzesAll.GET("", a.Quiz.GetMyQuizzes,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
 
 	// Announcement management
 	announcements := apiGroup.Group("/announcements")
@@ -187,7 +217,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	quizAttempts := apiGroup.Group("/quizzes/:quizID/attempts")
 	quizAttempts.POST("/start", a.QuizAttempt.StartQuizAttempt, m.RequireRole(middleware.RoleStudent))
 	quizAttempts.GET("", a.QuizAttempt.ListQuizAttempts, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	
+
 	attemptRoutes := apiGroup.Group("/attempts")
 	attemptRoutes.GET("/:attemptID", a.QuizAttempt.GetQuizAttempt)
 	attemptRoutes.POST("/:attemptID/submit", a.QuizAttempt.SubmitQuizAttempt, m.RequireRole(middleware.RoleStudent))

@@ -1,3 +1,7 @@
+version: v0.11.0-alpha.0
+
+dsn: memory
+
 serve:
   read:
     host: 0.0.0.0
@@ -6,52 +10,10 @@ serve:
     host: 0.0.0.0
     port: 4466
 
-namespaces:
-  - name: courses
-    id: 1
-    relations:
-      - name: faculty
-      - name: student
-      - name: admin
-      - name: manage_qr
-      - name: view_attendance
-      - name: mark_attendance
-      - name: manage_assignments
-      - name: submit_assignments
-      - name: grade_assignments
-
-  - name: departments
-    id: 2
-    relations:
-      - name: head
-      - name: faculty_member
-      - name: manage_courses
-      - name: view_analytics
-
-  - name: resources
-    id: 3
-    relations:
-      - name: owner
-      - name: viewer
-      - name: editor
-      - name: uploader
-      - name: download
-
-  - name: assignments
-    id: 4
-    relations:
-      - name: creator
-      - name: submitter
-      - name: grader
-      - name: viewer
-
-  - name: announcements
-    id: 5
-    relations:
-      - name: publisher
-      - name: viewer
-      - name: manager
-
 log:
   level: debug
   format: json
+
+namespaces:
+  - id: 0
+    name: default

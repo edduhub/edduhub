@@ -74,10 +74,44 @@ func (s *studentAnswerService) SubmitStudentAnswer(ctx context.Context, answer *
 		return fmt.Errorf("question ID is required")
 	}
 
-	// TODO: Add business logic validation
-	// - Check if the quiz attempt is still in progress
-	// - Verify the question belongs to the quiz being attempted
-	// - Validate answer format based on question type
+	// Business logic validation: Check if the quiz attempt is still in progress
+	attempt, err := s.quizAttemptRepo.GetQuizAttemptByID(ctx, 0, answer.QuizAttemptID) // college ID will be validated below
+	if err != nil {
+		return fmt.Errorf("failed to get quiz attempt: %w", err)
+	}
+	if attempt == nil {
+		return fmt.Errorf("quiz attempt with ID %d not found", answer.QuizAttemptID)
+	}
+	if attempt.Status != models.QuizAttemptStatusInProgress {
+		return fmt.Errorf("cannot submit answer: quiz attempt is %s", attempt.Status)
+	}
+
+	// Business logic validation: Verify the question belongs to the quiz being attempted
+	question, err := s.questionRepo.GetQuestionByID(ctx, attempt.CollegeID, answer.QuestionID)
+	if err != nil {
+		return fmt.Errorf("failed to validate question: %w", err)
+	}
+	if question == nil || question.QuizID != attempt.QuizID {
+		return fmt.Errorf("question with ID %d does not belong to attempt's quiz", answer.QuestionID)
+	}
+
+	// Business logic validation: Validate answer format based on question type
+	switch question.Type {
+	case models.MultipleChoice, models.TrueFalse:
+		if answer.SelectedOptionID == nil || len(*answer.SelectedOptionID) == 0 {
+			return fmt.Errorf("answer option selection is required for %s questions", question.Type)
+		}
+		if answer.AnswerText != "" {
+			return fmt.Errorf("text answers not allowed for %s questions", question.Type)
+		}
+	case models.ShortAnswer:
+		if answer.AnswerText == "" {
+			return fmt.Errorf("text answer is required for %s questions", question.Type)
+		}
+		if answer.SelectedOptionID != nil && len(*answer.SelectedOptionID) > 0 {
+			return fmt.Errorf("selected options not allowed for %s questions", question.Type)
+		}
+	}
 
 	return s.studentAnswerRepo.CreateStudentAnswer(ctx, answer)
 }

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { Award, TrendingUp, FileText } from "lucide-react";
+import { Award, TrendingUp, FileText, Loader2 } from "lucide-react";
 
 type Grade = {
   id: number;
@@ -32,59 +33,40 @@ type CourseGrade = {
 
 export default function GradesPage() {
   const { user } = useAuth();
-  const [grades] = useState<Grade[]>([
-    {
-      id: 1,
-      courseName: "Data Structures",
-      courseCode: "CS201",
-      assessmentType: "Quiz",
-      assessmentName: "Midterm Quiz",
-      score: 45,
-      maxScore: 50,
-      percentage: 90,
-      date: "2024-03-15"
-    },
-    {
-      id: 2,
-      courseName: "Data Structures",
-      courseCode: "CS201",
-      assessmentType: "Assignment",
-      assessmentName: "BST Implementation",
-      score: 92,
-      maxScore: 100,
-      percentage: 92,
-      date: "2024-03-10"
-    },
-    {
-      id: 3,
-      courseName: "Database Systems",
-      courseCode: "CS305",
-      assessmentType: "Exam",
-      assessmentName: "Final Exam",
-      score: 85,
-      maxScore: 100,
-      percentage: 85,
-      date: "2024-03-20"
-    },
-    {
-      id: 4,
-      courseName: "Machine Learning",
-      courseCode: "CS401",
-      assessmentType: "Project",
-      assessmentName: "Classification Model",
-      score: 88,
-      maxScore: 100,
-      percentage: 88,
-      date: "2024-03-12"
-    }
-  ]);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [courseGrades, setCourseGrades] = useState<CourseGrade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [courseGrades] = useState<CourseGrade[]>([
-    { courseName: "Data Structures", courseCode: "CS201", totalScore: 88, maxScore: 100, percentage: 88, grade: "A", credits: 4 },
-    { courseName: "Database Systems", courseCode: "CS305", totalScore: 85, maxScore: 100, percentage: 85, grade: "A", credits: 4 },
-    { courseName: "Machine Learning", courseCode: "CS401", totalScore: 90, maxScore: 100, percentage: 90, grade: "A+", credits: 4 },
-    { courseName: "Web Development", courseCode: "CS302", totalScore: 82, maxScore: 100, percentage: 82, grade: "A-", credits: 3 }
-  ]);
+  useEffect(() => {
+    const fetchGrades = async () => {
+      try {
+        setLoading(true);
+        // Try to fetch individual grades
+        try {
+          const gradesResponse = await api.get('/api/grades');
+          setGrades(Array.isArray(gradesResponse) ? gradesResponse : []);
+        } catch (err) {
+          console.warn('Failed to fetch individual grades:', err);
+        }
+
+        // Try to fetch course grades
+        try {
+          const courseGradesResponse = await api.get('/api/grades/courses');
+          setCourseGrades(Array.isArray(courseGradesResponse) ? courseGradesResponse : []);
+        } catch (err) {
+          console.warn('Failed to fetch course grades:', err);
+        }
+      } catch (err) {
+        console.error('Failed to fetch grades:', err);
+        setError('Failed to load grades');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGrades();
+  }, []);
 
   const calculateGPA = () => {
     const gradePoints: Record<string, number> = {

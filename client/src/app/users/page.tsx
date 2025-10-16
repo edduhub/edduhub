@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,74 +8,30 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, UserPlus, Shield, GraduationCap, Users as UsersIcon } from "lucide-react";
+import { fetchUsers } from "@/lib/api-client";
 
 type User = {
-  id: string;
+  id: number;
   name: string;
   email: string;
   role: 'student' | 'faculty' | 'admin';
-  status: 'active' | 'inactive' | 'suspended';
-  department?: string;
-  joinedDate: string;
-  avatar?: string;
+  is_active: boolean;
+  created_at: string;
+  kratos_identity_id: string;
 };
 
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRole, setSelectedRole] = useState<string>("all");
-  
-  const [users] = useState<User[]>([
-    {
-      id: "1",
-      name: "Aarav Kumar",
-      email: "aarav.kumar@college.edu",
-      role: "student",
-      status: "active",
-      department: "Computer Science",
-      joinedDate: "2023-08-15",
-      avatar: ""
-    },
-    {
-      id: "2",
-      name: "Dr. Priya Sharma",
-      email: "priya.sharma@college.edu",
-      role: "faculty",
-      status: "active",
-      department: "Computer Science",
-      joinedDate: "2020-06-01",
-      avatar: ""
-    },
-    {
-      id: "3",
-      name: "Rahul Patel",
-      email: "rahul.patel@college.edu",
-      role: "admin",
-      status: "active",
-      department: "Administration",
-      joinedDate: "2019-01-10",
-      avatar: ""
-    },
-    {
-      id: "4",
-      name: "Mira Singh",
-      email: "mira.singh@college.edu",
-      role: "student",
-      status: "active",
-      department: "Electronics",
-      joinedDate: "2023-08-15",
-      avatar: ""
-    },
-    {
-      id: "5",
-      name: "Prof. Amit Verma",
-      email: "amit.verma@college.edu",
-      role: "faculty",
-      status: "active",
-      department: "Mechanical",
-      joinedDate: "2018-07-20",
-      avatar: ""
-    }
-  ]);
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      const data = await fetchUsers();
+      setUsers(data);
+    };
+    loadUsers();
+  }, []);
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -100,20 +56,19 @@ export default function UsersPage() {
     );
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (isActive: boolean) => {
+    const status = isActive ? 'active' : 'inactive';
     const styles = {
       active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-      inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
-      suspended: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+      inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
     };
     return <Badge className={styles[status as keyof typeof styles]}>{status}</Badge>;
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = 
+    const matchesSearch =
       user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.department?.toLowerCase().includes(searchQuery.toLowerCase());
+      user.email.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesRole = selectedRole === "all" || user.role === selectedRole;
     
@@ -125,7 +80,7 @@ export default function UsersPage() {
     student: users.filter(u => u.role === 'student').length,
     faculty: users.filter(u => u.role === 'faculty').length,
     admin: users.filter(u => u.role === 'admin').length,
-    active: users.filter(u => u.status === 'active').length
+    active: users.filter(u => u.is_active).length
   };
 
   return (
@@ -211,7 +166,6 @@ export default function UsersPage() {
                 <TableHead>User</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Department</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>Actions</TableHead>
@@ -223,7 +177,6 @@ export default function UsersPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={user.avatar} />
                         <AvatarFallback>
                           {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                         </AvatarFallback>
@@ -233,9 +186,10 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{user.email}</TableCell>
                   <TableCell>{getRoleBadge(user.role)}</TableCell>
-                  <TableCell>{user.department}</TableCell>
-                  <TableCell>{getStatusBadge(user.status)}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.joinedDate}</TableCell>
+                  <TableCell>{getStatusBadge(user.is_active)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </TableCell>
                   <TableCell>
                     <Button variant="outline" size="sm">
                       Edit

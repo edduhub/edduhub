@@ -200,11 +200,17 @@ func (s *quizAttemptService) FindQuizAttemptsByQuiz(ctx context.Context, college
 // CountQuizAttemptsByQuiz returns the total number of attempts for a quiz.
 // Used for pagination calculations.
 func (s *quizAttemptService) CountQuizAttemptsByQuiz(ctx context.Context, collegeID int, quizID int) (int, error) {
-	// This method doesn't exist in the repository, so we'll need to implement it
-	// For now, we'll return a placeholder implementation
-	attempts, err := s.quizAttemptRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, 10000, 0)
+	// Verify college exists
+	_, err := s.collegeRepo.GetCollegeByID(ctx, collegeID)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("college verification failed: %w", err)
 	}
-	return len(attempts), nil
+
+	// Verify quiz exists
+	_, err = s.quizRepo.GetQuizByID(ctx, collegeID, quizID)
+	if err != nil {
+		return 0, fmt.Errorf("quiz verification failed: %w", err)
+	}
+
+	return s.quizAttemptRepo.CountQuizAttemptsByQuiz(ctx, collegeID, quizID)
 }

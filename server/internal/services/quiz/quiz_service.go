@@ -41,27 +41,30 @@ type QuizService interface {
 
 // quizService implements the QuizService interface.
 type quizService struct {
-	quizRepo       repository.QuizRepository
-	courseRepo     repository.CourseRepository
-	collegeRepo    repository.CollegeRepository
-	enrollmentRepo repository.EnrollmentRepository
-	validate       *validator.Validate
+	quizRepo         repository.QuizRepository
+	quizAttemptRepo  repository.QuizAttemptRepository
+	courseRepo       repository.CourseRepository
+	collegeRepo      repository.CollegeRepository
+	enrollmentRepo   repository.EnrollmentRepository
+	validate         *validator.Validate
 }
 
 // NewQuizService creates a new instance of QuizService with required dependencies.
 // Initializes validator for input validation.
 func NewQuizService(
 	quizRepo repository.QuizRepository,
+	quizAttemptRepo repository.QuizAttemptRepository,
 	courseRepo repository.CourseRepository,
 	collegeRepo repository.CollegeRepository,
 	enrollmentRepo repository.EnrollmentRepository,
 ) QuizService {
 	return &quizService{
-		quizRepo:       quizRepo,
-		courseRepo:     courseRepo,
-		collegeRepo:    collegeRepo,
-		enrollmentRepo: enrollmentRepo,
-		validate:       validator.New(),
+		quizRepo:        quizRepo,
+		quizAttemptRepo: quizAttemptRepo,
+		courseRepo:      courseRepo,
+		collegeRepo:     collegeRepo,
+		enrollmentRepo:  enrollmentRepo,
+		validate:        validator.New(),
 	}
 }
 
@@ -128,19 +131,16 @@ func (s *quizService) UpdateQuiz(ctx context.Context, quiz *models.Quiz) error {
 // DeleteQuiz removes a quiz and all its associated data.
 // Performs safety checks for active attempts before deletion.
 func (s *quizService) DeleteQuiz(ctx context.Context, collegeID int, quizID int) error {
-	// For now, we'll skip the attempt check as it requires QuizAttemptRepository
-	// This will be handled by the QuizAttemptService in the future
+	// Check for active quiz attempts before deletion to prevent data loss
+	attempts, err := s.quizAttemptRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, 10000, 0)
+	if err != nil {
+		return fmt.Errorf("failed to check quiz attempts: %w", err)
+	}
+	if len(attempts) > 0 {
+		return fmt.Errorf("cannot delete quiz with %d active attempts", len(attempts))
+	}
 
-	// TODO: Check for active quiz attempts using QuizAttemptRepository
-	// attempts, err := s.quizAttemptRepo.FindQuizAttemptsByQuiz(ctx, collegeID, quizID, 0, 0)
-	// if err != nil {
-	//     return fmt.Errorf("failed to check quiz attempts: %w", err)
-	// }
-	// if len(attempts) > 0 {
-	//     return fmt.Errorf("cannot delete quiz with active attempts")
-	// }
-
-	// For now, just delete the quiz - questions and answers will be handled by cascade delete
+	// Delete the quiz - questions and answers will be handled by cascade delete
 	if err := s.quizRepo.DeleteQuiz(ctx, collegeID, quizID); err != nil {
 		return fmt.Errorf("failed to delete quiz: %w", err)
 	}

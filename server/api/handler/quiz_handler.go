@@ -178,3 +178,26 @@ func (h *QuizHandler) DeleteQuiz(c echo.Context) error {
 
 	return helpers.Success(c, "Quiz deleted successfully", 200)
 }
+
+// GetMyQuizzes returns all quizzes across all enrolled courses for current student
+func (h *QuizHandler) GetMyQuizzes(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "student ID required", 400)
+	}
+
+	// Placeholder implementation
+	// TODO: Implement full logic with enrollment service
+	// 1. Get all enrolled courses for student
+	// 2. For each course, get quizzes
+	// 3. Combine and return
+	_ = collegeID
+	_ = studentID
+
+	return helpers.Success(c, []interface{}{}, 200)
+}

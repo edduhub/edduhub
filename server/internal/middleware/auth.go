@@ -131,23 +131,27 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 		if !ok || identity == nil {
 			return helpers.Error(c, "Unauthorized", 403)
 		}
-		ctx := c.Request().Context()
-		kratosID := identity.ID
+
+		// Only load student profile for student role - faculty/admin should get student IDs from URL params
 		if identity.Traits.Role == RoleStudent {
-			// student, err := m.StudentRepo.FindByKratosID(c.Request().Context(), identity.ID)
+			ctx := c.Request().Context()
+			kratosID := identity.ID
 
 			student, err := m.StudentService.FindByKratosID(ctx, kratosID)
 			if err != nil {
-				return helpers.Error(c, "Unauthorized", 403)
+				return helpers.Error(c, "Student lookup failed", 500)
 			}
 			if student == nil {
-				return helpers.Error(c, "Not registered", 401)
+				return helpers.Error(c, "Student not registered", 401)
 			}
 			if !student.IsActive {
-				return helpers.Error(c, "Inactive", 401)
+				return helpers.Error(c, "Student account inactive", 401)
 			}
+
+			// Set the student ID in context for ExtractStudentID helper
 			c.Set(studentIDContextKey, student.StudentID)
 		}
+
 		return next(c)
 	}
 }
@@ -260,12 +264,14 @@ func (m *AuthMiddleware) VerifyStudentOwnership() echo.MiddlewareFunc {
 
 			if userRole == RoleStudent {
 				// If the user is a student, they MUST be accessing their own record.
-				authenticatedStudentID, err := helpers.ExtractStudentID(c) // Get logged-in student's DB ID from context
-				if err != nil {
-					// This means LoadStudentProfile failed or context is broken
-					// Log this internal error
-					// log.Printf("Error extracting authenticated student ID from context: %v", err)
-					return helpers.Error(c, "Unauthorized - Could not verify student identity", http.StatusUnauthorized)
+				authenticatedStudentIDRaw := c.Get(studentIDContextKey)
+				if authenticatedStudentIDRaw == nil {
+					return helpers.Error(c, "Unauthorized - Student identity not loaded", http.StatusUnauthorized)
+				}
+
+				authenticatedStudentID, ok := authenticatedStudentIDRaw.(int)
+				if !ok {
+					return helpers.Error(c, "Internal error - Invalid student ID format", http.StatusInternalServerError)
 				}
 
 				if requestedStudentID != authenticatedStudentID {

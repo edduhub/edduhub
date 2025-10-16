@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, Clock, FileText, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Calendar, Clock, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 type Assignment = {
@@ -21,36 +22,26 @@ type Assignment = {
 
 export default function AssignmentsPage() {
   const { user } = useAuth();
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    {
-      id: 1,
-      title: "Data Structures Implementation",
-      courseName: "CS201 - Data Structures",
-      dueDate: new Date(Date.now() + 2 * 86400000).toISOString(),
-      maxScore: 100,
-      status: 'pending',
-      description: "Implement binary search tree and hash table"
-    },
-    {
-      id: 2,
-      title: "Database Design Project",
-      courseName: "CS305 - Database Systems",
-      dueDate: new Date(Date.now() + 5 * 86400000).toISOString(),
-      maxScore: 100,
-      status: 'pending',
-      description: "Design a normalized database schema for e-commerce"
-    },
-    {
-      id: 3,
-      title: "ML Model Training",
-      courseName: "CS401 - Machine Learning",
-      dueDate: new Date(Date.now() - 1 * 86400000).toISOString(),
-      maxScore: 100,
-      status: 'graded',
-      score: 92,
-      description: "Train and evaluate classification models"
-    }
-  ]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/assignments');
+        setAssignments(Array.isArray(response) ? response : []);
+      } catch (err) {
+        console.error('Failed to fetch assignments:', err);
+        setError('Failed to load assignments');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAssignments();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const styles = {

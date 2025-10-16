@@ -175,3 +175,106 @@ func (h *GradeHandler) GetStudentGrades(c echo.Context) error {
 
 	return helpers.Success(c, grades, 200)
 }
+
+// GetMyGrades returns all grades for the currently authenticated student
+func (h *GradeHandler) GetMyGrades(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "student ID required", 400)
+	}
+
+	grades, err := h.gradeService.GetGradesByStudent(c.Request().Context(), collegeID, studentID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	return helpers.Success(c, grades, 200)
+}
+
+// GetMyCourseGrades returns aggregated grades by course for current student
+func (h *GradeHandler) GetMyCourseGrades(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "student ID required", 400)
+	}
+
+	grades, err := h.gradeService.GetGradesByStudent(c.Request().Context(), collegeID, studentID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	// Group grades by course
+	courseGrades := make(map[int]struct {
+		CourseName string
+		CourseCode string
+		TotalScore float64
+		MaxScore   float64
+		Percentage float64
+		Grade      string
+		Credits    int
+	})
+
+	for _, grade := range grades {
+		cg := courseGrades[grade.CourseID]
+		cg.TotalScore += float64(*grade.Score)
+		cg.MaxScore += float64(*grade.MaxScore)
+		// Placeholder values - would need course service integration
+		cg.CourseCode = "COURSE-" + strconv.Itoa(grade.CourseID)
+		cg.CourseName = "Course " + strconv.Itoa(grade.CourseID)
+		cg.Credits = 3 // Default
+		courseGrades[grade.CourseID] = cg
+	}
+
+	// Calculate percentages and letter grades
+	result := []map[string]interface{}{}
+	for courseID, cg := range courseGrades {
+		if cg.MaxScore > 0 {
+			cg.Percentage = (cg.TotalScore / cg.MaxScore) * 100
+			// Calculate letter grade
+			if cg.Percentage >= 90 {
+				cg.Grade = "A+"
+			} else if cg.Percentage >= 85 {
+				cg.Grade = "A"
+			} else if cg.Percentage >= 80 {
+				cg.Grade = "A-"
+			} else if cg.Percentage >= 75 {
+				cg.Grade = "B+"
+			} else if cg.Percentage >= 70 {
+				cg.Grade = "B"
+			} else if cg.Percentage >= 65 {
+				cg.Grade = "B-"
+			} else if cg.Percentage >= 60 {
+				cg.Grade = "C+"
+			} else if cg.Percentage >= 55 {
+				cg.Grade = "C"
+			} else if cg.Percentage >= 50 {
+				cg.Grade = "D"
+			} else {
+				cg.Grade = "F"
+			}
+		}
+		courseGrades[courseID] = cg
+
+		result = append(result, map[string]interface{}{
+			"courseName": cg.CourseName,
+			"courseCode": cg.CourseCode,
+			"totalScore": cg.TotalScore,
+			"maxScore":   cg.MaxScore,
+			"percentage": cg.Percentage,
+			"grade":      cg.Grade,
+			"credits":    cg.Credits,
+		})
+	}
+
+	return helpers.Success(c, result, 200)
+}

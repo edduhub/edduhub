@@ -8,10 +8,15 @@ import (
 
 func ExtractStudentID(c echo.Context) (int, error) {
 	studentID := c.Get("student_id")
+	if studentID == nil {
+		return 0, Error(c, "student authentication required - LoadStudentProfile middleware must be applied", 401)
+	}
+
 	studentIDInt, ok := studentID.(int)
 	if !ok {
-		return 0, Error(c, "invalid student_id", 400)
+		return 0, Error(c, "invalid student_id format in context", 500)
 	}
+
 	return studentIDInt, nil
 }
 

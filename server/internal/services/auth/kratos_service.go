@@ -63,6 +63,71 @@ func NewKratosService() *kratosService {
 	}
 }
 
+// Login authenticates a user with email and password
+func (k *kratosService) Login(ctx context.Context, email, password string) (*Identity, error) {
+	// Initiate login flow
+	url := fmt.Sprintf("%s/self-service/login/api", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create login flow request: %w", err)
+	}
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initiate login flow: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var flow map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
+		return nil, fmt.Errorf("failed to decode login flow: %w", err)
+	}
+
+	flowID, ok := flow["id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("invalid flow ID in response")
+	}
+
+	// Submit credentials
+	loginData := map[string]interface{}{
+		"method":     "password",
+		"password":   password,
+		"identifier": email,
+	}
+	data, err := json.Marshal(loginData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal login data: %w", err)
+	}
+
+	submitURL := fmt.Sprintf("%s/self-service/login?flow=%s", k.PublicURL, flowID)
+	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create login submit request: %w", err)
+	}
+	submitReq.Header.Set("Content-Type", "application/json")
+
+	submitResp, err := k.HTTPClient.Do(submitReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to submit login: %w", err)
+	}
+	defer submitResp.Body.Close()
+
+	if submitResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("login failed with status: %s", http.StatusText(submitResp.StatusCode))
+	}
+
+	var result struct {
+		Session struct {
+			Identity Identity `json:"identity"`
+		} `json:"session"`
+	}
+	if err := json.NewDecoder(submitResp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode login response: %w", err)
+	}
+
+	return &result.Session.Identity, nil
+}
+
 // InitiateRegistrationFlow starts the registration process by calling Ory Kratos.
 func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/self-service/registration/api", k.PublicURL)
