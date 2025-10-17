@@ -226,8 +226,8 @@ func (h *GradeHandler) GetMyCourseGrades(c echo.Context) error {
 
 	for _, grade := range grades {
 		cg := courseGrades[grade.CourseID]
-		cg.TotalScore += float64(*grade.Score)
-		cg.MaxScore += float64(*grade.MaxScore)
+		cg.TotalScore += float64(grade.ObtainedMarks)
+		cg.MaxScore += float64(grade.TotalMarks)
 		// Placeholder values - would need course service integration
 		cg.CourseCode = "COURSE-" + strconv.Itoa(grade.CourseID)
 		cg.CourseName = "Course " + strconv.Itoa(grade.CourseID)

@@ -106,3 +106,168 @@ tasks:
     desc: "Apply database migrations to the test database"
     cmds:
       - migrate -path {{.MIGRATE_PATH}} -database {{.TEST_DB_URL}} up
+
+  # ==============================================================================
+  # BOOTSTRAP & SETUP TASKS
+  # ==============================================================================
+
+  check:env:
+    desc: Check if required environment variables are set
+    cmds:
+      - |
+        echo "Checking environment configuration..."
+        if [ ! -f server/.env.local ]; then
+          echo "❌ Missing server/.env.local"
+          echo "   Run: cp server/.env.example server/.env.local && edit server/.env.local"
+          exit 1
+        fi
+        echo "✓ server/.env.local found"
+        
+        if [ ! -f client/.env.local ]; then
+          echo "⚠ Missing client/.env.local (creating from example)"
+          cp client/.env.example client/.env.local
+        fi
+        echo "✓ client/.env.local found"
+
+  check:deps:
+    desc: Check if required tools are installed
+    cmds:
+      - |
+        echo "Checking required tools..."
+        
+        tools="go docker docker-compose node npm migrate"
+        missing=""
+        
+        for tool in $tools; do
+          if ! command -v $tool &> /dev/null; then
+            missing="$missing $tool"
+          else
+            version=$($tool --version 2>&1 | head -n 1)
+            echo "✓ $tool: $version"
+          fi
+        done
+        
+        if [ ! -z "$missing" ]; then
+          echo "❌ Missing tools:$missing"
+          exit 1
+        fi
+        echo "✓ All required tools found"
+
+  setup:server:
+    desc: Setup server environment (install deps, create .env)
+    cmds:
+      - task: check:env
+      - |
+        echo "Setting up server dependencies..."
+        go mod download
+        go mod tidy
+        echo "✓ Server dependencies ready"
+
+  setup:client:
+    desc: Setup client environment (install node dependencies)
+    cmds:
+      - |
+        echo "Setting up client dependencies..."
+        cd client
+        npm install
+        cd ..
+        echo "✓ Client dependencies ready"
+
+  db:start:
+    desc: Start database services (Docker Compose)
+    cmds:
+      - |
+        echo "Starting database services..."
+        docker-compose up -d postgres redis minio keto kratos-db kratos
+        echo "Waiting for services to be healthy..."
+        sleep 5
+        docker-compose exec -T postgres pg_isready -U keto || echo "⚠ PostgreSQL not ready yet"
+        echo "✓ Database services started"
+
+  db:stop:
+    desc: Stop database services
+    cmds:
+      - docker-compose down
+
+  db:migrate:
+    desc: Run all database migrations
+    cmds:
+      - |
+        DB_URL="postgres://$(grep '^DB_USER=' server/.env.local | cut -d= -f2):$(grep '^DB_PASSWORD=' server/.env.local | cut -d= -f2)@localhost:$(grep '^DB_PORT=' server/.env.local | cut -d= -f2)/$(grep '^DB_NAME=' server/.env.local | cut -d= -f2)?sslmode=disable"
+        echo "Running migrations..."
+        migrate -path {{.MIGRATE_PATH}} -database "$DB_URL" up
+        echo "✓ Database migrations completed"
+
+  db:reset:
+    desc: Reset database (WARNING - drops all data)
+    cmds:
+      - |
+        DB_URL="postgres://$(grep '^DB_USER=' server/.env.local | cut -d= -f2):$(grep '^DB_PASSWORD=' server/.env.local | cut -d= -f2)@localhost:$(grep '^DB_PORT=' server/.env.local | cut -d= -f2)/$(grep '^DB_NAME=' server/.env.local | cut -d= -f2)?sslmode=disable"
+        echo "⚠ WARNING: This will delete all data in the database"
+        read -p "Are you sure? (type 'yes' to confirm): " confirm
+        if [ "$confirm" = "yes" ]; then
+          migrate -path {{.MIGRATE_PATH}} -database "$DB_URL" down
+          migrate -path {{.MIGRATE_PATH}} -database "$DB_URL" up
+          echo "✓ Database reset completed"
+        else
+          echo "Cancelled"
+        fi
+
+  bootstrap:
+    desc: Full bootstrap setup (deps, env, db, migrations)
+    cmds:
+      - echo "🚀 Starting full bootstrap setup..."
+      - task: check:deps
+      - task: check:env
+      - task: setup:server
+      - task: setup:client
+      - task: db:start
+      - task: db:migrate
+      - echo "✅ Bootstrap complete! Run 'task dev' to start development"
+
+  dev:
+    desc: Start full development environment (server + client)
+    cmds:
+      - |
+        echo "Starting development environment..."
+        echo "Backend: http://localhost:8080"
+        echo "Frontend: http://localhost:3000"
+        echo "Swagger: http://localhost:8080/swagger/index.html"
+        echo ""
+        echo "Press Ctrl+C to stop both services"
+        sleep 2
+      - |
+        (task run:dev) & (cd client && npm run dev)
+        wait
+    
+  dev:server:
+    desc: Start server only with hot reload
+    cmds:
+      - task: run:dev
+
+  dev:client:
+    desc: Start client only
+    cmds:
+      - cd client && npm run dev
+
+  health:
+    desc: Check health of running services
+    cmds:
+      - |
+        echo "Checking service health..."
+        echo ""
+        
+        echo "Backend API:"
+        curl -s http://localhost:8080/api/health -I | head -n 1 || echo "❌ Backend not responding"
+        
+        echo ""
+        echo "Frontend:"
+        curl -s http://localhost:3000 -I | head -n 1 || echo "⚠ Frontend not responding"
+        
+        echo ""
+        echo "Database:"
+        docker-compose exec -T postgres pg_isready -U keto || echo "❌ Database not responding"
+        
+        echo ""
+        echo "Redis:"
+        docker-compose exec -T redis redis-cli ping || echo "❌ Redis not responding"

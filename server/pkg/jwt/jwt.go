@@ -23,6 +23,28 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// Convert Claims to common JWTClaims format for auth service
+func (c *Claims) ToJWTClaims() *JWTClaims {
+	return &JWTClaims{
+		KratosID:  c.KratosID,
+		Email:     c.Email,
+		Role:      c.Role,
+		CollegeID: c.CollegeID,
+		FirstName: c.FirstName,
+		LastName:  c.LastName,
+	}
+}
+
+// JWTClaims defines the expected JWT claims structure for auth service
+type JWTClaims struct {
+	KratosID  string
+	Email     string
+	Role      string
+	CollegeID string
+	FirstName string
+	LastName  string
+}
+
 type JWTManager struct {
 	secretKey     string
 	tokenDuration time.Duration
@@ -54,7 +76,7 @@ func (m *JWTManager) Generate(kratosID, email, role, collegeID, firstName, lastN
 	return token.SignedString([]byte(m.secretKey))
 }
 
-func (m *JWTManager) Verify(tokenString string) (*Claims, error) {
+func (m *JWTManager) Verify(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		&Claims{},
@@ -79,5 +101,5 @@ func (m *JWTManager) Verify(tokenString string) (*Claims, error) {
 		return nil, ErrExpiredToken
 	}
 
-	return claims, nil
+	return claims.ToJWTClaims(), nil
 }

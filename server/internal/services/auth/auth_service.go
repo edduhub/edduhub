@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"fmt"
+
+	"eduhub/server/pkg/jwt"
 )
 
 type AuthService interface {
@@ -37,16 +39,7 @@ type authService struct {
 
 type JWTManager interface {
 	Generate(kratosID, email, role, collegeID, firstName, lastName string) (string, error)
-	Verify(token string) (*JWTClaims, error)
-}
-
-type JWTClaims struct {
-	KratosID  string
-	Email     string
-	Role      string
-	CollegeID string
-	FirstName string
-	LastName  string
+	Verify(token string) (*jwt.JWTClaims, error)
 }
 
 func NewAuthService(kratos *kratosService, keto *ketoService, jwtManager JWTManager) AuthService {
