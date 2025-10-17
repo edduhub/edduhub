@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, UserPlus, Shield, GraduationCap, Users as UsersIcon } from "lucide-react";
-import { fetchUsers } from "@/lib/api-client";
+import { api } from "@/lib/api-client";
 
 type User = {
   id: number;
@@ -25,11 +25,12 @@ export default function UsersPage() {
   const [selectedRole, setSelectedRole] = useState<string>("all");
   const [users, setUsers] = useState<User[]>([]);
 
+  const loadUsers = async () => {
+    const data = await api.get<User[]>("/api/users");
+    setUsers(Array.isArray(data) ? data : []);
+  };
+
   useEffect(() => {
-    const loadUsers = async () => {
-      const data = await fetchUsers();
-      setUsers(data);
-    };
     loadUsers();
   }, []);
 
@@ -81,6 +82,18 @@ export default function UsersPage() {
     faculty: users.filter(u => u.role === 'faculty').length,
     admin: users.filter(u => u.role === 'admin').length,
     active: users.filter(u => u.is_active).length
+  };
+
+  const toggleActive = async (u: User) => {
+    await api.patch(`/api/users/${u.id}`, { is_active: !u.is_active });
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: !u.is_active } : x));
+  };
+
+  const cycleRole = async (u: User) => {
+    const sequence: User['role'][] = ['student', 'faculty', 'admin'];
+    const next = sequence[(sequence.indexOf(u.role) + 1) % sequence.length];
+    await api.patch(`/api/users/${u.id}/role`, { role: next });
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: next } : x));
   };
 
   return (
@@ -177,6 +190,7 @@ export default function UsersPage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-9 w-9">
+                        <AvatarImage src={undefined} />
                         <AvatarFallback>
                           {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                         </AvatarFallback>
@@ -190,9 +204,12 @@ export default function UsersPage() {
                   <TableCell className="text-muted-foreground">
                     {new Date(user.created_at).toLocaleDateString()}
                   </TableCell>
-                  <TableCell>
-                    <Button variant="outline" size="sm">
-                      Edit
+                  <TableCell className="space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => cycleRole(user)}>
+                      Cycle Role
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => toggleActive(user)}>
+                      {user.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
                   </TableCell>
                 </TableRow>

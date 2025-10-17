@@ -28,6 +28,17 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    type: 'event',
+    start: '',
+    end: '',
+    location: '',
+    description: '',
+  });
+
   useEffect(() => {
     const fetchEvents = async () => {
       try {
@@ -78,6 +89,23 @@ export default function CalendarPage() {
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
     .slice(0, 5);
 
+  const createEvent = async () => {
+    try {
+      setCreating(true);
+      setError(null);
+      await api.post('/api/calendar', newEvent);
+      const data = await api.get('/api/calendar');
+      setEvents(Array.isArray(data) ? data : []);
+      setShowCreate(false);
+      setNewEvent({ title: '', type: 'event', start: '', end: '', location: '', description: '' });
+    } catch (e) {
+      console.error(e);
+      setError('Failed to create event');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -88,12 +116,59 @@ export default function CalendarPage() {
           </p>
         </div>
         {(user?.role === 'faculty' || user?.role === 'admin') && (
-          <Button>
+          <Button onClick={() => setShowCreate(v => !v)}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Event
+            {showCreate ? 'Close' : 'Add Event'}
           </Button>
         )}
       </div>
+
+      {showCreate && (
+        <Card>
+          <CardHeader>
+            <CardTitle>New Event</CardTitle>
+            <CardDescription>Provide event details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Title</label>
+                <input className="w-full rounded-md border px-3 py-2" value={newEvent.title} onChange={e => setNewEvent({ ...newEvent, title: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Type</label>
+                <input className="w-full rounded-md border px-3 py-2" value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as any })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Start</label>
+                <input type="datetime-local" className="w-full rounded-md border px-3 py-2" value={newEvent.start} onChange={e => setNewEvent({ ...newEvent, start: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">End</label>
+                <input type="datetime-local" className="w-full rounded-md border px-3 py-2" value={newEvent.end} onChange={e => setNewEvent({ ...newEvent, end: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Location</label>
+                <input className="w-full rounded-md border px-3 py-2" value={newEvent.location} onChange={e => setNewEvent({ ...newEvent, location: e.target.value })} />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-sm font-medium">Description</label>
+                <input className="w-full rounded-md border px-3 py-2" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={createEvent} disabled={creating}>
+                {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Create
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>

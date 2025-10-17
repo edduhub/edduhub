@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { Award, TrendingUp, FileText, Loader2 } from "lucide-react";
 
-type Grade = {
+ type Grade = {
   id: number;
   courseName: string;
   courseCode: string;
@@ -21,7 +21,7 @@ type Grade = {
   date: string;
 };
 
-type CourseGrade = {
+ type CourseGrade = {
   courseName: string;
   courseCode: string;
   totalScore: number;
@@ -37,12 +37,13 @@ export default function GradesPage() {
   const [courseGrades, setCourseGrades] = useState<CourseGrade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const fetchGrades = async () => {
       try {
         setLoading(true);
-        // Try to fetch individual grades
+        // Student 'my' grades
         try {
           const gradesResponse = await api.get('/api/grades');
           setGrades(Array.isArray(gradesResponse) ? gradesResponse : []);
@@ -50,7 +51,7 @@ export default function GradesPage() {
           console.warn('Failed to fetch individual grades:', err);
         }
 
-        // Try to fetch course grades
+        // Course grades summary for student
         try {
           const courseGradesResponse = await api.get('/api/grades/courses');
           setCourseGrades(Array.isArray(courseGradesResponse) ? courseGradesResponse : []);
@@ -75,14 +76,18 @@ export default function GradesPage() {
       'C+': 2.0, 'C': 1.7, 'C-': 1.3,
       'D': 1.0, 'F': 0.0
     };
-    
+    const totalCredits = courseGrades.reduce((acc, course) => acc + course.credits, 0);
+    if (!totalCredits) return '0.00';
     const totalPoints = courseGrades.reduce(
       (acc, course) => acc + (gradePoints[course.grade] || 0) * course.credits,
       0
     );
-    const totalCredits = courseGrades.reduce((acc, course) => acc + course.credits, 0);
-    
     return (totalPoints / totalCredits).toFixed(2);
+  };
+
+  const avgScore = () => {
+    if (!courseGrades.length) return 0;
+    return Math.round(courseGrades.reduce((acc, c) => acc + c.percentage, 0) / courseGrades.length);
   };
 
   const getGradeColor = (percentage: number) => {
@@ -90,6 +95,28 @@ export default function GradesPage() {
     if (percentage >= 80) return 'text-blue-600';
     if (percentage >= 70) return 'text-yellow-600';
     return 'text-red-600';
+  };
+
+  const downloadReport = async () => {
+    try {
+      setDownloading(true);
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/reports/grade-card/me`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('Failed to generate report');
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gradecard.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      setError('Failed to download report');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -101,8 +128,8 @@ export default function GradesPage() {
             {user?.role === 'student' ? 'View your academic performance' : 'Manage student grades'}
           </p>
         </div>
-        <Button>
-          <FileText className="mr-2 h-4 w-4" />
+        <Button onClick={downloadReport} disabled={downloading}>
+          {downloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
           Generate Report
         </Button>
       </div>
@@ -127,7 +154,7 @@ export default function GradesPage() {
               Average Score
             </CardDescription>
             <CardTitle className="text-3xl">
-              {Math.round(courseGrades.reduce((acc, c) => acc + c.percentage, 0) / courseGrades.length)}%
+              {avgScore()}%
             </CardTitle>
           </CardHeader>
           <CardContent>

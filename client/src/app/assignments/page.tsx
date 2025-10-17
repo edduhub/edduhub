@@ -2,20 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { api, endpoints } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, Clock, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Calendar, Clock, FileText, CheckCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
 type Assignment = {
   id: number;
   title: string;
-  courseName: string;
+  courseId?: number;
+  courseName?: string;
   dueDate: string;
   maxScore: number;
-  status: 'pending' | 'submitted' | 'graded';
+  status?: 'pending' | 'submitted' | 'graded';
   score?: number;
   description: string;
 };
@@ -25,6 +27,17 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Create form
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newAssignment, setNewAssignment] = useState({
+    courseId: '',
+    title: '',
+    description: '',
+    dueDate: '',
+    maxScore: 100,
+  });
 
   useEffect(() => {
     const fetchAssignments = async () => {
@@ -52,8 +65,41 @@ export default function AssignmentsPage() {
     return <Badge className={styles[status as keyof typeof styles]}>{status}</Badge>;
   };
 
-  const isOverdue = (dueDate: string) => {
-    return new Date(dueDate) < new Date();
+  const isOverdue = (dueDate: string) => new Date(dueDate) < new Date();
+
+  const handleCreate = async () => {
+    try {
+      setCreating(true);
+      setError(null);
+      const courseIdNum = Number(newAssignment.courseId);
+      if (!courseIdNum) throw new Error('Course ID is required');
+      await api.post(endpoints.assignments.create, {
+        courseId: courseIdNum,
+        title: newAssignment.title,
+        description: newAssignment.description,
+        dueDate: newAssignment.dueDate,
+        maxScore: Number(newAssignment.maxScore),
+      });
+      const refreshed = await api.get('/api/assignments');
+      setAssignments(Array.isArray(refreshed) ? refreshed : []);
+      setShowCreate(false);
+      setNewAssignment({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100 });
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || 'Failed to create assignment');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleSubmit = async (a: Assignment) => {
+    try {
+      await api.post(endpoints.assignments.submit(a.id), { content: 'Submitted via portal' });
+      setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, status: 'submitted' } : x));
+    } catch (e) {
+      console.error(e);
+      setError('Failed to submit assignment');
+    }
   };
 
   return (
@@ -65,13 +111,56 @@ export default function AssignmentsPage() {
             {user?.role === 'student' ? 'View and submit your assignments' : 'Manage course assignments'}
           </p>
         </div>
-        {user?.role === 'faculty' && (
-          <Button>
+        {user?.role !== 'student' && (
+          <Button onClick={() => setShowCreate(v => !v)}>
             <Plus className="mr-2 h-4 w-4" />
-            Create Assignment
+            {showCreate ? 'Close' : 'Create Assignment'}
           </Button>
         )}
       </div>
+
+      {showCreate && (
+        <Card>
+          <CardHeader>
+            <CardTitle>New Assignment</CardTitle>
+            <CardDescription>Provide course ID and details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Course ID</label>
+                <Input value={newAssignment.courseId} onChange={e => setNewAssignment({ ...newAssignment, courseId: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Title</label>
+                <Input value={newAssignment.title} onChange={e => setNewAssignment({ ...newAssignment, title: e.target.value })} />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-sm font-medium">Description</label>
+                <Input value={newAssignment.description} onChange={e => setNewAssignment({ ...newAssignment, description: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Due Date</label>
+                <Input type="date" value={newAssignment.dueDate} onChange={e => setNewAssignment({ ...newAssignment, dueDate: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Max Score</label>
+                <Input type="number" value={newAssignment.maxScore} onChange={e => setNewAssignment({ ...newAssignment, maxScore: Number(e.target.value || 100) })} />
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={handleCreate} disabled={creating}>
+                {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Create
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
@@ -110,7 +199,7 @@ export default function AssignmentsPage() {
                     {assignment.courseName}
                   </CardDescription>
                 </div>
-                {getStatusBadge(assignment.status)}
+                {assignment.status && getStatusBadge(assignment.status)}
               </div>
             </CardHeader>
             <CardContent>
@@ -134,9 +223,15 @@ export default function AssignmentsPage() {
                     </div>
                   )}
                 </div>
-                <Button variant={assignment.status === 'pending' ? 'default' : 'outline'}>
-                  {assignment.status === 'pending' ? 'Submit' : 'View Details'}
-                </Button>
+                <div className="space-x-2">
+                  {user?.role === 'student' ? (
+                    <Button variant={assignment.status === 'pending' ? 'default' : 'outline'} onClick={() => handleSubmit(assignment)}>
+                      {assignment.status === 'pending' ? 'Submit' : 'View'}
+                    </Button>
+                  ) : (
+                    <Button variant="outline">Manage</Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

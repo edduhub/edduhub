@@ -20,7 +20,6 @@ import {
   CheckCircle,
   AlertCircle,
   FileText,
-  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardResponse } from "@/lib/api";
@@ -30,15 +29,18 @@ export default function DashboardPage() {
   const router = useRouter();
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
         try {
-          const data = await api.get<DashboardResponse>('/api/dashboard');
+          setLoading(true);
+          setError(null);
+          const data = await api.get<DashboardResponse>("/api/dashboard");
           setDashboardData(data);
-        } catch (error) {
-          console.error('Failed to fetch dashboard:', error);
+        } catch (err: any) {
+          setError(err?.message || "Failed to fetch dashboard");
         } finally {
           setLoading(false);
         }
@@ -50,11 +52,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push('/auth/login');
+      router.push("/auth/login");
     }
   }, [user, isLoading, router]);
 
-  if (isLoading) {
+  if (isLoading || loading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
@@ -64,6 +66,22 @@ export default function DashboardPage() {
 
   if (!user) {
     return null;
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Dashboard</CardTitle>
+            <CardDescription>Unable to load data</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-destructive">{error}</div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // Student Dashboard
@@ -82,7 +100,7 @@ export default function DashboardPage() {
                 <BookOpen className="h-4 w-4" />
                 Enrolled Courses
               </CardDescription>
-              <CardTitle className="text-2xl">5</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder until endpoint available */}5</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -91,7 +109,7 @@ export default function DashboardPage() {
                 <Award className="h-4 w-4" />
                 Current GPA
               </CardDescription>
-              <CardTitle className="text-2xl">3.85</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}3.85</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -100,7 +118,7 @@ export default function DashboardPage() {
                 <CheckCircle className="h-4 w-4" />
                 Attendance Rate
               </CardDescription>
-              <CardTitle className="text-2xl">92%</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}92%</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -109,7 +127,7 @@ export default function DashboardPage() {
                 <FileText className="h-4 w-4" />
                 Pending Tasks
               </CardDescription>
-              <CardTitle className="text-2xl">3</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}3</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -219,7 +237,7 @@ export default function DashboardPage() {
                 <BookOpen className="h-4 w-4" />
                 Teaching Courses
               </CardDescription>
-              <CardTitle className="text-2xl">4</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}4</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -228,7 +246,7 @@ export default function DashboardPage() {
                 <Users className="h-4 w-4" />
                 Total Students
               </CardDescription>
-              <CardTitle className="text-2xl">315</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}315</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -237,7 +255,7 @@ export default function DashboardPage() {
                 <FileText className="h-4 w-4" />
                 Pending Submissions
               </CardDescription>
-              <CardTitle className="text-2xl">42</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}42</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -246,7 +264,7 @@ export default function DashboardPage() {
                 <Clock className="h-4 w-4" />
                 Lectures Today
               </CardDescription>
-              <CardTitle className="text-2xl">3</CardTitle>
+              <CardTitle className="text-2xl">{/* Placeholder */}3</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -393,7 +411,7 @@ export default function DashboardPage() {
               <Users className="h-4 w-4" />
               Faculty Members
             </CardDescription>
-            <CardTitle className="text-2xl">118</CardTitle>
+            <CardTitle className="text-2xl">{/* Placeholder */}118</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-1 text-xs text-green-600">

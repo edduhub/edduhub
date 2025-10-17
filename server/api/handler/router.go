@@ -24,10 +24,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.GET("/register", a.Auth.InitiateRegistration)
 	auth.POST("/register/complete", a.Auth.HandleRegistration)
 	auth.POST("/login", a.Auth.HandleLogin)
-	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateJWT)
+	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateSession)
 
 	// Auth routes (require authentication)
-	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateJWT)
+	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateSession)
 	auth.POST("/refresh", a.Auth.RefreshToken)
 
 	// Password management (public)
@@ -42,7 +42,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT)
 
 	// Protected API routes with audit logging
-	apiGroup := e.Group("/api", m.ValidateJWT, m.RequireCollege)
+	apiGroup := e.Group("/api", m.ValidateSession, m.RequireCollege)
 
 	// Dashboard
 	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)

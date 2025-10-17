@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { QrCode, CheckCircle, XCircle, Clock, Calendar, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
-type AttendanceRecord = {
+ type AttendanceRecord = {
   id: number;
   courseName: string;
   courseCode: string;
@@ -20,7 +20,7 @@ type AttendanceRecord = {
   markedBy?: string;
 };
 
-type CourseAttendance = {
+ type CourseAttendance = {
   courseName: string;
   courseCode: string;
   present: number;
@@ -34,6 +34,17 @@ export default function AttendancePage() {
   const [courseStats, setCourseStats] = useState<CourseAttendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Faculty QR generation state
+  const [showQRForm, setShowQRForm] = useState(false);
+  const [courseId, setCourseId] = useState("");
+  const [lectureId, setLectureId] = useState("");
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
+
+  // Student QR marking state
+  const [qrToken, setQrToken] = useState("");
+  const [marking, setMarking] = useState(false);
 
   useEffect(() => {
     const fetchAttendance = async () => {
@@ -65,17 +76,19 @@ export default function AttendancePage() {
     fetchAttendance();
   }, []);
 
-  const overallAttendance = Math.round(
-    (courseStats.reduce((acc, c) => acc + c.present, 0) / 
-     courseStats.reduce((acc, c) => acc + c.total, 0)) * 100
-  );
+  const overallAttendance = (() => {
+    const total = courseStats.reduce((acc, c) => acc + c.total, 0);
+    if (!total) return 0;
+    const present = courseStats.reduce((acc, c) => acc + c.present, 0);
+    return Math.round((present / total) * 100);
+  })();
 
   const getStatusBadge = (status: string) => {
     const config = {
       present: { icon: CheckCircle, className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', label: 'Present' },
       absent: { icon: XCircle, className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', label: 'Absent' },
       late: { icon: Clock, className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', label: 'Late' }
-    };
+    } as const;
     const { icon: Icon, className, label } = config[status as keyof typeof config];
     return (
       <Badge className={className}>
@@ -83,6 +96,46 @@ export default function AttendancePage() {
         {label}
       </Badge>
     );
+  };
+
+  const generateQR = async () => {
+    try {
+      setQrLoading(true);
+      setError(null);
+      const cid = Number(courseId);
+      const lid = Number(lectureId);
+      if (!cid || !lid) throw new Error('Course ID and Lecture ID are required');
+      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/attendance/course/${cid}/lecture/${lid}/qrcode`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!resp.ok) throw new Error('Failed to generate QR');
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      setQrImageUrl(url);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || 'Failed to generate QR');
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const processQR = async () => {
+    try {
+      setMarking(true);
+      setError(null);
+      await api.post('/api/attendance/process-qr', { token: qrToken });
+      // Refresh records after marking
+      const refreshed = await api.get('/api/attendance/student/me');
+      setRecords(Array.isArray(refreshed) ? refreshed : []);
+      setQrToken("");
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || 'Failed to mark attendance');
+    } finally {
+      setMarking(false);
+    }
   };
 
   return (
@@ -95,12 +148,60 @@ export default function AttendancePage() {
           </p>
         </div>
         {user?.role === 'faculty' && (
-          <Button>
+          <Button onClick={() => setShowQRForm(v => !v)}>
             <QrCode className="mr-2 h-4 w-4" />
-            Generate QR Code
+            {showQRForm ? 'Close' : 'Generate QR Code'}
           </Button>
         )}
       </div>
+
+      {user?.role === 'faculty' && showQRForm && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Generate Attendance QR</CardTitle>
+            <CardDescription>Provide course and lecture IDs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Course ID</label>
+                <input className="w-full rounded-md border px-3 py-2" value={courseId} onChange={e => setCourseId(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Lecture ID</label>
+                <input className="w-full rounded-md border px-3 py-2" value={lectureId} onChange={e => setLectureId(e.target.value)} />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-4">
+              <Button onClick={generateQR} disabled={qrLoading}>
+                {qrLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <QrCode className="mr-2 h-4 w-4" />}
+                Generate
+              </Button>
+              {qrImageUrl && (
+                <img src={qrImageUrl} alt="Attendance QR" className="h-40 w-40 border" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {user?.role === 'student' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Mark Attendance via QR</CardTitle>
+            <CardDescription>Paste scanned QR token if camera scan is unavailable</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <input className="flex-1 rounded-md border px-3 py-2" placeholder="QR token" value={qrToken} onChange={e => setQrToken(e.target.value)} />
+              <Button onClick={processQR} disabled={marking || !qrToken}>
+                {marking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                Mark
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

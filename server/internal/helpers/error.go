@@ -5,13 +5,13 @@ import (
 )
 
 type ErrorResponse struct {
-	Message any `json:"error"`
-	Status  int `json:"status"`
+    Success bool `json:"success"`
+    Error   any  `json:"error"`
 }
 
 func Error(c echo.Context, error any, status int) error {
-	return c.JSON(status, ErrorResponse{
-		Message: error,
-		Status:  status,
-	})
+    return c.JSON(status, ErrorResponse{
+        Success: false,
+        Error:   error,
+    })
 }

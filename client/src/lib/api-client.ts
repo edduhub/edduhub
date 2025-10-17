@@ -57,6 +57,7 @@ export async function apiClient<T>(
     method,
     headers: requestHeaders,
     cache: 'no-store',
+    credentials: 'include',
   };
 
   if (body) {
@@ -196,9 +197,9 @@ export const endpoints = {
   // Notifications
   notifications: {
     list: '/api/notifications',
-    unreadCount: '/api/notifications/unread-count',
+    unreadCount: '/api/notifications/unread/count',
     markAsRead: (id: number) => `/api/notifications/${id}/read`,
-    markAllAsRead: '/api/notifications/read-all',
+    markAllAsRead: '/api/notifications/mark-all-read',
     delete: (id: number) => `/api/notifications/${id}`,
   },
   
@@ -225,12 +226,12 @@ export const endpoints = {
   
   // Analytics
   analytics: {
-    collegeDashboard: '/api/analytics/college/dashboard',
-    courseAnalytics: (courseId: number) => `/api/analytics/course/${courseId}`,
+    collegeDashboard: '/api/analytics/dashboard',
+    courseAnalytics: (courseId: number) => `/api/analytics/courses/${courseId}/analytics`,
     gradeDistribution: (courseId: number) =>
-      `/api/analytics/course/${courseId}/grade-distribution`,
+      `/api/analytics/courses/${courseId}/grades/distribution`,
     studentPerformance: (studentId: number) =>
-      `/api/analytics/student/${studentId}/performance`,
+      `/api/analytics/students/${studentId}/performance`,
     attendanceTrends: '/api/analytics/attendance/trends',
   },
   
