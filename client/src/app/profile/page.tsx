@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchProfile } from "@/lib/api-client";
+import { api, endpoints, fetchProfile } from "@/lib/api-client";
 import { Profile } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,36 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Camera, Mail, Phone, MapPin, Calendar, Edit2 } from "lucide-react";
 
+type ApiProfile = {
+  phone_number?: string;
+  date_of_birth?: string;
+  address?: string;
+  bio?: string;
+  profile_image?: string;
+};
+
+type UpdateProfilePayload = {
+  bio?: string;
+  phoneNumber?: string;
+  address?: string;
+  dateOfBirth?: string;
+};
+
+const formatDateForInput = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toISOString().split("T")[0];
+};
+
 export default function ProfilePage() {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [profileData, setProfileData] = useState({
     firstName: user?.firstName || "",
     lastName: user?.lastName || "",
@@ -29,17 +55,27 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const loadProfile = async () => {
-      const data = await fetchProfile();
-      setProfile(data);
-      setProfileData({
-        firstName: user?.firstName || "",
-        lastName: user?.lastName || "",
-        email: user?.email || "",
-        phone: data.phone_number || "",
-        dateOfBirth: data.date_of_birth ? new Date(data.date_of_birth).toISOString().split('T')[0] : "",
-        address: data.address || "",
-        bio: data.bio || ""
-      });
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchProfile();
+        setProfile(data);
+        const apiProfile = data as Profile & ApiProfile;
+        setProfileData({
+          firstName: user?.firstName || "",
+          lastName: user?.lastName || "",
+          email: user?.email || "",
+          phone: apiProfile.phone_number || "",
+          dateOfBirth: formatDateForInput(apiProfile.date_of_birth),
+          address: apiProfile.address || "",
+          bio: apiProfile.bio || ""
+        });
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load profile");
+      } finally {
+        setLoading(false);
+      }
     };
     loadProfile();
   }, [user]);
@@ -48,10 +84,38 @@ export default function ProfilePage() {
     ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
     : 'U';
 
-  const handleSave = () => {
-    // Save profile logic
-    setIsEditing(false);
-    alert("Profile updated successfully!");
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const payload: UpdateProfilePayload = {
+        bio: profileData.bio || undefined,
+        phoneNumber: profileData.phone || undefined,
+        address: profileData.address || undefined,
+        dateOfBirth: profileData.dateOfBirth || undefined,
+      };
+
+      await api.patch(endpoints.auth.profile, payload);
+
+      const updated = await fetchProfile();
+      setProfile(updated);
+      const updatedProfile = updated as Profile & ApiProfile;
+      setProfileData((prev) => ({
+        ...prev,
+        phone: updatedProfile.phone_number || prev.phone,
+        dateOfBirth: formatDateForInput(updatedProfile.date_of_birth) || prev.dateOfBirth,
+        address: updatedProfile.address || prev.address,
+        bio: updatedProfile.bio || prev.bio,
+      }));
+
+      setIsEditing(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getRoleBadge = (role?: string) => {
@@ -129,9 +193,10 @@ export default function ProfilePage() {
               </div>
               <Button
                 variant={isEditing ? "default" : "outline"}
+                disabled={loading}
                 onClick={() => isEditing ? handleSave() : setIsEditing(true)}
               >
-                {isEditing ? "Save Changes" : (
+                {isEditing ? (loading ? "Saving..." : "Save Changes") : (
                   <>
                     <Edit2 className="mr-2 h-4 w-4" />
                     Edit
@@ -218,11 +283,11 @@ export default function ProfilePage() {
 
             {isEditing && (
               <div className="flex justify-end gap-4">
-                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                <Button variant="outline" onClick={() => setIsEditing(false)} disabled={loading}>
                   Cancel
                 </Button>
-                <Button onClick={handleSave}>
-                  Save Changes
+                <Button onClick={handleSave} disabled={loading}>
+                  {loading ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             )}

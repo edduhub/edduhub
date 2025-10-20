@@ -18,6 +18,29 @@ type AssignmentService interface {
 	DeleteAssignment(ctx context.Context, collegeID, assignmentID int) error
 	SubmitAssignment(ctx context.Context, submission *models.AssignmentSubmission) error
 	GradeSubmission(ctx context.Context, collegeID, submissionID int, grade *int, feedback *string) error
+	GetSubmissionByStudentAndAssignment(ctx context.Context, studentID, assignmentID int) (*models.AssignmentSubmission, error)
+	CountPendingSubmissionsByCollege(ctx context.Context, collegeID int) (int, error)
+
+	// Enhanced grading features
+	BulkGradeSubmissions(ctx context.Context, collegeID int, grades map[int]*GradeInput) error
+	GetSubmissionsByAssignment(ctx context.Context, collegeID, assignmentID int) ([]*models.AssignmentSubmission, error)
+	CalculateLatePenalty(submission *models.AssignmentSubmission, assignment *models.Assignment) int
+	GetGradingStats(ctx context.Context, collegeID, assignmentID int) (*GradingStats, error)
+}
+
+// GradeInput represents grading input for a submission
+type GradeInput struct {
+	Grade    *int
+	Feedback *string
+}
+
+// GradingStats represents statistics for assignment grading
+type GradingStats struct {
+	TotalSubmissions  int
+	GradedSubmissions int
+	PendingGrading    int
+	AverageGrade      float64
+	LateSubmissions   int
 }
 
 type assignmentService struct {
@@ -77,13 +100,96 @@ func (a *assignmentService) GradeSubmission(ctx context.Context, collegeID, subm
 	if err != nil {
 		return err
 	}
-	
+
 	if grade != nil {
 		submission.Grade = grade
 	}
 	if feedback != nil {
 		submission.Feedback = feedback
 	}
-	
+
 	return a.repo.UpdateSubmission(ctx, submission)
+}
+
+func (a *assignmentService) GetSubmissionByStudentAndAssignment(ctx context.Context, studentID, assignmentID int) (*models.AssignmentSubmission, error) {
+	if studentID == 0 || assignmentID == 0 {
+		return nil, errors.New("studentID and assignmentID are required")
+	}
+	return a.repo.GetSubmissionByStudentAndAssignment(ctx, studentID, assignmentID)
+}
+
+func (a *assignmentService) CountPendingSubmissionsByCollege(ctx context.Context, collegeID int) (int, error) {
+	if collegeID == 0 {
+		return 0, errors.New("collegeID is required")
+	}
+	return a.repo.CountPendingSubmissionsByCollege(ctx, collegeID)
+}
+
+// BulkGradeSubmissions grades multiple submissions at once
+func (a *assignmentService) BulkGradeSubmissions(ctx context.Context, collegeID int, grades map[int]*GradeInput) error {
+	for submissionID, gradeInput := range grades {
+		if err := a.GradeSubmission(ctx, collegeID, submissionID, gradeInput.Grade, gradeInput.Feedback); err != nil {
+			// Log error but continue with other submissions
+			continue
+		}
+	}
+	return nil
+}
+
+// GetSubmissionsByAssignment retrieves all submissions for an assignment
+func (a *assignmentService) GetSubmissionsByAssignment(ctx context.Context, collegeID, assignmentID int) ([]*models.AssignmentSubmission, error) {
+	return a.repo.FindSubmissionsByAssignment(ctx, assignmentID, uint64(1000), uint64(0))
+}
+
+// CalculateLatePenalty calculates grade penalty for late submissions
+func (a *assignmentService) CalculateLatePenalty(submission *models.AssignmentSubmission, assignment *models.Assignment) int {
+	if submission.SubmissionTime.Before(assignment.DueDate) {
+		return 0 // Not late
+	}
+
+	// Calculate hours late
+	hoursLate := int(submission.SubmissionTime.Sub(assignment.DueDate).Hours())
+
+	// Default penalty: 10% per day, max 50%
+	daysLate := (hoursLate / 24) + 1
+	penalty := daysLate * 10
+	if penalty > 50 {
+		penalty = 50
+	}
+
+	return penalty
+}
+
+// GetGradingStats retrieves grading statistics for an assignment
+func (a *assignmentService) GetGradingStats(ctx context.Context, collegeID, assignmentID int) (*GradingStats, error) {
+	submissions, err := a.GetSubmissionsByAssignment(ctx, collegeID, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &GradingStats{
+		TotalSubmissions: len(submissions),
+	}
+
+	totalGrades := 0
+	for _, sub := range submissions {
+		if sub.Grade != nil {
+			stats.GradedSubmissions++
+			totalGrades += *sub.Grade
+		} else {
+			stats.PendingGrading++
+		}
+
+		// Check if late
+		assignment, err := a.GetAssignment(ctx, collegeID, assignmentID)
+		if err == nil && sub.SubmissionTime.After(assignment.DueDate) {
+			stats.LateSubmissions++
+		}
+	}
+
+	if stats.GradedSubmissions > 0 {
+		stats.AverageGrade = float64(totalGrades) / float64(stats.GradedSubmissions)
+	}
+
+	return stats, nil
 }

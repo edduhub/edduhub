@@ -301,13 +301,16 @@ func (s *advancedAnalyticsService) GetLearningAnalytics(ctx context.Context, col
 }
 
 func (s *advancedAnalyticsService) GetPerformanceTrends(ctx context.Context, collegeID int, entityType string, entityID int) ([]PerformanceTrend, error) {
-	// Implementation for performance trends over time
 	trends := make([]PerformanceTrend, 0)
 
-	// This would typically involve time-series analysis
-	// For now, return empty slice as this requires more complex implementation
-
-	return trends, nil
+	switch entityType {
+	case "student":
+		return s.getStudentPerformanceTrends(ctx, collegeID, entityID)
+	case "course":
+		return s.getCoursePerformanceTrends(ctx, collegeID, entityID)
+	default:
+		return trends, fmt.Errorf("invalid entity type: %s", entityType)
+	}
 }
 
 func (s *advancedAnalyticsService) GetComparativeAnalysis(ctx context.Context, collegeID int, courseIDs []int) (*ComparativeAnalysis, error) {
@@ -760,23 +763,75 @@ func (s *advancedAnalyticsService) getTopPerformingCourses(ctx context.Context, 
 }
 
 func (s *advancedAnalyticsService) identifyLearningPatterns(ctx context.Context, collegeID int) ([]LearningPattern, error) {
-	// Simplified pattern identification
-	patterns := []LearningPattern{
-		{
-			Pattern:     "Consistent Study Schedule",
-			Students:    45,
-			SuccessRate: 85.5,
-		},
-		{
-			Pattern:     "Active Participation",
-			Students:    32,
-			SuccessRate: 78.2,
-		},
-		{
-			Pattern:     "Regular Assessment Practice",
-			Students:    28,
-			SuccessRate: 82.1,
-		},
+	patterns := make([]LearningPattern, 0)
+
+	// Pattern 1: High attendance correlation with success
+	highAttendanceQuery := `
+		SELECT
+			COUNT(DISTINCT s.id) as student_count,
+			COALESCE(AVG(CASE WHEN g.percentage >= 60 THEN 100 ELSE 0 END), 0) as success_rate
+		FROM students s
+		JOIN attendance a ON a.student_id = s.id AND a.college_id = s.college_id
+		LEFT JOIN grades g ON g.student_id = s.id AND g.college_id = s.college_id
+		WHERE s.college_id = $1
+		GROUP BY s.id
+		HAVING COALESCE(AVG(CASE WHEN a.status = 'Present' THEN 100 ELSE 0 END), 0) >= 80`
+
+	var studentCount int
+	var successRate float64
+	err := s.db.Pool.QueryRow(ctx, highAttendanceQuery, collegeID).Scan(&studentCount, &successRate)
+	if err == nil && studentCount > 0 {
+		patterns = append(patterns, LearningPattern{
+			Pattern:     "High Attendance (≥80%)",
+			Students:    studentCount,
+			SuccessRate: successRate,
+		})
+	}
+
+	// Pattern 2: Regular assignment submission
+	regularSubmissionQuery := `
+		SELECT
+			COUNT(DISTINCT s.student_id) as student_count,
+			COALESCE(AVG(CASE WHEN g.percentage >= 60 THEN 100 ELSE 0 END), 0) as success_rate
+		FROM (
+			SELECT student_id, COUNT(*) as submission_count
+			FROM assignment_submissions
+			WHERE college_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '60 days'
+			GROUP BY student_id
+			HAVING COUNT(*) >= 5
+		) s
+		LEFT JOIN grades g ON g.student_id = s.student_id AND g.college_id = $1`
+
+	err = s.db.Pool.QueryRow(ctx, regularSubmissionQuery, collegeID).Scan(&studentCount, &successRate)
+	if err == nil && studentCount > 0 {
+		patterns = append(patterns, LearningPattern{
+			Pattern:     "Regular Assignment Submissions",
+			Students:    studentCount,
+			SuccessRate: successRate,
+		})
+	}
+
+	// Pattern 3: Active quiz participation
+	activeQuizQuery := `
+		SELECT
+			COUNT(DISTINCT qa.student_id) as student_count,
+			COALESCE(AVG(CASE WHEN g.percentage >= 60 THEN 100 ELSE 0 END), 0) as success_rate
+		FROM (
+			SELECT student_id, COUNT(*) as quiz_count
+			FROM quiz_attempts
+			WHERE college_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '60 days'
+			GROUP BY student_id
+			HAVING COUNT(*) >= 3
+		) qa
+		LEFT JOIN grades g ON g.student_id = qa.student_id AND g.college_id = $1`
+
+	err = s.db.Pool.QueryRow(ctx, activeQuizQuery, collegeID).Scan(&studentCount, &successRate)
+	if err == nil && studentCount > 0 {
+		patterns = append(patterns, LearningPattern{
+			Pattern:     "Active Quiz Participation",
+			Students:    studentCount,
+			SuccessRate: successRate,
+		})
 	}
 
 	return patterns, nil
@@ -873,4 +928,184 @@ func abs(x float64) float64 {
 		return -x
 	}
 	return x
+}
+
+func (s *advancedAnalyticsService) getStudentPerformanceTrends(ctx context.Context, collegeID, studentID int) ([]PerformanceTrend, error) {
+	trends := make([]PerformanceTrend, 0)
+
+	// Grade trends over time
+	gradeQuery := `
+		SELECT
+			DATE_TRUNC('week', created_at) as week,
+			AVG(percentage) as avg_grade
+		FROM grades
+		WHERE college_id = $1 AND student_id = $2
+		GROUP BY DATE_TRUNC('week', created_at)
+		ORDER BY week DESC
+		LIMIT 12`
+
+	rows, err := s.db.Pool.Query(ctx, gradeQuery, collegeID, studentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var prevValue float64
+	first := true
+	for rows.Next() {
+		var date time.Time
+		var value float64
+		if err := rows.Scan(&date, &value); err != nil {
+			continue
+		}
+
+		changeRate := 0.0
+		if !first {
+			changeRate = ((value - prevValue) / prevValue) * 100
+		}
+
+		trends = append(trends, PerformanceTrend{
+			Date:       date,
+			Metric:     "average_grade",
+			Value:      value,
+			ChangeRate: changeRate,
+		})
+
+		prevValue = value
+		first = false
+	}
+
+	// Attendance trends
+	attendanceQuery := `
+		SELECT
+			DATE_TRUNC('week', date) as week,
+			COALESCE(AVG(CASE WHEN status = 'Present' THEN 100 ELSE 0 END), 0) as attendance_rate
+		FROM attendance
+		WHERE college_id = $1 AND student_id = $2
+		GROUP BY DATE_TRUNC('week', date)
+		ORDER BY week DESC
+		LIMIT 12`
+
+	rows, err = s.db.Pool.Query(ctx, attendanceQuery, collegeID, studentID)
+	if err != nil {
+		return trends, nil
+	}
+	defer rows.Close()
+
+	prevValue = 0
+	first = true
+	for rows.Next() {
+		var date time.Time
+		var value float64
+		if err := rows.Scan(&date, &value); err != nil {
+			continue
+		}
+
+		changeRate := 0.0
+		if !first && prevValue > 0 {
+			changeRate = ((value - prevValue) / prevValue) * 100
+		}
+
+		trends = append(trends, PerformanceTrend{
+			Date:       date,
+			Metric:     "attendance_rate",
+			Value:      value,
+			ChangeRate: changeRate,
+		})
+
+		prevValue = value
+		first = false
+	}
+
+	return trends, nil
+}
+
+func (s *advancedAnalyticsService) getCoursePerformanceTrends(ctx context.Context, collegeID, courseID int) ([]PerformanceTrend, error) {
+	trends := make([]PerformanceTrend, 0)
+
+	// Average grade trends for course
+	gradeQuery := `
+		SELECT
+			DATE_TRUNC('week', created_at) as week,
+			AVG(percentage) as avg_grade
+		FROM grades
+		WHERE college_id = $1 AND course_id = $2
+		GROUP BY DATE_TRUNC('week', created_at)
+		ORDER BY week DESC
+		LIMIT 12`
+
+	rows, err := s.db.Pool.Query(ctx, gradeQuery, collegeID, courseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var prevValue float64
+	first := true
+	for rows.Next() {
+		var date time.Time
+		var value float64
+		if err := rows.Scan(&date, &value); err != nil {
+			continue
+		}
+
+		changeRate := 0.0
+		if !first && prevValue > 0 {
+			changeRate = ((value - prevValue) / prevValue) * 100
+		}
+
+		trends = append(trends, PerformanceTrend{
+			Date:       date,
+			Metric:     "course_average_grade",
+			Value:      value,
+			ChangeRate: changeRate,
+		})
+
+		prevValue = value
+		first = false
+	}
+
+	// Enrollment trends
+	enrollmentQuery := `
+		SELECT
+			DATE_TRUNC('month', created_at) as month,
+			COUNT(*) as enrollment_count
+		FROM enrollments
+		WHERE college_id = $1 AND course_id = $2
+		GROUP BY DATE_TRUNC('month', created_at)
+		ORDER BY month DESC
+		LIMIT 6`
+
+	rows, err = s.db.Pool.Query(ctx, enrollmentQuery, collegeID, courseID)
+	if err != nil {
+		return trends, nil
+	}
+	defer rows.Close()
+
+	prevValue = 0
+	first = true
+	for rows.Next() {
+		var date time.Time
+		var value float64
+		if err := rows.Scan(&date, &value); err != nil {
+			continue
+		}
+
+		changeRate := 0.0
+		if !first && prevValue > 0 {
+			changeRate = ((value - prevValue) / prevValue) * 100
+		}
+
+		trends = append(trends, PerformanceTrend{
+			Date:       date,
+			Metric:     "enrollment_count",
+			Value:      value,
+			ChangeRate: changeRate,
+		})
+
+		prevValue = value
+		first = false
+	}
+
+	return trends, nil
 }

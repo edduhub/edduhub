@@ -22,6 +22,25 @@ type Assignment = {
   description: string;
 };
 
+type ApiAssignment = {
+  id: number;
+  title?: string;
+  description?: string;
+  courseId?: number;
+  courseName?: string;
+  dueDate?: string;
+  maxScore?: number;
+  status?: string;
+  score?: number;
+};
+
+const normalizeStatus = (status?: string): Assignment['status'] => {
+  if (status === 'submitted' || status === 'graded') {
+    return status;
+  }
+  return 'pending';
+};
+
 export default function AssignmentsPage() {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -43,8 +62,19 @@ export default function AssignmentsPage() {
     const fetchAssignments = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/api/assignments');
-        setAssignments(Array.isArray(response) ? response : []);
+        const response = await api.get<ApiAssignment[]>(endpoints.assignments.list);
+        const normalized = (Array.isArray(response) ? response : []).map<Assignment>((item) => ({
+          id: item.id,
+          title: item.title ?? 'Untitled assignment',
+          courseId: item.courseId,
+          courseName: item.courseName ?? (item.courseId ? `Course ${item.courseId}` : undefined),
+          dueDate: item.dueDate ?? new Date().toISOString(),
+          maxScore: item.maxScore ?? 100,
+          status: normalizeStatus(item.status),
+          score: item.score,
+          description: item.description ?? '',
+        }));
+        setAssignments(normalized);
       } catch (err) {
         console.error('Failed to fetch assignments:', err);
         setError('Failed to load assignments');
@@ -73,15 +103,26 @@ export default function AssignmentsPage() {
       setError(null);
       const courseIdNum = Number(newAssignment.courseId);
       if (!courseIdNum) throw new Error('Course ID is required');
-      await api.post(endpoints.assignments.create, {
+      await api.post(endpoints.assignments.create(courseIdNum), {
         courseId: courseIdNum,
         title: newAssignment.title,
         description: newAssignment.description,
         dueDate: newAssignment.dueDate,
         maxScore: Number(newAssignment.maxScore),
       });
-      const refreshed = await api.get('/api/assignments');
-      setAssignments(Array.isArray(refreshed) ? refreshed : []);
+      const refreshed = await api.get<ApiAssignment[]>(endpoints.assignments.list);
+      const normalized = (Array.isArray(refreshed) ? refreshed : []).map<Assignment>((item) => ({
+        id: item.id,
+        title: item.title ?? 'Untitled assignment',
+        courseId: item.courseId,
+        courseName: item.courseName ?? (item.courseId ? `Course ${item.courseId}` : undefined),
+        dueDate: item.dueDate ?? new Date().toISOString(),
+        maxScore: item.maxScore ?? 100,
+        status: normalizeStatus(item.status),
+        score: item.score,
+        description: item.description ?? '',
+      }));
+      setAssignments(normalized);
       setShowCreate(false);
       setNewAssignment({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100 });
     } catch (e: any) {
@@ -94,7 +135,11 @@ export default function AssignmentsPage() {
 
   const handleSubmit = async (a: Assignment) => {
     try {
-      await api.post(endpoints.assignments.submit(a.id), { content: 'Submitted via portal' });
+      if (!a.courseId) {
+        setError('Course ID not available for this assignment');
+        return;
+      }
+      await api.post(endpoints.assignments.submit(a.courseId, a.id), { content: 'Submitted via portal' });
       setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, status: 'submitted' } : x));
     } catch (e) {
       console.error(e);

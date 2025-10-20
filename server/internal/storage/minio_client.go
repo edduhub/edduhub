@@ -99,6 +99,10 @@ func (m *MinioClient) GetBucketName() string {
 	return m.config.Bucket
 }
 
+func (m *MinioClient) Client() *minio.Client {
+	return m.client
+}
+
 func (m *MinioClient) GetFileSize(ctx context.Context, bucketName, objectName string) (int, error) {
 	info, err := m.client.StatObject(ctx, bucketName, objectName, minio.StatObjectOptions{})
 	if err != nil {

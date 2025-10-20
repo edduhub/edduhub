@@ -1,6 +1,7 @@
 package services
 
 import (
+	"log"
 	"time"
 
 	"eduhub/server/internal/config"
@@ -25,11 +26,13 @@ import (
 	"eduhub/server/internal/services/profile"
 	"eduhub/server/internal/services/quiz"
 	"eduhub/server/internal/services/report"
-	"eduhub/server/internal/services/storage"
+	storageservice "eduhub/server/internal/services/storage"
 	"eduhub/server/internal/services/student"
 	"eduhub/server/internal/services/user"
 	"eduhub/server/internal/services/webhook"
+	storageclient "eduhub/server/internal/storage"
 	"eduhub/server/pkg/jwt"
+	minio "github.com/minio/minio-go/v7"
 )
 
 type Services struct {
@@ -50,11 +53,12 @@ type Services struct {
 	ProfileService      profile.ProfileService
 	QuestionService     quiz.QuestionServiceSimple
 	QuizAttemptService  quiz.QuizAttemptServiceSimple
-	StorageService      storage.StorageService
+	StorageService      storageservice.StorageService
 	FileService         file.FileService
 	NotificationService notification.NotificationService
 	WebSocketService    notification.WebSocketService
 	AnalyticsService    analytics.AnalyticsService
+	AdvancedAnalyticsService analytics.AdvancedAnalyticsService
 	BatchService        batch.BatchService
 	ReportService       report.ReportService
 	WebhookService      webhook.WebhookService
@@ -91,7 +95,41 @@ func NewServices(cfg *config.Config) *Services {
 	quizAttemptRepo := repository.NewQuizAttemptRepository(cfg.DB)
 	calendarRepo := repository.NewCalendarRepository(cfg.DB)
 	departmentRepo := repository.NewDepartmentRepository(cfg.DB)
-	assignmentRepo := repository.NewAssignmentRepository(cfg.DB, nil)
+
+	var minioClient *storageclient.MinioClient
+	storageBucket := "eduhub"
+	storageEndpoint := "localhost:9000"
+	storageUseSSL := false
+	storageRegion := ""
+
+	if cfg.StorageConfig != nil {
+		if cfg.StorageConfig.Bucket != "" {
+			storageBucket = cfg.StorageConfig.Bucket
+		}
+		if cfg.StorageConfig.Endpoint != "" {
+			storageEndpoint = cfg.StorageConfig.Endpoint
+		}
+		storageUseSSL = cfg.StorageConfig.UseSSL
+		storageRegion = cfg.StorageConfig.Region
+
+		if cfg.StorageConfig.AccessKey != "" && cfg.StorageConfig.SecretKey != "" {
+			client, err := storageclient.NewMinioClient(&storageclient.MinioConfig{
+				Endpoint:  storageEndpoint,
+				AccessKey: cfg.StorageConfig.AccessKey,
+				SecretKey: cfg.StorageConfig.SecretKey,
+				UseSSL:    storageUseSSL,
+				Bucket:    storageBucket,
+				Region:    storageRegion,
+			})
+			if err != nil {
+				log.Printf("failed to initialize minio client: %v", err)
+			} else {
+				minioClient = client
+			}
+		}
+	}
+
+	assignmentRepo := repository.NewAssignmentRepository(cfg.DB, minioClient)
 	announcementRepo := repository.NewAnnouncementRepository(cfg.DB)
 
 	studentService := student.NewstudentService(
@@ -111,7 +149,7 @@ func NewServices(cfg *config.Config) *Services {
 	quizService := quiz.NewQuizService(quizRepo, quizAttemptRepo, courseRepo, collegeRepo, enrollmentRepo)
 	calendarService := calendar.NewCalendarService(calendarRepo)
 	departmentService := department.NewDepartmentService(departmentRepo)
-	assignmentService := assignment.NewAssignmentService(assignmentRepo, nil)
+	assignmentService := assignment.NewAssignmentService(assignmentRepo, minioClient)
 	userService := user.NewUserService(userRepo)
 	announcementService := announcement.NewAnnouncementService(announcementRepo)
 	profileService := profile.NewProfileService(profileRepo)
@@ -127,16 +165,21 @@ func NewServices(cfg *config.Config) *Services {
 	questionService := quiz.NewSimpleQuestionService(questionRepo)
 	quizAttemptService := quiz.NewSimpleQuizAttemptService(quizAttemptRepo, studentAnswerRepo, quizRepo)
 	fileRepo := repository.NewFileRepository(cfg.DB)
-	storageService := storage.NewStorageService(
-		nil, // Use default MinioClient later when storage config is available
-		cfg.StorageConfig.Bucket,
-		cfg.StorageConfig.Endpoint,
-		cfg.StorageConfig.UseSSL,
+	var minioNative *minio.Client
+	if minioClient != nil {
+		minioNative = minioClient.Client()
+	}
+	storageService := storageservice.NewStorageService(
+		minioNative,
+		storageBucket,
+		storageEndpoint,
+		storageUseSSL,
 	)
 	fileService := file.NewFileService(fileRepo, storageService)
 	websocketService := notification.NewWebSocketService(notificationRepo)
 	notificationService := notification.NewNotificationService(notificationRepo, websocketService)
 	analyticsService := analytics.NewAnalyticsService(studentRepo, attendanceRepo, gradeRepo, courseRepo, assignmentRepo, cfg.DB)
+	advancedAnalyticsService := analytics.NewAdvancedAnalyticsService(cfg.DB, analyticsService)
 	batchService := batch.NewBatchService(studentRepo, enrollmentRepo, gradeRepo)
 	reportService := report.NewReportService(studentRepo, gradeRepo, attendanceRepo, enrollmentRepo, courseRepo)
 	webhookService := webhook.NewWebhookService(webhookRepo)
@@ -172,6 +215,7 @@ func NewServices(cfg *config.Config) *Services {
 		NotificationService: notificationService,
 		WebSocketService:    websocketService,
 		AnalyticsService:    analyticsService,
+		AdvancedAnalyticsService: advancedAnalyticsService,
 		BatchService:        batchService,
 		ReportService:       reportService,
 		WebhookService:      webhookService,

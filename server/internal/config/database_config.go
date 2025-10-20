@@ -13,22 +13,26 @@ import (
 )
 
 type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
+	Host        string
+	Port        string
+	User        string
+	Password    string
+	DBName      string
+	SSLMode     string
+	SSLRootCert string // Path to SSL root certificate for production
+	SSLCert     string // Path to SSL client certificate (optional)
+	SSLKey      string // Path to SSL client key (optional)
 }
 
 // LoadDatabaseConfig loads database configuration from environment variables
+// SECURITY: Supports SSL/TLS configuration for production databases
 func LoadDatabaseConfig() (*DBConfig, error) {
 	dbHost := os.Getenv("DB_HOST")
 	dbPortStr := os.Getenv("DB_PORT")
 	dbUser := os.Getenv("DB_USER")
 	dbPassword := os.Getenv("DB_PASSWORD")
 	dbName := os.Getenv("DB_NAME")
-	dbSSLMode := os.Getenv("DB_SSLMODE") // Often "disable" for local dev, "require" for prod
+	dbSSLMode := os.Getenv("DB_SSLMODE") // Often "disable" for local dev, "require"/"verify-full" for prod
 
 	if dbHost == "" || dbPortStr == "" || dbUser == "" || dbPassword == "" || dbName == "" {
 		return nil, fmt.Errorf("database environment variables (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME) must be set")
@@ -43,13 +47,26 @@ func LoadDatabaseConfig() (*DBConfig, error) {
 		dbSSLMode = "disable" // Default SSLMode if not set
 	}
 
+	// Load SSL certificate paths for production
+	sslRootCert := os.Getenv("DB_SSL_ROOT_CERT") // e.g., "/path/to/root.crt"
+	sslCert := os.Getenv("DB_SSL_CERT")          // e.g., "/path/to/client.crt"
+	sslKey := os.Getenv("DB_SSL_KEY")            // e.g., "/path/to/client.key"
+
+	// SECURITY RECOMMENDATION: In production, enforce SSL
+	if os.Getenv("APP_ENV") == "production" && dbSSLMode == "disable" {
+		fmt.Println("WARNING: Database SSL is disabled in production environment. This is insecure!")
+	}
+
 	return &DBConfig{
-		Host:     dbHost,
-		Port:     strconv.Itoa(dbPort),
-		User:     dbUser,
-		Password: dbPassword,
-		DBName:   dbName,
-		SSLMode:  dbSSLMode,
+		Host:        dbHost,
+		Port:        strconv.Itoa(dbPort),
+		User:        dbUser,
+		Password:    dbPassword,
+		DBName:      dbName,
+		SSLMode:     dbSSLMode,
+		SSLRootCert: sslRootCert,
+		SSLCert:     sslCert,
+		SSLKey:      sslKey,
 	}, nil
 }
 
@@ -106,8 +123,8 @@ func LoadDatabase() *repository.DB {
 }
 
 func buildDSN(config DBConfig) string {
-	// Using fmt.Sprintf is often cleaner for DSN construction
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+	// Base DSN
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		config.User,
 		config.Password,
 		config.Host,
@@ -115,6 +132,19 @@ func buildDSN(config DBConfig) string {
 		config.DBName,
 		config.SSLMode,
 	)
+
+	// Add SSL certificate parameters if configured
+	if config.SSLRootCert != "" {
+		dsn += fmt.Sprintf("&sslrootcert=%s", config.SSLRootCert)
+	}
+	if config.SSLCert != "" {
+		dsn += fmt.Sprintf("&sslcert=%s", config.SSLCert)
+	}
+	if config.SSLKey != "" {
+		dsn += fmt.Sprintf("&sslkey=%s", config.SSLKey)
+	}
+
+	return dsn
 }
 
 // Validate is a method on DBConfig for validation.

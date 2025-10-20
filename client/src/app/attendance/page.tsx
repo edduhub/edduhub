@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { api, endpoints } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +20,36 @@ import { format } from "date-fns";
   markedBy?: string;
 };
 
- type CourseAttendance = {
+type CourseAttendance = {
   courseName: string;
   courseCode: string;
   present: number;
   total: number;
   percentage: number;
+};
+
+type ApiAttendanceRecord = {
+  id?: number;
+  courseId?: number;
+  courseName?: string;
+  date?: string;
+  status?: string;
+};
+
+type ApiCourseStat = {
+  courseId?: number;
+  courseName?: string;
+  present?: number;
+  total?: number;
+  percentage?: number;
+};
+
+const normalizeStatus = (status?: string): AttendanceRecord['status'] => {
+  const normalized = (status || '').toLowerCase();
+  if (normalized === 'present' || normalized === 'absent' || normalized === 'late') {
+    return normalized;
+  }
+  return 'absent';
 };
 
 export default function AttendancePage() {
@@ -52,16 +76,30 @@ export default function AttendancePage() {
         setLoading(true);
         // Fetch individual attendance records
         try {
-          const recordsResponse = await api.get('/api/attendance/student/me');
-          setRecords(Array.isArray(recordsResponse) ? recordsResponse : []);
+          const recordsResponse = await api.get<ApiAttendanceRecord[]>(endpoints.attendance.myAttendance);
+          const normalizedRecords = (Array.isArray(recordsResponse) ? recordsResponse : []).map<AttendanceRecord>((record, index) => ({
+            id: record.id ?? index,
+            courseName: record.courseName ?? (record.courseId ? `Course ${record.courseId}` : 'Unknown Course'),
+            courseCode: record.courseId ? `COURSE-${record.courseId}` : 'COURSE',
+            date: record.date ?? new Date().toISOString(),
+            status: normalizeStatus(record.status),
+          }));
+          setRecords(normalizedRecords);
         } catch (err) {
           console.warn('Failed to fetch attendance records:', err);
         }
 
         // Try to fetch course attendance stats
         try {
-          const statsResponse = await api.get('/api/attendance/stats/courses');
-          setCourseStats(Array.isArray(statsResponse) ? statsResponse : []);
+          const statsResponse = await api.get<ApiCourseStat[]>(endpoints.attendance.myCourseStats);
+          const normalizedStats = (Array.isArray(statsResponse) ? statsResponse : []).map<CourseAttendance>((stat) => ({
+            courseName: stat.courseName ?? (stat.courseId ? `Course ${stat.courseId}` : 'Unknown Course'),
+            courseCode: stat.courseId ? `COURSE-${stat.courseId}` : 'COURSE',
+            present: stat.present ?? 0,
+            total: stat.total ?? 0,
+            percentage: stat.percentage ?? 0,
+          }));
+          setCourseStats(normalizedStats);
         } catch (err) {
           console.warn('Failed to fetch attendance stats:', err);
         }
@@ -125,10 +163,17 @@ export default function AttendancePage() {
     try {
       setMarking(true);
       setError(null);
-      await api.post('/api/attendance/process-qr', { token: qrToken });
+      await api.post('/api/attendance/process-qr', { qrcode_data: qrToken });
       // Refresh records after marking
-      const refreshed = await api.get('/api/attendance/student/me');
-      setRecords(Array.isArray(refreshed) ? refreshed : []);
+      const refreshed = await api.get<ApiAttendanceRecord[]>(endpoints.attendance.myAttendance);
+      const normalizedRecords = (Array.isArray(refreshed) ? refreshed : []).map<AttendanceRecord>((record, index) => ({
+        id: record.id ?? index,
+        courseName: record.courseName ?? (record.courseId ? `Course ${record.courseId}` : 'Unknown Course'),
+        courseCode: record.courseId ? `COURSE-${record.courseId}` : 'COURSE',
+        date: record.date ?? new Date().toISOString(),
+        status: normalizeStatus(record.status),
+      }));
+      setRecords(normalizedRecords);
       setQrToken("");
     } catch (e: any) {
       console.error(e);

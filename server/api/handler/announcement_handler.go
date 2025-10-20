@@ -74,7 +74,28 @@ func (h *AnnouncementHandler) ListAnnouncements(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 500)
 	}
 
-	return helpers.Success(c, announcements, 200)
+	// Enrich announcements with author information
+	enrichedAnnouncements := make([]map[string]interface{}, 0, len(announcements))
+	for _, ann := range announcements {
+		author := "System"
+		authorRole := "admin"
+		if ann.CreatedBy != nil {
+			author = *ann.CreatedBy
+		}
+		
+		enrichedAnnouncements = append(enrichedAnnouncements, map[string]interface{}{
+			"id":          ann.ID,
+			"title":       ann.Title,
+			"content":     ann.Content,
+			"priority":    ann.Priority,
+			"author":      author,
+			"authorRole":  authorRole,
+			"publishedAt": ann.PublishedAt,
+			"isPinned":    false, // Could be extended with a field in the model
+		})
+	}
+
+	return helpers.Success(c, enrichedAnnouncements, 200)
 }
 
 // CreateAnnouncement creates a new announcement

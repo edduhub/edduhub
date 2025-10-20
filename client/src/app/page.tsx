@@ -37,9 +37,21 @@ export default function DashboardPage() {
         try {
           setLoading(true);
           setError(null);
-          const data = await api.get<DashboardResponse>("/api/dashboard");
-          setDashboardData(data);
+          const data = await api.get<any>("/api/dashboard");
+          // Backend returns metrics object with basic data, normalize it
+          const normalized: DashboardResponse = {
+            metrics: {
+              totalStudents: data?.metrics?.totalStudents ?? 0,
+              totalCourses: data?.metrics?.totalCourses ?? 0,
+              attendanceRate: data?.metrics?.attendanceRate ?? 0,
+              announcements: Array.isArray(data?.announcements) ? data.announcements.length : 0,
+            },
+            upcomingEvents: Array.isArray(data?.upcomingEvents) ? data.upcomingEvents : [],
+            recentActivity: Array.isArray(data?.recentActivity) ? data.recentActivity : [],
+          };
+          setDashboardData(normalized);
         } catch (err: any) {
+          console.error('Dashboard fetch error:', err);
           setError(err?.message || "Failed to fetch dashboard");
         } finally {
           setLoading(false);
@@ -84,6 +96,76 @@ export default function DashboardPage() {
     );
   }
 
+  const [studentData, setStudentData] = useState<any>({
+    enrolledCourses: 0,
+    gpa: 0,
+    attendanceRate: 0,
+    pendingTasks: 0,
+    courseGrades: [],
+    recentGrades: []
+  });
+
+  useEffect(() => {
+    const fetchStudentData = async () => {
+      if (user?.role !== 'student') return;
+        try {
+          // Fetch student-specific data from various endpoints
+          const [courseGrades, attendance, assignments, grades] = await Promise.all([
+            api.get<any[]>('/api/grades/courses').catch(() => []),
+            api.get<any[]>('/api/attendance/stats/courses').catch(() => []),
+            api.get<any[]>('/api/assignments').catch(() => []),
+            api.get<any[]>('/api/grades').catch(() => [])
+          ]);
+
+          const enrolledCourses = courseGrades.length;
+          
+          // Calculate GPA
+          let gpa = 0;
+          if (courseGrades.length > 0) {
+            const gradePoints: Record<string, number> = {
+              'A+': 4.0, 'A': 3.7, 'A-': 3.3,
+              'B+': 3.0, 'B': 2.7, 'B-': 2.3,
+              'C+': 2.0, 'C': 1.7, 'C-': 1.3,
+              'D': 1.0, 'F': 0.0
+            };
+            const totalCredits = courseGrades.reduce((acc: number, c: any) => acc + (c.credits || 3), 0);
+            if (totalCredits > 0) {
+              const totalPoints = courseGrades.reduce((acc: number, c: any) => {
+                const grade = c.letterGrade || c.grade || 'C';
+                return acc + (gradePoints[grade] || 0) * (c.credits || 3);
+              }, 0);
+              gpa = totalPoints / totalCredits;
+            }
+          }
+
+          // Calculate attendance rate
+          let attendanceRate = 0;
+          if (attendance.length > 0) {
+            const totalSessions = attendance.reduce((acc: number, c: any) => acc + (c.totalSessions || c.total || 0), 0);
+            const presentSessions = attendance.reduce((acc: number, c: any) => acc + (c.presentCount || c.present || 0), 0);
+            if (totalSessions > 0) {
+              attendanceRate = Math.round((presentSessions / totalSessions) * 100);
+            }
+          }
+
+          const pendingTasks = assignments.filter((a: any) => a.status === 'pending').length;
+
+          setStudentData({
+            enrolledCourses,
+            gpa: gpa.toFixed(2),
+            attendanceRate,
+            pendingTasks,
+            courseGrades: courseGrades.slice(0, 4),
+            recentGrades: grades.slice(0, 3)
+          });
+        } catch (err) {
+          console.error('Failed to fetch student data:', err);
+        }
+    };
+
+    fetchStudentData();
+  }, [user?.role]);
+
   // Student Dashboard
   if (user.role === 'student') {
     return (
@@ -100,7 +182,7 @@ export default function DashboardPage() {
                 <BookOpen className="h-4 w-4" />
                 Enrolled Courses
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder until endpoint available */}5</CardTitle>
+              <CardTitle className="text-2xl">{studentData.enrolledCourses}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -109,7 +191,7 @@ export default function DashboardPage() {
                 <Award className="h-4 w-4" />
                 Current GPA
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}3.85</CardTitle>
+              <CardTitle className="text-2xl">{studentData.gpa}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -118,7 +200,7 @@ export default function DashboardPage() {
                 <CheckCircle className="h-4 w-4" />
                 Attendance Rate
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}92%</CardTitle>
+              <CardTitle className="text-2xl">{studentData.attendanceRate}%</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -127,7 +209,7 @@ export default function DashboardPage() {
                 <FileText className="h-4 w-4" />
                 Pending Tasks
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}3</CardTitle>
+              <CardTitle className="text-2xl">{studentData.pendingTasks}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -139,23 +221,21 @@ export default function DashboardPage() {
               <CardDescription>Your progress in enrolled courses</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                { name: "Data Structures", code: "CS201", progress: 75 },
-                { name: "Database Systems", code: "CS305", progress: 60 },
-                { name: "Machine Learning", code: "CS401", progress: 45 },
-                { name: "Web Development", code: "CS302", progress: 80 }
-              ].map((course) => (
-                <div key={course.code} className="space-y-2">
+              {studentData.courseGrades.map((course: any, idx: number) => (
+                <div key={idx} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <div>
-                      <span className="font-medium">{course.name}</span>
-                      <span className="ml-2 text-muted-foreground">{course.code}</span>
+                      <span className="font-medium">{course.courseName || 'Course'}</span>
+                      <span className="ml-2 text-muted-foreground">{course.courseCode || ''}</span>
                     </div>
-                    <span className="font-medium">{course.progress}%</span>
+                    <span className="font-medium">{Math.round(course.percentage || 0)}%</span>
                   </div>
-                  <Progress value={course.progress} />
+                  <Progress value={course.percentage || 0} />
                 </div>
               ))}
+              {studentData.courseGrades.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No course data available</p>
+              )}
             </CardContent>
           </Card>
 
@@ -165,7 +245,7 @@ export default function DashboardPage() {
               <CardDescription>Don't miss these!</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {dashboardData?.upcomingEvents?.map((item) => (
+              {dashboardData?.upcomingEvents?.slice(0, 5).map((item) => (
                 <div key={item.id} className="rounded-lg border p-3 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm">{item.title}</span>
@@ -177,6 +257,9 @@ export default function DashboardPage() {
                   <div className="text-xs text-muted-foreground">{item.course}</div>
                 </div>
               ))}
+              {(!dashboardData?.upcomingEvents || dashboardData.upcomingEvents.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -198,21 +281,26 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {[
-                  { course: "CS201", assessment: "Midterm Quiz", score: "45/50", grade: "A", date: "2024-03-15" },
-                  { course: "CS305", assessment: "Assignment 2", score: "92/100", grade: "A+", date: "2024-03-12" },
-                  { course: "CS401", assessment: "Project", score: "88/100", grade: "A", date: "2024-03-10" }
-                ].map((grade, idx) => (
+                {studentData.recentGrades.map((grade: any, idx: number) => (
                   <TableRow key={idx}>
-                    <TableCell className="font-medium">{grade.course}</TableCell>
-                    <TableCell>{grade.assessment}</TableCell>
-                    <TableCell>{grade.score}</TableCell>
+                    <TableCell className="font-medium">{grade.courseName || grade.courseCode || 'Course'}</TableCell>
+                    <TableCell>{grade.assessmentName || grade.assessment_name || 'Assessment'}</TableCell>
+                    <TableCell>{grade.obtainedMarks || grade.obtained_marks || 0}/{grade.totalMarks || grade.total_marks || 100}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{grade.grade}</Badge>
+                      <Badge variant="secondary">{grade.letterGrade || grade.grade || 'N/A'}</Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{grade.date}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {grade.gradedAt || grade.graded_at ? format(new Date(grade.gradedAt || grade.graded_at), 'MMM dd, yyyy') : 'N/A'}
+                    </TableCell>
                   </TableRow>
                 ))}
+                {studentData.recentGrades.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
+                      No grades available yet
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -237,7 +325,7 @@ export default function DashboardPage() {
                 <BookOpen className="h-4 w-4" />
                 Teaching Courses
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}4</CardTitle>
+              <CardTitle className="text-2xl">{dashboardData?.metrics.totalCourses ?? 0}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -246,7 +334,7 @@ export default function DashboardPage() {
                 <Users className="h-4 w-4" />
                 Total Students
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}315</CardTitle>
+              <CardTitle className="text-2xl">{dashboardData?.metrics.totalStudents ?? 0}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -255,7 +343,7 @@ export default function DashboardPage() {
                 <FileText className="h-4 w-4" />
                 Pending Submissions
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}42</CardTitle>
+              <CardTitle className="text-2xl">{dashboardData?.metrics?.pendingSubmissions ?? 0}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -264,7 +352,7 @@ export default function DashboardPage() {
                 <Clock className="h-4 w-4" />
                 Lectures Today
               </CardDescription>
-              <CardTitle className="text-2xl">{/* Placeholder */}3</CardTitle>
+              <CardTitle className="text-2xl">{dashboardData?.upcomingEvents?.length ?? 0}</CardTitle>
             </CardHeader>
           </Card>
         </div>
@@ -276,107 +364,54 @@ export default function DashboardPage() {
               <CardDescription>Your lectures for today</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {[
-                { course: "CS201", title: "Data Structures", time: "10:00 AM - 11:30 AM", room: "Room 301", students: 82 },
-                { course: "CS305", title: "Database Systems", time: "2:00 PM - 3:30 PM", room: "Room 205", students: 76 },
-                { course: "CS401", title: "Machine Learning", time: "4:00 PM - 5:30 PM", room: "Lab 102", students: 65 }
-              ].map((lecture, idx) => (
-                <div key={idx} className="rounded-lg border p-4 space-y-2">
+              {dashboardData?.upcomingEvents?.slice(0, 3).map((event) => (
+                <div key={event.id} className="rounded-lg border p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{lecture.title}</div>
-                      <div className="text-sm text-muted-foreground">{lecture.course}</div>
+                      <div className="font-medium">{event.title}</div>
+                      <div className="text-sm text-muted-foreground">{event.course || 'Course'}</div>
                     </div>
-                    <Badge variant="outline">{lecture.students} students</Badge>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {lecture.time}
+                      {format(new Date(event.start), 'hh:mm a')}
                     </div>
-                    <div>{lecture.room}</div>
                   </div>
                   <Button size="sm" className="w-full">Mark Attendance</Button>
                 </div>
               ))}
+              {(!dashboardData?.upcomingEvents || dashboardData.upcomingEvents.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No lectures scheduled today</p>
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Pending Grading</CardTitle>
-              <CardDescription>Submissions waiting for review</CardDescription>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>Latest system activity</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {[
-                { title: "Assignment 3", course: "CS201", submissions: 18, dueDate: "2 days ago" },
-                { title: "Quiz 2", course: "CS305", submissions: 12, dueDate: "1 day ago" },
-                { title: "Project Phase 2", course: "CS401", submissions: 8, dueDate: "Today" }
-              ].map((item, idx) => (
-                <div key={idx} className="rounded-lg border p-3 space-y-2">
+              {dashboardData?.recentActivity?.slice(0, 3).map((activity) => (
+                <div key={activity.id} className="rounded-lg border p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-sm">{item.title}</div>
-                      <div className="text-xs text-muted-foreground">{item.course}</div>
+                      <div className="font-medium text-sm">{activity.message}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{activity.entity}</div>
                     </div>
-                    <Badge>{item.submissions} pending</Badge>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Due: {item.dueDate}</span>
-                    <Button size="sm" variant="outline">Review</Button>
+                  <div className="text-xs text-muted-foreground">
+                    {format(new Date(activity.timestamp), 'MMM dd, hh:mm a')}
                   </div>
                 </div>
               ))}
+              {(!dashboardData?.recentActivity || dashboardData.recentActivity.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+              )}
             </CardContent>
           </Card>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Course Performance</CardTitle>
-            <CardDescription>Average performance across your courses</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Course</TableHead>
-                  <TableHead>Students</TableHead>
-                  <TableHead>Avg Grade</TableHead>
-                  <TableHead>Attendance</TableHead>
-                  <TableHead>Completion</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[
-                  { code: "CS201", name: "Data Structures", students: 82, avgGrade: "B+", attendance: 88, completion: 65 },
-                  { code: "CS305", name: "Database Systems", students: 76, avgGrade: "A-", attendance: 92, completion: 55 },
-                  { code: "CS401", name: "Machine Learning", students: 65, avgGrade: "A", attendance: 90, completion: 45 }
-                ].map((course, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{course.name}</div>
-                        <div className="text-sm text-muted-foreground">{course.code}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{course.students}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{course.avgGrade}</Badge>
-                    </TableCell>
-                    <TableCell>{course.attendance}%</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress value={course.completion} className="w-20" />
-                        <span className="text-sm">{course.completion}%</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -398,12 +433,6 @@ export default function DashboardPage() {
             </CardDescription>
             <CardTitle className="text-2xl">{dashboardData?.metrics.totalStudents ?? 'N/A'}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-1 text-xs text-green-600">
-              <TrendingUp className="h-3 w-3" />
-              <span>+12% from last year</span>
-            </div>
-          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-3">
@@ -411,14 +440,8 @@ export default function DashboardPage() {
               <Users className="h-4 w-4" />
               Faculty Members
             </CardDescription>
-            <CardTitle className="text-2xl">{/* Placeholder */}118</CardTitle>
+            <CardTitle className="text-2xl">{dashboardData?.metrics?.totalFaculty ?? 0}</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-1 text-xs text-green-600">
-              <TrendingUp className="h-3 w-3" />
-              <span>+5% from last year</span>
-            </div>
-          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-3">
@@ -435,7 +458,7 @@ export default function DashboardPage() {
               <CheckCircle className="h-4 w-4" />
               Avg Attendance
             </CardDescription>
-            <CardTitle className="text-2xl">{dashboardData?.metrics.attendanceRate ?? 'N/A'}%</CardTitle>
+            <CardTitle className="text-2xl">{dashboardData?.metrics.attendanceRate ? Math.round(dashboardData.metrics.attendanceRate) : 'N/A'}%</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -443,87 +466,58 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Department Statistics</CardTitle>
-            <CardDescription>Student enrollment by department</CardDescription>
+            <CardTitle>Upcoming Events</CardTitle>
+            <CardDescription>Scheduled college events</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { name: "Computer Science", students: 450, faculty: 25, percentage: 21 },
-                { name: "Electronics & Communication", students: 380, faculty: 22, percentage: 18 },
-                { name: "Mechanical Engineering", students: 420, faculty: 28, percentage: 20 },
-                { name: "Civil Engineering", students: 350, faculty: 20, percentage: 16 },
-                { name: "Business Administration", students: 545, faculty: 23, percentage: 25 }
-              ].map((dept, idx) => (
-                <div key={idx} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">{dept.name}</span>
-                    <span className="text-muted-foreground">{dept.students} students</span>
+              {dashboardData?.upcomingEvents?.slice(0, 5).map((event) => (
+                <div key={event.id} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-sm">{event.title}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {format(new Date(event.start), 'MMM dd')}
+                    </div>
                   </div>
-                  <Progress value={dept.percentage * 2} />
-                  <div className="text-xs text-muted-foreground">{dept.faculty} faculty members</div>
+                  {event.course && (
+                    <div className="text-xs text-muted-foreground mt-1">{event.course}</div>
+                  )}
                 </div>
               ))}
+              {(!dashboardData?.upcomingEvents || dashboardData.upcomingEvents.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No upcoming events</p>
+              )}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>System Alerts</CardTitle>
-            <CardDescription>Items requiring attention</CardDescription>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Latest system activity</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {[
-              { type: "warning", message: "15 students below 75% attendance threshold", action: "View Students" },
-              { type: "info", message: "3 courses with low enrollment (< 50%)", action: "View Courses" },
-              { type: "warning", message: "8 pending faculty leave requests", action: "Review Requests" },
-              { type: "info", message: "Database backup completed successfully", action: "View Logs" }
-            ].map((alert, idx) => (
-              <div key={idx} className="rounded-lg border p-3 space-y-2">
+            {dashboardData?.recentActivity?.slice(0, 5).map((activity) => (
+              <div key={activity.id} className="rounded-lg border p-3">
                 <div className="flex items-start gap-2">
-                  <AlertCircle className={`h-4 w-4 mt-0.5 ${alert.type === 'warning' ? 'text-yellow-600' : 'text-blue-600'}`} />
+                  <AlertCircle className="h-4 w-4 mt-0.5 text-blue-600" />
                   <div className="flex-1">
-                    <p className="text-sm">{alert.message}</p>
+                    <p className="text-sm">{activity.message}</p>
+                    <p className="text-xs text-muted-foreground capitalize mt-1">{activity.entity}</p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline" className="w-full">{alert.action}</Button>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {format(new Date(activity.timestamp), 'MMM dd, hh:mm a')}
+                </div>
               </div>
             ))}
+            {(!dashboardData?.recentActivity || dashboardData.recentActivity.length === 0) && (
+              <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Latest actions across the system</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Activity</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Time</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {dashboardData?.recentActivity?.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.message}</TableCell>
-                  <TableCell>System</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="capitalize">{item.entity}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{format(new Date(item.timestamp), 'PPpp')}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }

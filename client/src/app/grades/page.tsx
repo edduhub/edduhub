@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { api, endpoints } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +21,7 @@ import { Award, TrendingUp, FileText, Loader2 } from "lucide-react";
   date: string;
 };
 
- type CourseGrade = {
+type CourseGrade = {
   courseName: string;
   courseCode: string;
   totalScore: number;
@@ -29,6 +29,30 @@ import { Award, TrendingUp, FileText, Loader2 } from "lucide-react";
   percentage: number;
   grade: string;
   credits: number;
+};
+
+type ApiGrade = {
+  id: number;
+  course_id?: number;
+  assessment_type?: string;
+  assessment_name?: string;
+  obtained_marks?: number;
+  total_marks?: number;
+  percentage?: number;
+  created_at?: string;
+  graded_at?: string;
+  grade?: string;
+};
+
+type ApiCourseGrade = {
+  courseId?: number;
+  courseName?: string;
+  courseCode?: string;
+  totalScore?: number;
+  maxScore?: number;
+  percentage?: number;
+  letterGrade?: string;
+  credits?: number;
 };
 
 export default function GradesPage() {
@@ -45,16 +69,36 @@ export default function GradesPage() {
         setLoading(true);
         // Student 'my' grades
         try {
-          const gradesResponse = await api.get('/api/grades');
-          setGrades(Array.isArray(gradesResponse) ? gradesResponse : []);
+          const gradesResponse = await api.get<ApiGrade[]>(endpoints.grades.myGrades);
+          const normalized = (Array.isArray(gradesResponse) ? gradesResponse : []).map<Grade>((grade) => ({
+            id: grade.id,
+            courseName: grade.course_id ? `Course ${grade.course_id}` : 'Unknown Course',
+            courseCode: grade.course_id ? `COURSE-${grade.course_id}` : 'COURSE',
+            assessmentType: grade.assessment_type ?? 'Assessment',
+            assessmentName: grade.assessment_name ?? 'Assessment',
+            score: grade.obtained_marks ?? 0,
+            maxScore: grade.total_marks ?? 100,
+            percentage: Math.round((grade.percentage ?? 0) * 100) / 100,
+            date: new Date(grade.graded_at ?? grade.created_at ?? new Date().toISOString()).toLocaleDateString(),
+          }));
+          setGrades(normalized);
         } catch (err) {
           console.warn('Failed to fetch individual grades:', err);
         }
 
         // Course grades summary for student
         try {
-          const courseGradesResponse = await api.get('/api/grades/courses');
-          setCourseGrades(Array.isArray(courseGradesResponse) ? courseGradesResponse : []);
+          const courseGradesResponse = await api.get<ApiCourseGrade[]>(endpoints.grades.myCourseGrades);
+          const normalizedCourses = (Array.isArray(courseGradesResponse) ? courseGradesResponse : []).map<CourseGrade>((course) => ({
+            courseName: course.courseName ?? (course.courseId ? `Course ${course.courseId}` : 'Unknown Course'),
+            courseCode: course.courseCode ?? (course.courseId ? `COURSE-${course.courseId}` : 'COURSE'),
+            totalScore: course.totalScore ?? 0,
+            maxScore: course.maxScore ?? 100,
+            percentage: Math.round((course.percentage ?? 0) * 100) / 100,
+            grade: course.letterGrade ?? 'N/A',
+            credits: course.credits ?? 0,
+          }));
+          setCourseGrades(normalizedCourses);
         } catch (err) {
           console.warn('Failed to fetch course grades:', err);
         }
@@ -100,8 +144,19 @@ export default function GradesPage() {
   const downloadReport = async () => {
     try {
       setDownloading(true);
-      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/reports/grade-card/me`, { credentials: 'include' });
-      if (!resp.ok) throw new Error('Failed to generate report');
+      setError(null);
+      
+      // Use the student convenience endpoint that doesn't require studentId
+      const resp = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${endpoints.reports.myGradeCard}`,
+        { credentials: 'include' }
+      );
+      
+      if (!resp.ok) {
+        const errorText = await resp.text().catch(() => 'Unknown error');
+        throw new Error(`Failed to generate report: ${errorText}`);
+      }
+      
       const blob = await resp.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -111,9 +166,9 @@ export default function GradesPage() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setError('Failed to download report');
+      setError(e?.message || 'Failed to download report');
     } finally {
       setDownloading(false);
     }

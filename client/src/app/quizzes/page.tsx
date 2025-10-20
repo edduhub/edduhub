@@ -23,6 +23,21 @@ import { api, endpoints } from "@/lib/api-client";
   endTime?: string;
 };
 
+type ApiQuiz = {
+  id: number;
+  title?: string;
+  description?: string;
+  courseId?: number;
+  courseName?: string;
+  duration?: number;
+  dueDate?: string;
+  status?: string;
+  attempts?: number;
+  maxAttempts?: number;
+  score?: number;
+  questions?: any[];
+};
+
 export default function QuizzesPage() {
   const { user } = useAuth();
   const [quizzes, setQuizzes] = useState<DisplayQuiz[]>([]);
@@ -36,18 +51,18 @@ export default function QuizzesPage() {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.get<any[]>(endpoints.quizzes.list);
-      const display: DisplayQuiz[] = (data || []).map((q: any) => ({
+      const data = await api.get<ApiQuiz[]>(endpoints.quizzes.myQuizzes);
+      const display: DisplayQuiz[] = (Array.isArray(data) ? data : []).map((q) => ({
         id: q.id,
-        title: q.title,
+        title: q.title ?? 'Untitled Quiz',
         courseName: q.courseName,
         duration: q.duration,
-        totalMarks: q.totalMarks,
+        totalMarks: q.questions?.reduce((sum, question) => sum + (question?.points ?? 0), 0) ?? undefined,
         questionsCount: q.questions?.length,
-        status: 'not_started',
-        attempts: 0,
-        maxAttempts: q.allowedAttempts ?? 1,
-        endTime: q.endTime,
+        status: q.status === 'completed' ? 'completed' : 'not_started',
+        attempts: q.attempts ?? 0,
+        maxAttempts: q.maxAttempts ?? 1,
+        endTime: q.dueDate,
       }));
       setQuizzes(display);
     } catch (e) {
@@ -92,7 +107,7 @@ export default function QuizzesPage() {
       setCreating(true);
       const courseIdNum = Number(newQuiz.courseId);
       if (!courseIdNum) throw new Error('Course ID is required');
-      await api.post<any>(endpoints.quizzes.create, {
+      await api.post<any>(endpoints.quizzes.create(courseIdNum), {
         courseId: courseIdNum,
         title: newQuiz.title,
         description: newQuiz.description,

@@ -51,6 +51,61 @@ func (h *ReportHandler) GenerateGradeCard(c echo.Context) error {
 	return c.Blob(200, "application/pdf", pdfBytes)
 }
 
+// GenerateMyGradeCard generates a PDF grade card for the current student user
+func (h *ReportHandler) GenerateMyGradeCard(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	// Extract student ID from context (set by LoadStudentProfile middleware)
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "student profile not found", 400)
+	}
+
+	semesterStr := c.QueryParam("semester")
+	var semester *int
+	if semesterStr != "" {
+		sem, err := strconv.Atoi(semesterStr)
+		if err == nil {
+			semester = &sem
+		}
+	}
+
+	pdfBytes, err := h.reportService.GenerateGradeCard(c.Request().Context(), collegeID, studentID, semester)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	c.Response().Header().Set("Content-Type", "application/pdf")
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=grade_card.pdf")
+	return c.Blob(200, "application/pdf", pdfBytes)
+}
+
+// GenerateMyTranscript generates an official transcript for the current student user
+func (h *ReportHandler) GenerateMyTranscript(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	// Extract student ID from context (set by LoadStudentProfile middleware)
+	studentID, err := helpers.ExtractStudentID(c)
+	if err != nil {
+		return helpers.Error(c, "student profile not found", 400)
+	}
+
+	pdfBytes, err := h.reportService.GenerateTranscript(c.Request().Context(), collegeID, studentID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	c.Response().Header().Set("Content-Type", "application/pdf")
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=transcript.pdf")
+	return c.Blob(200, "application/pdf", pdfBytes)
+}
+
 // GenerateTranscript generates an official transcript for a student
 func (h *ReportHandler) GenerateTranscript(c echo.Context) error {
 	studentIDStr := c.Param("studentID")

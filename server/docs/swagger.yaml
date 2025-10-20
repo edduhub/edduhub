@@ -1,4 +1,310 @@
-info:
-  contact: {}
-paths: {}
 swagger: "2.0"
+info:
+  title: EduHub API
+  description: Comprehensive education management system API
+  version: "1.0.0"
+  contact:
+    name: EduHub Support
+    email: support@eduhub.com
+host: localhost:8080
+basePath: /
+schemes:
+  - http
+  - https
+securityDefinitions:
+  Bearer:
+    type: apiKey
+    name: Authorization
+    in: header
+    description: JWT Bearer token
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns server health status
+      responses:
+        "200":
+          description: Server is healthy
+  /api/dashboard:
+    get:
+      summary: Get dashboard data
+      description: Returns role-based dashboard metrics and data
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Dashboard data retrieved successfully
+        "401":
+          description: Unauthorized
+  /api/students:
+    get:
+      summary: List all students
+      description: Retrieve paginated list of students with optional filters
+      security:
+        - Bearer: []
+      parameters:
+        - name: limit
+          in: query
+          type: integer
+          description: Number of records per page
+        - name: offset
+          in: query
+          type: integer
+          description: Number of records to skip
+      responses:
+        "200":
+          description: List of students
+        "401":
+          description: Unauthorized
+    post:
+      summary: Create new student
+      description: Create a new student record
+      security:
+        - Bearer: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              first_name:
+                type: string
+              last_name:
+                type: string
+              email:
+                type: string
+              date_of_birth:
+                type: string
+                format: date
+      responses:
+        "201":
+          description: Student created successfully
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+  /api/courses:
+    get:
+      summary: List all courses
+      description: Retrieve all courses in the college
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: List of courses
+    post:
+      summary: Create new course
+      description: Create a new course
+      security:
+        - Bearer: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              code:
+                type: string
+              description:
+                type: string
+              credits:
+                type: integer
+      responses:
+        "201":
+          description: Course created successfully
+  /api/announcements:
+    get:
+      summary: List announcements
+      description: Get all announcements with optional filters
+      security:
+        - Bearer: []
+      parameters:
+        - name: priority
+          in: query
+          type: string
+          enum: [low, normal, high, urgent]
+        - name: published
+          in: query
+          type: boolean
+      responses:
+        "200":
+          description: List of announcements
+    post:
+      summary: Create announcement
+      description: Create a new announcement
+      security:
+        - Bearer: []
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - title
+              - content
+            properties:
+              title:
+                type: string
+              content:
+                type: string
+              priority:
+                type: string
+                enum: [low, normal, high, urgent]
+              is_published:
+                type: boolean
+      responses:
+        "201":
+          description: Announcement created successfully
+  /api/analytics/dashboard:
+    get:
+      summary: Get analytics dashboard
+      description: Retrieve college-wide analytics metrics
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Analytics data
+  /api/analytics/advanced/students/{studentID}/progression:
+    get:
+      summary: Get student progression analytics
+      description: Retrieve detailed progression analytics for a specific student
+      security:
+        - Bearer: []
+      parameters:
+        - name: studentID
+          in: path
+          required: true
+          type: integer
+      responses:
+        "200":
+          description: Student progression data
+  /api/analytics/advanced/courses/{courseID}/engagement:
+    get:
+      summary: Get course engagement analytics
+      description: Retrieve detailed engagement metrics for a course
+      security:
+        - Bearer: []
+      parameters:
+        - name: courseID
+          in: path
+          required: true
+          type: integer
+      responses:
+        "200":
+          description: Course engagement data
+  /api/analytics/advanced/predictive-insights:
+    get:
+      summary: Get predictive insights
+      description: Retrieve predictive analytics including at-risk students
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Predictive insights data
+  /api/attendance/student/me:
+    get:
+      summary: Get my attendance
+      description: Get attendance records for the current student user
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Attendance records
+  /api/grades:
+    get:
+      summary: Get my grades
+      description: Get grade records for the current student user
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Grade records
+  /api/assignments:
+    get:
+      summary: Get my assignments
+      description: Get all assignments across enrolled courses for current student
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: List of assignments
+  /api/courses/{courseID}/assignments:
+    get:
+      summary: List course assignments
+      description: Get all assignments for a specific course
+      security:
+        - Bearer: []
+      parameters:
+        - name: courseID
+          in: path
+          required: true
+          type: integer
+      responses:
+        "200":
+          description: List of course assignments
+    post:
+      summary: Create assignment
+      description: Create a new assignment for the course
+      security:
+        - Bearer: []
+      parameters:
+        - name: courseID
+          in: path
+          required: true
+          type: integer
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              due_date:
+                type: string
+                format: date-time
+              max_score:
+                type: number
+      responses:
+        "201":
+          description: Assignment created successfully
+  /api/reports/students/me/gradecard:
+    get:
+      summary: Generate my grade card
+      description: Generate grade card report for current student
+      security:
+        - Bearer: []
+      responses:
+        "200":
+          description: Grade card PDF
+  /api/batch/students/import:
+    post:
+      summary: Import students
+      description: Bulk import students from CSV
+      security:
+        - Bearer: []
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: file
+          in: formData
+          type: file
+          required: true
+      responses:
+        "200":
+          description: Students imported successfully
+definitions:
+  Error:
+    type: object
+    properties:
+      error:
+        type: string
+      message:
+        type: string

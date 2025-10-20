@@ -5,18 +5,24 @@ import (
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/models"
+	"eduhub/server/internal/services/course"
+	"eduhub/server/internal/services/enrollment"
 	"eduhub/server/internal/services/quiz"
 
 	"github.com/labstack/echo/v4"
 )
 
 type QuizHandler struct {
-	quizService quiz.QuizService
+	quizService        quiz.QuizService
+	enrollmentService  enrollment.EnrollmentService
+	courseService      course.CourseService
 }
 
-func NewQuizHandler(quizService quiz.QuizService) *QuizHandler {
+func NewQuizHandler(quizService quiz.QuizService, enrollmentService enrollment.EnrollmentService, courseService course.CourseService) *QuizHandler {
 	return &QuizHandler{
-		quizService: quizService,
+		quizService:        quizService,
+		enrollmentService:  enrollmentService,
+		courseService:      courseService,
 	}
 }
 
@@ -191,13 +197,49 @@ func (h *QuizHandler) GetMyQuizzes(c echo.Context) error {
 		return helpers.Error(c, "student ID required", 400)
 	}
 
-	// Placeholder implementation
-	// TODO: Implement full logic with enrollment service
-	// 1. Get all enrolled courses for student
-	// 2. For each course, get quizzes
-	// 3. Combine and return
-	_ = collegeID
-	_ = studentID
+	ctx := c.Request().Context()
+	enrollments, err := h.enrollmentService.FindEnrollmentsByStudent(ctx, collegeID, studentID, 1000, 0)
+	if err != nil {
+		return helpers.Error(c, "failed to load enrollments", 500)
+	}
 
-	return helpers.Success(c, []interface{}{}, 200)
+	courseNames := make(map[int]string)
+	result := make([]map[string]interface{}, 0)
+
+	for _, enrollmentRecord := range enrollments {
+		quizzes, err := h.quizService.FindQuizzesByCourse(ctx, collegeID, enrollmentRecord.CourseID, 100, 0)
+		if err != nil {
+			return helpers.Error(c, "failed to load quizzes", 500)
+		}
+
+		courseName, cached := courseNames[enrollmentRecord.CourseID]
+		if !cached {
+			courseInfo, err := h.courseService.FindCourseByID(ctx, collegeID, enrollmentRecord.CourseID)
+			if err == nil && courseInfo != nil {
+				courseName = courseInfo.Name
+				courseNames[enrollmentRecord.CourseID] = courseName
+			} else {
+				courseName = "Course " + strconv.Itoa(enrollmentRecord.CourseID)
+			}
+		}
+
+		for _, quiz := range quizzes {
+			result = append(result, map[string]interface{}{
+				"id":             quiz.ID,
+				"title":          quiz.Title,
+				"description":    quiz.Description,
+				"courseId":       quiz.CourseID,
+				"courseName":     courseName,
+				"duration":       quiz.TimeLimitMinutes,
+				"dueDate":        quiz.DueDate,
+				"status":         "not_started",
+				"attempts":       0,
+				"maxAttempts":    1,
+				"allowedAttempts": 1,
+				"questions":      quiz.Questions,
+			})
+		}
+	}
+
+	return helpers.Success(c, result, 200)
 }

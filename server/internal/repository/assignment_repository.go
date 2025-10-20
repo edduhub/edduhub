@@ -30,6 +30,7 @@ type AssignmentRepository interface {
 	UpdateSubmission(ctx context.Context, submission *models.AssignmentSubmission) error // For grading/feedback
 	FindSubmissionsByAssignment(ctx context.Context, assignmentID int, limit, offset uint64) ([]*models.AssignmentSubmission, error)
 	FindSubmissionsByStudent(ctx context.Context, studentID int, limit, offset uint64) ([]*models.AssignmentSubmission, error)
+	CountPendingSubmissionsByCollege(ctx context.Context, collegeID int) (int, error)
 }
 
 type assignmentRepository struct {
@@ -311,4 +312,18 @@ func (r *assignmentRepository) FindSubmissionsByStudent(ctx context.Context, stu
 		return nil, fmt.Errorf("FindSubmissionsByStudent: failed to execute query or scan: %w", err)
 	}
 	return submissions, nil
+}
+
+func (r *assignmentRepository) CountPendingSubmissionsByCollege(ctx context.Context, collegeID int) (int, error) {
+	sql := `SELECT COUNT(*) 
+			FROM assignment_submissions s
+			JOIN assignments a ON a.id = s.assignment_id
+			WHERE a.college_id = $1 AND s.grade IS NULL`
+	
+	var count int
+	err := r.DB.Pool.QueryRow(ctx, sql, collegeID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("CountPendingSubmissionsByCollege: failed to execute query or scan: %w", err)
+	}
+	return count, nil
 }

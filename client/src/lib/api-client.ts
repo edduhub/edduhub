@@ -144,19 +144,22 @@ export const endpoints = {
   
   // Assignments
   assignments: {
+    // Student convenience endpoint (list all assignments across enrolled courses)
     list: '/api/assignments',
-    get: (id: number) => `/api/assignments/${id}`,
-    create: '/api/assignments',
-    update: (id: number) => `/api/assignments/${id}`,
-    delete: (id: number) => `/api/assignments/${id}`,
-    submit: (id: number) => `/api/assignments/${id}/submit`,
-    submissions: (id: number) => `/api/assignments/${id}/submissions`,
-    grade: (assignmentId: number, submissionId: number) =>
-      `/api/assignments/${assignmentId}/submissions/${submissionId}/grade`,
+    // Course-scoped endpoints
+    listByCourse: (courseId: number) => `/api/courses/${courseId}/assignments`,
+    get: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}`,
+    create: (courseId: number) => `/api/courses/${courseId}/assignments`,
+    update: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}`,
+    delete: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}`,
+    submit: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}/submit`,
+    grade: (submissionId: number) => `/api/courses/0/assignments/submissions/${submissionId}/grade`,
   },
   
   // Attendance
   attendance: {
+    myAttendance: '/api/attendance/student/me',
+    myCourseStats: '/api/attendance/stats/courses',
     mark: '/api/attendance/mark',
     markBulk: '/api/attendance/mark-bulk',
     generateQR: '/api/attendance/qr/generate',
@@ -168,6 +171,8 @@ export const endpoints = {
   
   // Grades
   grades: {
+    myGrades: '/api/grades',
+    myCourseGrades: '/api/grades/courses',
     byCourse: (courseId: number) => `/api/grades/course/${courseId}`,
     byStudent: (studentId: number) => `/api/grades/student/${studentId}`,
     createAssessment: '/api/grades/assessment',
@@ -205,11 +210,14 @@ export const endpoints = {
   
   // Quizzes
   quizzes: {
-    list: '/api/quizzes',
-    get: (id: number) => `/api/quizzes/${id}`,
-    create: '/api/quizzes',
-    update: (id: number) => `/api/quizzes/${id}`,
-    delete: (id: number) => `/api/quizzes/${id}`,
+    // Student convenience endpoint (list all quizzes across enrolled courses)
+    myQuizzes: '/api/quizzes',
+    // Course-scoped endpoints
+    listByCourse: (courseId: number) => `/api/courses/${courseId}/quizzes`,
+    get: (courseId: number, id: number) => `/api/courses/${courseId}/quizzes/${id}`,
+    create: (courseId: number) => `/api/courses/${courseId}/quizzes`,
+    update: (courseId: number, id: number) => `/api/courses/${courseId}/quizzes/${id}`,
+    delete: (courseId: number, id: number) => `/api/courses/${courseId}/quizzes/${id}`,
     questions: (id: number) => `/api/quizzes/${id}/questions`,
   },
   
@@ -264,16 +272,19 @@ export const endpoints = {
   
   // Reports
   reports: {
-    gradeCard: (studentId: number) => `/api/reports/grade-card/${studentId}`,
-    transcript: (studentId: number) => `/api/reports/transcript/${studentId}`,
-    attendanceReport: (studentId: number) =>
-      `/api/reports/attendance/${studentId}`,
-    courseReport: (courseId: number) => `/api/reports/course/${courseId}`,
+    // Student convenience endpoints
+    myGradeCard: '/api/reports/students/me/gradecard',
+    myTranscript: '/api/reports/students/me/transcript',
+    // Admin/Faculty endpoints
+    gradeCard: (studentId: number) => `/api/reports/students/${studentId}/gradecard`,
+    transcript: (studentId: number) => `/api/reports/students/${studentId}/transcript`,
+    courseAttendance: (courseId: number) => `/api/reports/courses/${courseId}/attendance`,
+    courseReport: (courseId: number) => `/api/reports/courses/${courseId}/report`,
   },
 };
 
 export async function fetchQuizzes() {
-  return api.get<any[]>(endpoints.quizzes.list);
+  return api.get<any[]>(endpoints.quizzes.myQuizzes);
 }
 
 export async function fetchProfile() {

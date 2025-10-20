@@ -273,6 +273,14 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	analytics.GET("/courses/:courseID/grades/distribution", a.Analytics.GetGradeDistribution)
 	analytics.GET("/attendance/trends", a.Analytics.GetAttendanceTrends)
 
+	advancedAnalytics := analytics.Group("/advanced")
+	advancedAnalytics.GET("/students/:studentID/progression", a.AdvancedAnalytics.GetStudentProgression)
+	advancedAnalytics.GET("/courses/:courseID/engagement", a.AdvancedAnalytics.GetCourseEngagement)
+	advancedAnalytics.GET("/predictive-insights", a.AdvancedAnalytics.GetPredictiveInsights)
+	advancedAnalytics.GET("/learning-analytics", a.AdvancedAnalytics.GetLearningAnalytics)
+	advancedAnalytics.GET("/performance/:entityType/:entityID/trends", a.AdvancedAnalytics.GetPerformanceTrends)
+	advancedAnalytics.GET("/courses/comparative", a.AdvancedAnalytics.GetComparativeAnalysis)
+
 	// Batch Operations management
 	batch := apiGroup.Group("/batch", m.RequireRole(middleware.RoleAdmin))
 	batch.POST("/students/import", a.Batch.ImportStudents)
@@ -282,11 +290,23 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	batch.POST("/enroll", a.Batch.BulkEnroll)
 
 	// Report Generation management
-	reports := apiGroup.Group("/reports", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	reports.GET("/students/:studentID/gradecard", a.Report.GenerateGradeCard)
-	reports.GET("/students/:studentID/transcript", a.Report.GenerateTranscript)
-	reports.GET("/courses/:courseID/attendance", a.Report.GenerateAttendanceReport)
-	reports.GET("/courses/:courseID/report", a.Report.GenerateCourseReport)
+	reports := apiGroup.Group("/reports")
+	// Student convenience endpoints (access own reports)
+	reports.GET("/students/me/gradecard", a.Report.GenerateMyGradeCard, 
+		m.RequireRole(middleware.RoleStudent), 
+		m.LoadStudentProfile)
+	reports.GET("/students/me/transcript", a.Report.GenerateMyTranscript,
+		m.RequireRole(middleware.RoleStudent),
+		m.LoadStudentProfile)
+	// Admin/Faculty endpoints (access any student's reports)
+	reports.GET("/students/:studentID/gradecard", a.Report.GenerateGradeCard,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	reports.GET("/students/:studentID/transcript", a.Report.GenerateTranscript,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	reports.GET("/courses/:courseID/attendance", a.Report.GenerateAttendanceReport,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	reports.GET("/courses/:courseID/report", a.Report.GenerateCourseReport,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	// Webhook management
 	webhooks := apiGroup.Group("/webhooks", m.RequireRole(middleware.RoleAdmin))

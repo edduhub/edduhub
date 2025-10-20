@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"math"
+	"sort"
 	"strconv"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/models"
+	"eduhub/server/internal/services/course"
 	"eduhub/server/internal/services/grades"
 
 	"github.com/labstack/echo/v4"
@@ -12,11 +15,13 @@ import (
 
 type GradeHandler struct {
 	gradeService grades.GradeServices
+	courseService course.CourseService
 }
 
-func NewGradeHandler(gradeService grades.GradeServices) *GradeHandler {
+func NewGradeHandler(gradeService grades.GradeServices, courseService course.CourseService) *GradeHandler {
 	return &GradeHandler{
 		gradeService: gradeService,
+		courseService: courseService,
 	}
 }
 
@@ -214,65 +219,79 @@ func (h *GradeHandler) GetMyCourseGrades(c echo.Context) error {
 	}
 
 	// Group grades by course
-	courseGrades := make(map[int]struct {
-		CourseName string
-		CourseCode string
-		TotalScore float64
-		MaxScore   float64
-		Percentage float64
-		Grade      string
-		Credits    int
-	})
-
-	for _, grade := range grades {
-		cg := courseGrades[grade.CourseID]
-		cg.TotalScore += float64(grade.ObtainedMarks)
-		cg.MaxScore += float64(grade.TotalMarks)
-		// Placeholder values - would need course service integration
-		cg.CourseCode = "COURSE-" + strconv.Itoa(grade.CourseID)
-		cg.CourseName = "Course " + strconv.Itoa(grade.CourseID)
-		cg.Credits = 3 // Default
-		courseGrades[grade.CourseID] = cg
+	type aggregatedCourse struct {
+		totalScore float64
+		maxScore   float64
 	}
 
-	// Calculate percentages and letter grades
-	result := []map[string]interface{}{}
-	for courseID, cg := range courseGrades {
-		if cg.MaxScore > 0 {
-			cg.Percentage = (cg.TotalScore / cg.MaxScore) * 100
-			// Calculate letter grade
-			if cg.Percentage >= 90 {
-				cg.Grade = "A+"
-			} else if cg.Percentage >= 85 {
-				cg.Grade = "A"
-			} else if cg.Percentage >= 80 {
-				cg.Grade = "A-"
-			} else if cg.Percentage >= 75 {
-				cg.Grade = "B+"
-			} else if cg.Percentage >= 70 {
-				cg.Grade = "B"
-			} else if cg.Percentage >= 65 {
-				cg.Grade = "B-"
-			} else if cg.Percentage >= 60 {
-				cg.Grade = "C+"
-			} else if cg.Percentage >= 55 {
-				cg.Grade = "C"
-			} else if cg.Percentage >= 50 {
-				cg.Grade = "D"
-			} else {
-				cg.Grade = "F"
+	aggByCourse := make(map[int]*aggregatedCourse)
+	for _, grade := range grades {
+		agg, ok := aggByCourse[grade.CourseID]
+		if !ok {
+			agg = &aggregatedCourse{}
+			aggByCourse[grade.CourseID] = agg
+		}
+		agg.totalScore += float64(grade.ObtainedMarks)
+		agg.maxScore += float64(grade.TotalMarks)
+	}
+
+	courseIDs := make([]int, 0, len(aggByCourse))
+	for id := range aggByCourse {
+		courseIDs = append(courseIDs, id)
+	}
+	sort.Ints(courseIDs)
+
+	result := make([]map[string]interface{}, 0, len(courseIDs))
+	for _, courseID := range courseIDs {
+		agg := aggByCourse[courseID]
+		percentage := 0.0
+		letter := ""
+		if agg.maxScore > 0 {
+			percentage = math.Round((agg.totalScore/agg.maxScore)*10000) / 100
+			switch {
+			case percentage >= 90:
+				letter = "A+"
+			case percentage >= 85:
+				letter = "A"
+			case percentage >= 80:
+				letter = "A-"
+			case percentage >= 75:
+				letter = "B+"
+			case percentage >= 70:
+				letter = "B"
+			case percentage >= 65:
+				letter = "B-"
+			case percentage >= 60:
+				letter = "C+"
+			case percentage >= 55:
+				letter = "C"
+			case percentage >= 50:
+				letter = "D"
+			default:
+				letter = "F"
 			}
 		}
-		courseGrades[courseID] = cg
+
+		courseName := "Course " + strconv.Itoa(courseID)
+		courseCode := "COURSE-" + strconv.Itoa(courseID)
+		credits := 3
+		courseDetails, err := h.courseService.FindCourseByID(c.Request().Context(), collegeID, courseID)
+		if err == nil && courseDetails != nil {
+			courseName = courseDetails.Name
+			if courseDetails.Credits > 0 {
+				credits = courseDetails.Credits
+			}
+		}
 
 		result = append(result, map[string]interface{}{
-			"courseName": cg.CourseName,
-			"courseCode": cg.CourseCode,
-			"totalScore": cg.TotalScore,
-			"maxScore":   cg.MaxScore,
-			"percentage": cg.Percentage,
-			"grade":      cg.Grade,
-			"credits":    cg.Credits,
+			"courseId":    courseID,
+			"courseName":  courseName,
+			"courseCode":  courseCode,
+			"credits":     credits,
+			"totalScore":  agg.totalScore,
+			"maxScore":    agg.maxScore,
+			"percentage":  percentage,
+			"letterGrade": letter,
 		})
 	}
 

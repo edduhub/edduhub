@@ -1,20 +1,21 @@
 package handler
 
 import (
-	"fmt"
+	"encoding/base64"
+	"math"
 	"net/http"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/models" // Import models package
-
-	// "eduhub/server/internal/middleware" // Assuming validator is setup via middleware or directly
-	"eduhub/server/internal/services/attendance"
+	attendancesvc "eduhub/server/internal/services/attendance"
+	"eduhub/server/internal/services/course"
 
 	"github.com/labstack/echo/v4"
 )
 
 type AttendanceHandler struct {
-	attendanceService attendance.AttendanceService
+	attendanceService attendancesvc.AttendanceService
+	courseService     course.CourseService
 }
 
 // BulkAttendanceRequest defines the structure for the bulk attendance marking endpoint.
@@ -26,9 +27,10 @@ type QRCodeRequest struct {
 	QRCodeData string `json:"qrcode_data"`
 }
 
-func NewAttendanceHandler(attendance attendance.AttendanceService) *AttendanceHandler {
+func NewAttendanceHandler(attendance attendancesvc.AttendanceService, courseService course.CourseService) *AttendanceHandler {
 	return &AttendanceHandler{
 		attendanceService: attendance,
+		courseService:     courseService,
 	}
 }
 
@@ -48,11 +50,20 @@ func (a *AttendanceHandler) GenerateQRCode(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	qrCode, err := a.attendanceService.GenerateQRCode(ctx, collegeID, courseID, lectureID)
+	qrCodeBase64, err := a.attendanceService.GenerateQRCode(ctx, collegeID, courseID, lectureID)
 	if err != nil {
 		return helpers.Error(c, err, 400)
 	}
-	return helpers.Success(c, qrCode, 200)
+	
+	// Decode base64 to bytes and return as image
+	qrBytes, err := base64.StdEncoding.DecodeString(qrCodeBase64)
+	if err != nil {
+		return helpers.Error(c, "failed to decode QR code", 500)
+	}
+	
+	c.Response().Header().Set("Content-Type", "image/png")
+	c.Response().Header().Set("Content-Disposition", "inline; filename=qrcode.png")
+	return c.Blob(200, "image/png", qrBytes)
 }
 
 func (a *AttendanceHandler) ProcessAttendance(c echo.Context) error {
@@ -70,7 +81,10 @@ func (a *AttendanceHandler) ProcessAttendance(c echo.Context) error {
 		return helpers.Error(c, "invalid request body", 400)
 	}
 	err = a.attendanceService.ProcessQRCode(ctx, collegeID, studentId, qrcodeData.QRCodeData)
-	return err
+	if err != nil {
+		return helpers.Error(c, err.Error(), 400)
+	}
+	return helpers.Success(c, "Attendance marked successfully", 200)
 }
 
 func (a *AttendanceHandler) MarkAttendance(c echo.Context) error {
@@ -235,7 +249,26 @@ func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "unable to get attendance by student", http.StatusInternalServerError)
 	}
-	return helpers.Success(c, attendance, http.StatusOK)
+	
+	// Enrich with course names
+	response := make([]map[string]interface{}, 0, len(attendance))
+	for _, record := range attendance {
+		courseName := ""
+		course, err := a.courseService.FindCourseByID(ctx, collegeID, record.CourseID)
+		if err == nil && course != nil {
+			courseName = course.Name
+		}
+		
+		response = append(response, map[string]interface{}{
+			"id":         record.ID,
+			"courseId":   record.CourseID,
+			"courseName": courseName,
+			"date":       record.Date,
+			"status":     record.Status,
+		})
+	}
+	
+	return helpers.Success(c, response, http.StatusOK)
 }
 
 // GetMyCourseStats gets course-wise attendance stats for current student
@@ -252,49 +285,40 @@ func (a *AttendanceHandler) GetMyCourseStats(c echo.Context) error {
 	}
 
 	// Get all attendance records for the student
-	attendance, err := a.attendanceService.GetAttendanceByStudent(ctx, collegeID, studentID, 1000, 0)
+	records, err := a.attendanceService.GetAttendanceByStudent(ctx, collegeID, studentID, 1000, 0)
 	if err != nil {
 		return helpers.Error(c, "unable to get attendance", http.StatusInternalServerError)
 	}
 
-	// Group by course and calculate stats
-	courseStats := make(map[int]struct {
-		CourseName string
-		CourseCode string
-		Present    int
-		Total      int
-		Percentage float64
-	})
+	// Aggregate stats by course
+	statsByCourse := make(map[int]*models.AttendanceCourseStats)
+	for _, record := range records {
+		stat, ok := statsByCourse[record.CourseID]
+		if !ok {
+			stat = &models.AttendanceCourseStats{CourseID: record.CourseID}
+			statsByCourse[record.CourseID] = stat
+		}
 
-	for _, record := range attendance {
-		stats := courseStats[record.CourseID]
-		stats.Total++
-		if record.Status == "Present" {
-			stats.Present++
+		stat.TotalSessions++
+		if record.Status == attendancesvc.Present {
+			stat.PresentCount++
 		}
-		// Note: CourseCode and CourseName would need to be fetched from course service
-		// For now, using courseID as placeholder
-		stats.CourseCode = fmt.Sprintf("COURSE-%d", record.CourseID)
-		stats.CourseName = fmt.Sprintf("Course %d", record.CourseID)
-		if stats.Total > 0 {
-			stats.Percentage = float64(stats.Present) / float64(stats.Total) * 100
-		}
-		courseStats[record.CourseID] = stats
 	}
 
-	// Convert map to slice
-	result := []map[string]interface{}{}
-	for _, stats := range courseStats {
-		result = append(result, map[string]interface{}{
-			"courseName": stats.CourseName,
-			"courseCode": stats.CourseCode,
-			"present":    stats.Present,
-			"total":      stats.Total,
-			"percentage": stats.Percentage,
-		})
+	// Enrich with course metadata and compute percentages
+	results := make([]models.AttendanceCourseStats, 0, len(statsByCourse))
+	for courseID, stat := range statsByCourse {
+		course, err := a.courseService.FindCourseByID(ctx, collegeID, courseID)
+		if err == nil && course != nil {
+			stat.CourseName = course.Name
+		}
+		if stat.TotalSessions > 0 {
+			stat.AttendanceRate = math.Round(float64(stat.PresentCount)/float64(stat.TotalSessions)*10000) / 100
+		}
+		results = append(results, *stat)
 	}
 
-	return helpers.Success(c, result, http.StatusOK)
+	return helpers.Success(c, results, http.StatusOK)
 }
 
 func (a *AttendanceHandler) MarkBulkAttendance(c echo.Context) error {

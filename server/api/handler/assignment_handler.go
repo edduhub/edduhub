@@ -2,21 +2,28 @@ package handler
 
 import (
 	"strconv"
+	"time"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/services/assignment"
+	"eduhub/server/internal/services/course"
+	"eduhub/server/internal/services/enrollment"
 
 	"github.com/labstack/echo/v4"
 )
 
 type AssignmentHandler struct {
-	assignmentService assignment.AssignmentService
+	assignmentService  assignment.AssignmentService
+	enrollmentService  enrollment.EnrollmentService
+	courseService      course.CourseService
 }
 
-func NewAssignmentHandler(assignmentService assignment.AssignmentService) *AssignmentHandler {
+func NewAssignmentHandler(assignmentService assignment.AssignmentService, enrollmentService enrollment.EnrollmentService, courseService course.CourseService) *AssignmentHandler {
 	return &AssignmentHandler{
-		assignmentService: assignmentService,
+		assignmentService:  assignmentService,
+		enrollmentService:  enrollmentService,
+		courseService:      courseService,
 	}
 }
 
@@ -201,16 +208,58 @@ func (h *AssignmentHandler) GetMyAssignments(c echo.Context) error {
 		return helpers.Error(c, "student ID required", 400)
 	}
 
-	// This would need enrollment service to get all courses
-	// For now, return empty or implement full logic
-	// Placeholder implementation
-	_ = collegeID
-	_ = studentID
+	ctx := c.Request().Context()
+	enrollments, err := h.enrollmentService.FindEnrollmentsByStudent(ctx, collegeID, studentID, 1000, 0)
+	if err != nil {
+		return helpers.Error(c, "failed to fetch enrollments", 500)
+	}
 
-	// TODO: Implement full logic with enrollment service
-	// 1. Get all enrolled courses for student
-	// 2. For each course, get assignments
-	// 3. Combine and return
+	response := make([]map[string]interface{}, 0)
 
-	return helpers.Success(c, []interface{}{}, 200)
+	for _, enrollmentRecord := range enrollments {
+		assignments, err := h.assignmentService.GetAssignmentsByCourse(ctx, collegeID, enrollmentRecord.CourseID)
+		if err != nil {
+			return helpers.Error(c, "failed to fetch assignments", 500)
+		}
+
+		courseDetails, err := h.courseService.FindCourseByID(ctx, collegeID, enrollmentRecord.CourseID)
+		courseName := ""
+		if err == nil && courseDetails != nil {
+			courseName = courseDetails.Name
+		}
+
+		for _, a := range assignments {
+			// Check if student has submitted this assignment
+			status := "pending"
+			var score *int
+			submission, err := h.assignmentService.GetSubmissionByStudentAndAssignment(ctx, studentID, a.ID)
+			if err == nil && submission != nil {
+				if submission.Grade != nil {
+					status = "graded"
+					score = submission.Grade
+				} else {
+					status = "submitted"
+				}
+			}
+
+			assignmentData := map[string]interface{}{
+				"id":          a.ID,
+				"title":       a.Title,
+				"description": a.Description,
+				"courseId":    a.CourseID,
+				"courseName":  courseName,
+				"dueDate":     a.DueDate.Format(time.RFC3339),
+				"maxScore":    a.MaxPoints,
+				"status":      status,
+			}
+			
+			if score != nil {
+				assignmentData["score"] = *score
+			}
+
+			response = append(response, assignmentData)
+		}
+	}
+
+	return helpers.Success(c, response, 200)
 }

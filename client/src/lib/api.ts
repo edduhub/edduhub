@@ -5,8 +5,10 @@ export type DashboardResponse = {
   metrics: {
     totalStudents: number;
     totalCourses: number;
+    totalFaculty?: number;
     attendanceRate: number;
     announcements: number;
+    pendingSubmissions?: number;
   };
   upcomingEvents: { id: number; title: string; start: string; course?: string }[];
   recentActivity: { id: number; entity: string; message: string; timestamp: string }[];

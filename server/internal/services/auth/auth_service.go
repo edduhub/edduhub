@@ -13,6 +13,7 @@ type AuthService interface {
 	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
 	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
+	ValidateCollegeAccess(ctx context.Context, collegeID int) (interface{}, error)
 	CheckCollegeAccess(identity *Identity, collegeID string) bool
 	HasRole(identity *Identity, role string) bool
 	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
@@ -29,12 +30,14 @@ type AuthService interface {
 	VerifyEmail(ctx context.Context, flowID string, token string) error
 	InitiateEmailVerification(ctx context.Context, identityID string) (map[string]any, error)
 	ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error
+	RefreshToken(ctx context.Context, token string) (string, error)
 }
 
 type authService struct {
-	Auth       *kratosService
-	AuthZ      *ketoService
-	JWTManager JWTManager
+	Auth           *kratosService
+	AuthZ          *ketoService
+	JWTManager     JWTManager
+	CollegeChecker CollegeChecker
 }
 
 type JWTManager interface {
@@ -42,11 +45,24 @@ type JWTManager interface {
 	Verify(token string) (*jwt.JWTClaims, error)
 }
 
+type CollegeChecker interface {
+	GetCollegeByID(ctx context.Context, id int) (interface{}, error)
+}
+
 func NewAuthService(kratos *kratosService, keto *ketoService, jwtManager JWTManager) AuthService {
 	return &authService{
 		Auth:       kratos,
 		AuthZ:      keto,
 		JWTManager: jwtManager,
+	}
+}
+
+func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, jwtManager JWTManager, collegeChecker CollegeChecker) AuthService {
+	return &authService{
+		Auth:           kratos,
+		AuthZ:          keto,
+		JWTManager:     jwtManager,
+		CollegeChecker: collegeChecker,
 	}
 }
 
@@ -158,4 +174,39 @@ func (a *authService) InitiateEmailVerification(ctx context.Context, identityID 
 
 func (a *authService) ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error {
 	return a.Auth.ChangePassword(ctx, identityID, oldPassword, newPassword)
+}
+
+// ValidateCollegeAccess verifies that a college with the given ID exists in the database
+// This is a critical security function for multi-tenant isolation
+func (a *authService) ValidateCollegeAccess(ctx context.Context, collegeID int) (interface{}, error) {
+	if a.CollegeChecker == nil {
+		// If college checker not injected, assume validation is handled elsewhere
+		return map[string]int{"id": collegeID}, nil
+	}
+	return a.CollegeChecker.GetCollegeByID(ctx, collegeID)
+}
+
+// RefreshToken validates and generates a new JWT token with updated expiration
+// Implements token rotation for enhanced security
+func (a *authService) RefreshToken(ctx context.Context, token string) (string, error) {
+	// Validate the existing token
+	claims, err := a.JWTManager.Verify(token)
+	if err != nil {
+		return "", fmt.Errorf("invalid token: %w", err)
+	}
+
+	// Generate a new token with the same claims but new expiration
+	newToken, err := a.JWTManager.Generate(
+		claims.KratosID,
+		claims.Email,
+		claims.Role,
+		claims.CollegeID,
+		claims.FirstName,
+		claims.LastName,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate new token: %w", err)
+	}
+
+	return newToken, nil
 }

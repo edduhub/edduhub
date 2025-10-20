@@ -21,8 +21,19 @@ export default function AnalyticsPage() {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/api/analytics');
-        setMetrics(Array.isArray(response) ? response : []);
+        const response = await api.get('/api/analytics/dashboard');
+        // Backend returns CollegeDashboard structure, adapt to metrics format
+        if (response && typeof response === 'object') {
+          const data: any = response;
+          const adaptedMetrics: AnalyticsMetric[] = [
+            { label: 'Total Students', value: data.total_students || data.totalStudents || 0 },
+            { label: 'Total Courses', value: data.total_courses || data.totalCourses || 0 },
+            { label: 'Total Faculty', value: data.total_faculty || data.totalFaculty || 0 },
+            { label: 'Average Attendance', value: Math.round((data.average_attendance || data.averageAttendance || 0) * 100) / 100 },
+            { label: 'Overall GPA', value: Math.round((data.overall_gpa || data.overallGPA || 0) * 100) / 100 },
+          ];
+          setMetrics(adaptedMetrics);
+        }
       } catch (err) {
         console.error('Failed to fetch analytics:', err);
         setError('Failed to load analytics data');

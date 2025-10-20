@@ -20,3 +20,12 @@ type StudentAttendanceStatus struct {
 	StudentID int    `json:"student_id" validate:"required,gt=0"`
 	Status    string `json:"status" validate:"required,oneof=Present Absent"` // Ensure status is either Present or Absent
 }
+
+// AttendanceCourseStats represents aggregated attendance data for a course.
+type AttendanceCourseStats struct {
+	CourseID       int     `json:"courseId"`
+	CourseName     string  `json:"courseName"`
+	PresentCount   int     `json:"present"`
+	TotalSessions  int     `json:"total"`
+	AttendanceRate float64 `json:"percentage"`
+}

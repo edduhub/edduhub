@@ -5,33 +5,34 @@ import (
 )
 
 type Handlers struct {
-	Auth         *AuthHandler
-	Dashboard    *DashboardHandler
-	Attendance   *AttendanceHandler
-	Student      *StudentHandler
-	College      *CollegeHandler
-	Course       *CourseHandler
-	Lecture      *LectureHandler
-	Quiz         *QuizHandler
-	Grade        *GradeHandler
-	Calendar     *CalendarHandler
-	Department   *DepartmentHandler
-	Assignment   *AssignmentHandler
-	User         *UserHandler
-	Announcement *AnnouncementHandler
-	Profile      *ProfileHandler
-	System       *SystemHandler
-	Question     *QuestionHandler
-	QuizAttempt  *QuizAttemptHandler
-	FileUpload   *FileUploadHandler
-	File         *FileHandler
-	Notification *NotificationHandler
-	WebSocket    *WebSocketHandler
-	Analytics    *AnalyticsHandler
-	Batch        *BatchHandler
-	Report       *ReportHandler
-	Webhook      *WebhookHandler
-	Audit        *AuditHandler
+	Auth              *AuthHandler
+	Dashboard         *DashboardHandler
+	Attendance        *AttendanceHandler
+	Student           *StudentHandler
+	College           *CollegeHandler
+	Course            *CourseHandler
+	Lecture           *LectureHandler
+	Quiz              *QuizHandler
+	Grade             *GradeHandler
+	Calendar          *CalendarHandler
+	Department        *DepartmentHandler
+	Assignment        *AssignmentHandler
+	User              *UserHandler
+	Announcement      *AnnouncementHandler
+	Profile           *ProfileHandler
+	System            *SystemHandler
+	Question          *QuestionHandler
+	QuizAttempt       *QuizAttemptHandler
+	FileUpload        *FileUploadHandler
+	File              *FileHandler
+	Notification      *NotificationHandler
+	WebSocket         *WebSocketHandler
+	Analytics         *AnalyticsHandler
+	AdvancedAnalytics *AdvancedAnalyticsHandler
+	Batch             *BatchHandler
+	Report            *ReportHandler
+	Webhook           *WebhookHandler
+	Audit             *AuditHandler
 }
 
 func NewHandlers(services *services.Services) *Handlers {
@@ -45,17 +46,18 @@ func NewHandlers(services *services.Services) *Handlers {
 			services.CalendarService,
 			services.AnalyticsService,
 			services.AuditService,
+			services.AssignmentService,
 		),
-		Attendance:   NewAttendanceHandler(services.Attendance),
+		Attendance:   NewAttendanceHandler(services.Attendance, services.CourseService),
 		Student:      NewStudentHandler(services.StudentService),
 		College:      NewCollegeHandler(services.CollegeService),
 		Course:       NewCourseHandler(services.CourseService, services.EnrollmentService, services.StudentService),
 		Lecture:      NewLectureHandler(services.LectureService),
-		Quiz:         NewQuizHandler(services.QuizService),
-		Grade:        NewGradeHandler(services.GradeService),
+		Quiz:         NewQuizHandler(services.QuizService, services.EnrollmentService, services.CourseService),
+		Grade:        NewGradeHandler(services.GradeService, services.CourseService),
 		Calendar:     NewCalendarHandler(services.CalendarService),
 		Department:   NewDepartmentHandler(services.DepartmentService),
-		Assignment:   NewAssignmentHandler(services.AssignmentService),
+		Assignment:   NewAssignmentHandler(services.AssignmentService, services.EnrollmentService, services.CourseService),
 		User:         NewUserHandler(services.UserService),
 		Announcement: NewAnnouncementHandler(services.AnnouncementService),
 		Profile:      NewProfileHandler(services.ProfileService, services.AuditService, services.StorageService),
@@ -64,12 +66,13 @@ func NewHandlers(services *services.Services) *Handlers {
 		QuizAttempt:  NewQuizAttemptHandler(services.QuizAttemptService),
 		FileUpload:   NewFileUploadHandler(services.StorageService),
 		File:         NewFileHandler(services.FileService),
-		Notification: NewNotificationHandler(services.NotificationService),
-		WebSocket:    NewWebSocketHandler(services.WebSocketService),
-		Analytics:    NewAnalyticsHandler(services.AnalyticsService),
-		Batch:        NewBatchHandler(services.BatchService),
-		Report:       NewReportHandler(services.ReportService),
-		Webhook:      NewWebhookHandler(services.WebhookService),
-		Audit:        NewAuditHandler(services.AuditService),
+		Notification:      NewNotificationHandler(services.NotificationService),
+		WebSocket:         NewWebSocketHandler(services.WebSocketService),
+		Analytics:         NewAnalyticsHandler(services.AnalyticsService),
+		AdvancedAnalytics: NewAdvancedAnalyticsHandler(services.AdvancedAnalyticsService),
+		Batch:             NewBatchHandler(services.BatchService),
+		Report:            NewReportHandler(services.ReportService),
+		Webhook:           NewWebhookHandler(services.WebhookService),
+		Audit:             NewAuditHandler(services.AuditService),
 	}
 }

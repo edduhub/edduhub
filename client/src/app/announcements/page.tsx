@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { api, endpoints } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, Pin, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -32,6 +36,13 @@ export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [formData, setFormData] = useState({
+    title: "",
+    content: "",
+    priority: "normal",
+  });
 
   useEffect(() => {
     const fetchAnnouncements = async () => {
@@ -49,6 +60,34 @@ export default function AnnouncementsPage() {
 
     fetchAnnouncements();
   }, []);
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.title.trim() || !formData.content.trim()) {
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const newAnnouncement = await api.post(endpoints.announcements.create, {
+        title: formData.title,
+        content: formData.content,
+        priority: formData.priority,
+        is_published: true,
+        published_at: new Date().toISOString(),
+      });
+
+      setAnnouncements(prev => [newAnnouncement, ...prev]);
+      setFormData({ title: "", content: "", priority: "normal" });
+      setDialogOpen(false);
+    } catch (err) {
+      console.error('Failed to create announcement:', err);
+      setError('Failed to create announcement');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const getPriorityBadge = (priority: string) => {
     const config = {
@@ -92,10 +131,73 @@ export default function AnnouncementsPage() {
           </p>
         </div>
         {(user?.role === 'faculty' || user?.role === 'admin') && (
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Announcement
-          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Announcement
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[525px]">
+              <form onSubmit={handleCreateAnnouncement}>
+                <DialogHeader>
+                  <DialogTitle>Create Announcement</DialogTitle>
+                  <DialogDescription>
+                    Share important information with students and faculty
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="title">Title</Label>
+                    <Input
+                      id="title"
+                      value={formData.title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Enter announcement title"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="content">Content</Label>
+                    <Textarea
+                      id="content"
+                      value={formData.content}
+                      onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                      placeholder="Enter announcement content"
+                      required
+                      rows={5}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select
+                      value={formData.priority}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value }))}
+                    >
+                      <SelectTrigger id="priority">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={creating}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={creating}>
+                    {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {creating ? 'Creating...' : 'Create Announcement'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
 

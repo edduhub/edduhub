@@ -65,7 +65,7 @@ func (h *CourseHandler) ListCourses(c echo.Context) error {
 	}
 
 	// Parse pagination parameters
-	limit := uint64(10) // default limit
+	limit := uint64(100) // default limit - increased for better UX
 	offset := uint64(0)  // default offset
 
 	if limitParam := c.QueryParam("limit"); limitParam != "" {
@@ -85,7 +85,40 @@ func (h *CourseHandler) ListCourses(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 500)
 	}
 
-	return helpers.Success(c, courses, 200)
+	// Enrich courses with enrollment count and instructor name
+	enrichedCourses := make([]map[string]interface{}, 0, len(courses))
+	
+	for _, course := range courses {
+		// Get enrollment count
+		enrollmentCount := 0
+		// TODO: Implement FindEnrollmentsByCourse in enrollment service
+		// enrollments, err := h.enrollmentService.FindEnrollmentsByCourse(ctx, collegeID, course.ID, 1000, 0)
+		// if err == nil {
+		// 	enrollmentCount = len(enrollments)
+		// }
+		
+		// Get instructor name
+		instructorName := "Unknown"
+		if course.Instructor != nil {
+			instructorName = course.Instructor.Name
+		}
+		
+		enrichedCourses = append(enrichedCourses, map[string]interface{}{
+			"id":               course.ID,
+			"code":             "COURSE-" + strconv.Itoa(course.ID),
+			"name":             course.Name,
+			"description":      course.Description,
+			"credits":          course.Credits,
+			"instructor":       instructorName,
+			"instructorId":     course.InstructorID,
+			"enrolledStudents": enrollmentCount,
+			"maxStudents":      100, // Default max, could be made configurable
+			"semester":         "Current",
+			"department":       "General",
+		})
+	}
+
+	return helpers.Success(c, enrichedCourses, 200)
 }
 
 func (h *CourseHandler) GetCourse(c echo.Context) error {
