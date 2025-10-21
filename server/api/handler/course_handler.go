@@ -91,11 +91,10 @@ func (h *CourseHandler) ListCourses(c echo.Context) error {
 	for _, course := range courses {
 		// Get enrollment count
 		enrollmentCount := 0
-		// TODO: Implement FindEnrollmentsByCourse in enrollment service
-		// enrollments, err := h.enrollmentService.FindEnrollmentsByCourse(ctx, collegeID, course.ID, 1000, 0)
-		// if err == nil {
-		// 	enrollmentCount = len(enrollments)
-		// }
+		enrollments, err := h.enrollmentService.FindEnrollmentsByCourse(c.Request().Context(), collegeID, course.ID, 1000, 0)
+		if err == nil {
+			enrollmentCount = len(enrollments)
+		}
 		
 		// Get instructor name
 		instructorName := "Unknown"

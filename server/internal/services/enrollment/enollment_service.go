@@ -17,6 +17,7 @@ type EnrollmentService interface {
 	UpdateEnrollmentStatus(ctx context.Context, collegeID, enrollmentID int, Newstatus string) error
 	DeleteEnrollment(ctx context.Context, collegeID int, enrollmentID int) error
 	FindEnrollmentsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.Enrollment, error)
+	FindEnrollmentsByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Enrollment, error)
 	GetEnrollmentByID(ctx context.Context, collegeID int, enrollmentID int) (*models.Enrollment, error)
 }
 
@@ -64,6 +65,10 @@ func (e *enrollmentService) DeleteEnrollment(ctx context.Context, collegeID int,
 
 func (e *enrollmentService) FindEnrollmentsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.Enrollment, error) {
 	return e.enrollmentRepo.FindEnrollmentsByStudent(ctx, collegeID, studentID, limit, offset)
+}
+
+func (e *enrollmentService) FindEnrollmentsByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Enrollment, error) {
+	return e.enrollmentRepo.FindEnrollmentsByCourse(ctx, collegeID, courseID, limit, offset)
 }
 
 func (e *enrollmentService) GetEnrollmentByID(ctx context.Context, collegeID, enrollmentID int) (*models.Enrollment, error) {

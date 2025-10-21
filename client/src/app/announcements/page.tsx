@@ -76,7 +76,7 @@ export default function AnnouncementsPage() {
         priority: formData.priority,
         is_published: true,
         published_at: new Date().toISOString(),
-      });
+      }) as Announcement;
 
       setAnnouncements(prev => [newAnnouncement, ...prev]);
       setFormData({ title: "", content: "", priority: "normal" });
