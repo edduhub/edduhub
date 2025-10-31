@@ -47,6 +47,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Dashboard
 	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)
 
+	// Student Dashboard (student-specific comprehensive view)
+	student := apiGroup.Group("/student", m.RequireRole(middleware.RoleStudent))
+	student.GET("/dashboard", a.Dashboard.GetStudentDashboard)
+
 	// User profile management
 	profile := apiGroup.Group("/profile")
 	profile.GET("", a.Profile.GetUserProfile)
@@ -92,6 +96,43 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	courses.POST("/:courseID/enroll", a.Course.EnrollStudents, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	courses.DELETE("/:courseID/students/:studentID", a.Course.RemoveStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	courses.GET("/:courseID/students", a.Course.ListEnrolledStudents)
+
+	// Course Materials & Modules
+	// Module management (nested under courses)
+	modules := apiGroup.Group("/courses/:courseID/modules")
+	modules.GET("", a.CourseMaterial.ListModules)
+	modules.POST("", a.CourseMaterial.CreateModule, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Module operations (standalone endpoints)
+	moduleEndpoints := apiGroup.Group("/modules")
+	moduleEndpoints.GET("/:moduleID", a.CourseMaterial.GetModule)
+	moduleEndpoints.PUT("/:moduleID", a.CourseMaterial.UpdateModule, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	moduleEndpoints.DELETE("/:moduleID", a.CourseMaterial.DeleteModule, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Course materials (nested under courses)
+	materials := apiGroup.Group("/courses/:courseID/materials")
+	materials.GET("", a.CourseMaterial.ListMaterials)
+	materials.POST("", a.CourseMaterial.CreateMaterial, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Material operations (standalone endpoints)
+	materialEndpoints := apiGroup.Group("/materials")
+	materialEndpoints.GET("/:materialID", a.CourseMaterial.GetMaterial)
+	materialEndpoints.PUT("/:materialID", a.CourseMaterial.UpdateMaterial, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	materialEndpoints.DELETE("/:materialID", a.CourseMaterial.DeleteMaterial, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	materialEndpoints.POST("/:materialID/publish", a.CourseMaterial.PublishMaterial, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	materialEndpoints.POST("/:materialID/unpublish", a.CourseMaterial.UnpublishMaterial, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Access tracking (for students)
+	materialEndpoints.POST("/:materialID/access", a.CourseMaterial.LogMaterialAccess, m.RequireRole(middleware.RoleStudent))
+
+	// Statistics (for faculty/admin)
+	materialEndpoints.GET("/:materialID/stats", a.CourseMaterial.GetMaterialAccessStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Student progress tracking
+	apiGroup.GET("/courses/:courseID/students/:studentID/progress", a.CourseMaterial.GetStudentProgress,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty, middleware.RoleStudent),
+		m.LoadStudentProfile,
+		m.VerifyStudentOwnership())
 
 	// Lecture management
 	lectures := apiGroup.Group("/courses/:courseID/lectures")

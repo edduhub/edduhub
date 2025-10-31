@@ -11,6 +11,7 @@ type Handlers struct {
 	Student           *StudentHandler
 	College           *CollegeHandler
 	Course            *CourseHandler
+	CourseMaterial    *CourseMaterialHandler
 	Lecture           *LectureHandler
 	Quiz              *QuizHandler
 	Grade             *GradeHandler
@@ -47,12 +48,15 @@ func NewHandlers(services *services.Services) *Handlers {
 			services.AnalyticsService,
 			services.AuditService,
 			services.AssignmentService,
+			services.EnrollmentService,
+			services.GradeService,
 		),
 		Attendance:   NewAttendanceHandler(services.Attendance, services.CourseService),
-		Student:      NewStudentHandler(services.StudentService),
-		College:      NewCollegeHandler(services.CollegeService),
-		Course:       NewCourseHandler(services.CourseService, services.EnrollmentService, services.StudentService),
-		Lecture:      NewLectureHandler(services.LectureService),
+		Student:        NewStudentHandler(services.StudentService),
+		College:        NewCollegeHandler(services.CollegeService),
+		Course:         NewCourseHandler(services.CourseService, services.EnrollmentService, services.StudentService),
+		CourseMaterial: NewCourseMaterialHandler(services.CourseMaterialService),
+		Lecture:        NewLectureHandler(services.LectureService),
 		Quiz:         NewQuizHandler(services.QuizService, services.EnrollmentService, services.CourseService),
 		Grade:        NewGradeHandler(services.GradeService, services.CourseService),
 		Calendar:     NewCalendarHandler(services.CalendarService),

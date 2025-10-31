@@ -16,6 +16,7 @@ import (
 	"eduhub/server/internal/services/calendar"
 	"eduhub/server/internal/services/college"
 	"eduhub/server/internal/services/course"
+	"eduhub/server/internal/services/course_material"
 	"eduhub/server/internal/services/department"
 	"eduhub/server/internal/services/email"
 	"eduhub/server/internal/services/enrollment"
@@ -39,9 +40,10 @@ type Services struct {
 	Auth                auth.AuthService
 	Attendance          attendance.AttendanceService
 	StudentService      student.StudentService
-	CollegeService      college.CollegeService
-	CourseService       course.CourseService
-	EnrollmentService   enrollment.EnrollmentService
+	CollegeService        college.CollegeService
+	CourseService         course.CourseService
+	CourseMaterialService course_material.CourseMaterialService
+	EnrollmentService     enrollment.EnrollmentService
 	GradeService        grades.GradeServices
 	LectureService      lecture.LectureService
 	QuizService         quiz.QuizService
@@ -131,6 +133,7 @@ func NewServices(cfg *config.Config) *Services {
 
 	assignmentRepo := repository.NewAssignmentRepository(cfg.DB, minioClient)
 	announcementRepo := repository.NewAnnouncementRepository(cfg.DB)
+	courseMaterialRepo := repository.NewCourseMaterialRepository(cfg.DB)
 
 	studentService := student.NewstudentService(
 		studentRepo,
@@ -153,6 +156,7 @@ func NewServices(cfg *config.Config) *Services {
 	userService := user.NewUserService(userRepo)
 	announcementService := announcement.NewAnnouncementService(announcementRepo)
 	profileService := profile.NewProfileService(profileRepo)
+	courseMaterialService := course_material.NewCourseMaterialService(courseRepo, courseMaterialRepo, fileRepo, studentRepo)
 
 	// New services
 	questionRepo := repository.NewQuestionRepository(cfg.DB)
@@ -208,12 +212,13 @@ func NewServices(cfg *config.Config) *Services {
 	)
 
 	return &Services{
-		Auth:                authService,
-		Attendance:          attendanceService,
-		StudentService:      studentService,
-		CollegeService:      collegeService,
-		CourseService:       courseService,
-		EnrollmentService:   enrollmentService,
+		Auth:                  authService,
+		Attendance:            attendanceService,
+		StudentService:        studentService,
+		CollegeService:        collegeService,
+		CourseService:         courseService,
+		CourseMaterialService: courseMaterialService,
+		EnrollmentService:     enrollmentService,
 		GradeService:        gradeService,
 		LectureService:      lectureService,
 		QuizService:         quizService,

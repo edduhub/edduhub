@@ -22,7 +22,7 @@ import {
   FileText,
 } from "lucide-react";
 import { format } from "date-fns";
-import { DashboardResponse } from "@/lib/api";
+import { DashboardResponse } from "@/lib/types";
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth();
