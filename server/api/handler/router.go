@@ -47,6 +47,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Dashboard
 	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)
 
+	// Student Dashboard (student-specific comprehensive view)
+	student := apiGroup.Group("/student", m.RequireRole(middleware.RoleStudent))
+	student.GET("/dashboard", a.Dashboard.GetStudentDashboard)
+
 	// User profile management
 	profile := apiGroup.Group("/profile")
 	profile.GET("", a.Profile.GetUserProfile)

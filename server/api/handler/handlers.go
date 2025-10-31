@@ -47,6 +47,8 @@ func NewHandlers(services *services.Services) *Handlers {
 			services.AnalyticsService,
 			services.AuditService,
 			services.AssignmentService,
+			services.EnrollmentService,
+			services.GradeService,
 		),
 		Attendance:   NewAttendanceHandler(services.Attendance, services.CourseService),
 		Student:      NewStudentHandler(services.StudentService),
