@@ -65,12 +65,12 @@ func (r *questionRepository) CreateQuestion(ctx context.Context, question *model
 	question.UpdatedAt = now
 
 	// SQL query with parameterized placeholders
-	sql := `INSERT INTO questions (quiz_id, text, type, points, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
+	sql := `INSERT INTO questions (quiz_id, text, type, points, correct_answer, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
 
 	// Prepare arguments in correct order
 	args := []any{question.QuizID, question.Text, question.Type, question.Points,
-				 question.CreatedAt, question.UpdatedAt}
+				 question.CorrectAnswer, question.CreatedAt, question.UpdatedAt}
 
 	// Execute query and scan the returned ID
 	temp := struct {
@@ -92,7 +92,7 @@ func (r *questionRepository) GetQuestionByID(ctx context.Context, collegeID int,
 	question := &models.Question{}
 
 	// Query with college isolation through JOIN
-	sql := `SELECT q.id, q.quiz_id, q.text, q.type, q.points, q.created_at, q.updated_at
+	sql := `SELECT q.id, q.quiz_id, q.text, q.type, q.points, q.correct_answer, q.created_at, q.updated_at
 			FROM questions q
 			JOIN quizzes qu ON q.quiz_id = qu.id
 			WHERE q.id = $1 AND qu.college_id = $2`
@@ -117,9 +117,9 @@ func (r *questionRepository) UpdateQuestion(ctx context.Context, collegeID int, 
 	question.UpdatedAt = time.Now()
 
 	// Update query with college isolation through subquery
-	sql := `UPDATE questions SET text = $1, type = $2, points = $3, updated_at = $4
-			WHERE id = $5 AND quiz_id IN (SELECT id FROM quizzes WHERE college_id = $6)`
-	args := []any{question.Text, question.Type, question.Points, question.UpdatedAt,
+	sql := `UPDATE questions SET text = $1, type = $2, points = $3, correct_answer = $4, updated_at = $5
+			WHERE id = $6 AND quiz_id IN (SELECT id FROM quizzes WHERE college_id = $7)`
+	args := []any{question.Text, question.Type, question.Points, question.CorrectAnswer, question.UpdatedAt,
 				 question.ID, collegeID}
 
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
@@ -160,7 +160,7 @@ func (r *questionRepository) DeleteQuestion(ctx context.Context, collegeID int, 
 func (r *questionRepository) FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.Question, error) {
 	questions := []*models.Question{}
 
-	sql := `SELECT q.id, q.quiz_id, q.text, q.type, q.points, q.created_at, q.updated_at
+	sql := `SELECT q.id, q.quiz_id, q.text, q.type, q.points, q.correct_answer, q.created_at, q.updated_at
 			FROM questions q
 			JOIN quizzes qu ON q.quiz_id = qu.id
 			WHERE q.quiz_id = $1 AND qu.college_id = $2

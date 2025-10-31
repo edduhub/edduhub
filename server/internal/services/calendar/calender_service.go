@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"errors"
+	"time"
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
@@ -14,6 +15,9 @@ type CalendarService interface {
 	GetEvents(ctx context.Context, filter models.CalendarBlockFilter) ([]*models.CalendarBlock, error)
 	UpdateEvent(ctx context.Context, collegeID int, eventID int, req *models.UpdateCalendarRequest) error
 	DeleteEvent(ctx context.Context, collegeID int, eventID int) error
+	GetEventsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.CalendarBlock, error)
+	GetUpcomingEvents(ctx context.Context, collegeID int, limit int) ([]*models.CalendarBlock, error)
+	SearchEvents(ctx context.Context, collegeID int, query string) ([]*models.CalendarBlock, error)
 }
 
 type calendarService struct {
@@ -50,4 +54,33 @@ func (s *calendarService) UpdateEvent(ctx context.Context, collegeID int, eventI
 
 func (s *calendarService) DeleteEvent(ctx context.Context, collegeID int, eventID int) error {
 	return s.calendarRepo.DeleteCalendarBlock(ctx, eventID, collegeID)
+}
+
+func (s *calendarService) GetEventsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.CalendarBlock, error) {
+	filter := models.CalendarBlockFilter{
+		CollegeID: collegeID,
+		CourseID:  &courseID,
+		Limit:     100,
+	}
+	return s.calendarRepo.GetCalendarBlocks(ctx, filter)
+}
+
+func (s *calendarService) GetUpcomingEvents(ctx context.Context, collegeID int, limit int) ([]*models.CalendarBlock, error) {
+	now := time.Now()
+	filter := models.CalendarBlockFilter{
+		CollegeID:   collegeID,
+		StartDate:   &now,
+		IncludePast: false,
+		Limit:       limit,
+	}
+	return s.calendarRepo.GetCalendarBlocks(ctx, filter)
+}
+
+func (s *calendarService) SearchEvents(ctx context.Context, collegeID int, query string) ([]*models.CalendarBlock, error) {
+	filter := models.CalendarBlockFilter{
+		CollegeID: collegeID,
+		Search:    &query,
+		Limit:     50,
+	}
+	return s.calendarRepo.GetCalendarBlocks(ctx, filter)
 }

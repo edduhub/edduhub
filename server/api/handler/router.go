@@ -176,6 +176,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	assignments.DELETE("/:assignmentID", a.Assignment.DeleteAssignment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	assignments.POST("/:assignmentID/submit", a.Assignment.SubmitAssignment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	assignments.POST("/submissions/:submissionID/grade", a.Assignment.GradeSubmission, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	// Assignment grading enhancements
+	assignments.GET("/:assignmentID/submissions", a.Assignment.ListSubmissionsByAssignment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	assignments.POST("/:assignmentID/submissions/bulk-grade", a.Assignment.BulkGradeSubmissions, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	assignments.GET("/:assignmentID/stats", a.Assignment.GetAssignmentGradingStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	// Convenience endpoint for all assignments (current user)
 	assignmentsAll := apiGroup.Group("/assignments")

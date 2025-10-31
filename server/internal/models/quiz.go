@@ -29,13 +29,14 @@ type Quiz struct {
 
 // Question represents a single question within a quiz.
 type Question struct {
-	ID        int       `db:"id" json:"id"`
-	QuizID    int       `db:"quiz_id" json:"quiz_id"`
-	Text      string    `db:"text" json:"text"`
-	Type      QuizType  `db:"type" json:"type"` // e.g., MultipleChoice, TrueFalse, ShortAnswer
-	Points    int       `db:"points" json:"points"`
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+	ID            int       `db:"id" json:"id"`
+	QuizID        int       `db:"quiz_id" json:"quiz_id"`
+	Text          string    `db:"text" json:"text"`
+	Type          QuizType  `db:"type" json:"type"` // e.g., MultipleChoice, TrueFalse, ShortAnswer
+	Points        int       `db:"points" json:"points"`
+	CorrectAnswer *string   `db:"correct_answer" json:"correct_answer,omitempty"` // For ShortAnswer questions
+	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
 
 	// Relations - not stored in DB
 	Options []*AnswerOption `db:"-" json:"options,omitempty"` // For MultipleChoice/TrueFalse
@@ -77,6 +78,7 @@ type QuizAttempt struct {
 	// Relations - not stored in DB
 	Student *Student `db:"-" json:"student,omitempty"`
 	Quiz    *Quiz    `db:"-" json:"quiz,omitempty"`
+	Answers []*StudentAnswer `db:"-" json:"answers,omitempty"`
 }
 
 // StudentAnswer represents a student's answer to a specific question in an attempt.

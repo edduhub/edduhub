@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ type ApiQuiz = {
 };
 
 export default function QuizzesPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [quizzes, setQuizzes] = useState<DisplayQuiz[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +97,10 @@ export default function QuizzesPage() {
     try {
       const attempt = await api.post<any>(endpoints.quizAttempts.start(quizId), {});
       setQuizzes(prev => prev.map(q => q.id === quizId ? { ...q, status: 'in_progress', attempts: q.attempts + 1 } : q));
-      // Navigate to attempt page if exists (placeholder)
+      // Navigate to attempt page
+      if (attempt?.id) {
+        router.push(`/quizzes/${quizId}/attempt/${attempt.id}`);
+      }
     } catch (e) {
       console.error(e);
       setError('Failed to start quiz');
@@ -269,10 +274,11 @@ export default function QuizzesPage() {
                 {user?.role === 'student' ? (
                   <Button 
                     className="w-full"
-                    onClick={() => startQuiz(quiz.id)}
-                    disabled={quiz.attempts >= quiz.maxAttempts && quiz.status === 'completed'}
+                    onClick={() => quiz.status === 'completed' ? undefined : startQuiz(quiz.id)}
+                    disabled={quiz.status === 'completed' || (quiz.attempts >= quiz.maxAttempts && quiz.status === 'completed')}
+                    variant={quiz.status === 'completed' ? 'outline' : 'default'}
                   >
-                    {quiz.status === 'completed' ? 'View Results' : (
+                    {quiz.status === 'completed' ? 'Completed' : (
                       <>
                         <Play className="mr-2 h-4 w-4" />
                         Start Quiz

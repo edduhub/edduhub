@@ -64,6 +64,11 @@ const (
 // It automatically sets CreatedAt and UpdatedAt timestamps.
 // Uses parameterized queries to prevent SQL injection.
 func (r *quizRepository) CreateQuiz(ctx context.Context, quiz *models.Quiz) error {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return fmt.Errorf("database connection is required")
+	}
+	
 	// Set timestamps
 	now := time.Now()
 	quiz.CreatedAt = now
@@ -94,6 +99,11 @@ func (r *quizRepository) CreateQuiz(ctx context.Context, quiz *models.Quiz) erro
 // GetQuizByID retrieves a quiz by its ID with college isolation.
 // Returns an error if the quiz doesn't exist or doesn't belong to the college.
 func (r *quizRepository) GetQuizByID(ctx context.Context, collegeID int, quizID int) (*models.Quiz, error) {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return nil, fmt.Errorf("database connection is required")
+	}
+	
 	quiz := &models.Quiz{}
 
 	// Query with college isolation
@@ -115,6 +125,11 @@ func (r *quizRepository) GetQuizByID(ctx context.Context, collegeID int, quizID 
 // UpdateQuiz updates all fields of an existing quiz.
 // Updates the UpdatedAt timestamp automatically.
 func (r *quizRepository) UpdateQuiz(ctx context.Context, quiz *models.Quiz) error {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return fmt.Errorf("database connection is required")
+	}
+	
 	// Update timestamp
 	quiz.UpdatedAt = time.Now()
 
@@ -141,6 +156,11 @@ func (r *quizRepository) UpdateQuiz(ctx context.Context, quiz *models.Quiz) erro
 // Only fields that are non-nil in the request will be updated.
 // Uses dynamic SQL building for efficiency.
 func (r *quizRepository) UpdateQuizPartial(ctx context.Context, collegeID int, quizID int, req *models.UpdateQuizRequest) error {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return fmt.Errorf("database connection is required")
+	}
+	
 	// Input validation
 	if collegeID <= 0 {
 		return fmt.Errorf("UpdateQuizPartial: collegeID must be greater than 0")
@@ -222,6 +242,11 @@ func (r *quizRepository) UpdateQuizPartial(ctx context.Context, collegeID int, q
 // DeleteQuiz removes a quiz from the database.
 // Ensures college isolation by checking college_id in the WHERE clause.
 func (r *quizRepository) DeleteQuiz(ctx context.Context, collegeID int, quizID int) error {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return fmt.Errorf("database connection is required")
+	}
+	
 	sql := `DELETE FROM quizzes WHERE id = $1 AND college_id = $2`
 	args := []any{quizID, collegeID}
 
@@ -241,6 +266,11 @@ func (r *quizRepository) DeleteQuiz(ctx context.Context, collegeID int, quizID i
 // FindQuizzesByCourse retrieves quizzes for a specific course with pagination.
 // Results are ordered by due date (descending) then creation date (descending).
 func (r *quizRepository) FindQuizzesByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Quiz, error) {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return nil, fmt.Errorf("database connection is required")
+	}
+	
 	quizzes := []*models.Quiz{}
 
 	sql := `SELECT id, college_id, course_id, title, description, time_limit_minutes, due_date, created_at, updated_at
@@ -261,6 +291,11 @@ func (r *quizRepository) FindQuizzesByCourse(ctx context.Context, collegeID int,
 // CountQuizzesByCourse returns the total count of quizzes for a specific course.
 // Used for pagination calculations.
 func (r *quizRepository) CountQuizzesByCourse(ctx context.Context, collegeID int, courseID int) (int, error) {
+	// Check if database connection is available
+	if r.DB == nil || r.DB.Pool == nil {
+		return 0, fmt.Errorf("database connection is required")
+	}
+	
 	sql := `SELECT COUNT(*) FROM quizzes WHERE college_id = $1 AND course_id = $2`
 	args := []any{collegeID, courseID}
 

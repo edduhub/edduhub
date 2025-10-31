@@ -611,17 +611,3 @@ func (s *analyticsService) overallAveragePercentage(ctx context.Context, college
 	return 0, nil
 }
 
-func percentageToGPA(percentage float64) float64 {
-	if percentage <= 0 {
-		return 0
-	}
-	gpa := (percentage / 100) * 4
-	if gpa > 4 {
-		gpa = 4
-	}
-	return roundFloat(gpa)
-}
-
-func roundFloat(value float64) float64 {
-	return math.Round(value*100) / 100
-}

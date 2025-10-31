@@ -19,11 +19,11 @@ type AttendanceRepository interface {
 	UnFreezeAttendance(ctx context.Context, collegeID int, studentID int) error
 
 	// Get methods with pagination
-	// get attendnace by course of all students 
+	// get attendnace by course of all students
 	GetAttendanceByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
-	// get attendnace of a particular student in a course 
+	// get attendnace of a particular student in a course
 	GetAttendanceStudentInCourse(ctx context.Context, collegeID int, studentID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
-	// get attendance of a student across all courses 
+	// get attendance of a student across all courses
 	GetAttendanceStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.Attendance, error)
 	GetAttendanceByLecture(ctx context.Context, collegeID int, lectureID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
 }
@@ -218,20 +218,23 @@ WHERE college_id = $2 AND student_id = $3 AND status = $4`
 
 func (a *attendanceRepository) SetAttendanceStatus(ctx context.Context, collegeID int, studentID int, courseID int, lectureID int, status string) error {
 	now := time.Now()
+	// Truncate date for the 'date' column to match MarkAttendance behavior
+	attendanceDate := now.Truncate(24 * time.Hour)
 
 	sql := `INSERT INTO attendance (
     student_id,
     course_id,
     college_id,
     lecture_id,
+    date,
     status,
     scanned_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) ON CONFLICT (student_id, course_id, college_id, lecture_id)
+    $1, $2, $3, $4, $5, $6, $7
+) ON CONFLICT (student_id, course_id, lecture_id, date, college_id)
 DO UPDATE SET status = EXCLUDED.status, scanned_at = EXCLUDED.scanned_at`
 
-	_, err := a.Pool.Exec(ctx, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), status, now)
+	_, err := a.Pool.Exec(ctx, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), attendanceDate, status, now)
 	if err != nil {
 		return fmt.Errorf("SetAttendanceStatus: failed to execute query: %w", err)
 	}

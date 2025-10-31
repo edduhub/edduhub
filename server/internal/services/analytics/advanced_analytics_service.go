@@ -186,6 +186,13 @@ func (s *advancedAnalyticsService) GetStudentProgression(ctx context.Context, co
 	// Analyze overall trend
 	progression.OverallTrend = s.analyzeOverallTrend(gradeProgression, attendanceTrend)
 
+	// Get skill development data
+	skillDevelopment, err := s.getSkillDevelopment(ctx, collegeID, studentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get skill development: %w", err)
+	}
+	progression.SkillDevelopment = skillDevelopment
+
 	// Generate recommendations
 	progression.Recommendations = s.generateStudentRecommendations(progression.OverallTrend, gradeProgression, attendanceTrend)
 
@@ -233,6 +240,13 @@ func (s *advancedAnalyticsService) GetCourseEngagement(ctx context.Context, coll
 		return nil, fmt.Errorf("failed to get dropout risk students: %w", err)
 	}
 	engagement.DropoutRiskStudents = dropoutRisk
+
+	// Get engagement timeline
+	timeline, err := s.getEngagementTimeline(ctx, collegeID, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get engagement timeline: %w", err)
+	}
+	engagement.EngagementTimeline = timeline
 
 	return engagement, nil
 }
@@ -1108,4 +1122,127 @@ func (s *advancedAnalyticsService) getCoursePerformanceTrends(ctx context.Contex
 	}
 
 	return trends, nil
+}
+// percentageToGPA converts percentage score to GPA scale (0.0-4.0)
+func percentageToGPA(percentage float64) float64 {
+	if percentage >= 90 {
+		return 4.0
+	} else if percentage >= 85 {
+		return 3.7
+	} else if percentage >= 82 {
+		return 3.3
+	} else if percentage >= 78 {
+		return 3.0
+	} else if percentage >= 75 {
+		return 2.7
+	} else if percentage >= 72 {
+		return 2.3
+	} else if percentage >= 68 {
+		return 2.0
+	} else if percentage >= 64 {
+		return 1.5
+	} else if percentage >= 60 {
+		return 1.0
+	}
+	return 0.0
+}
+
+// getSkillDevelopment calculates skill development over time based on grades and performance
+func (s *advancedAnalyticsService) getSkillDevelopment(ctx context.Context, collegeID, studentID int) ([]SkillPoint, error) {
+	query := `
+		SELECT 
+			c.name as skill_area,
+			DATE_TRUNC('month', g.created_at) as month,
+			AVG(g.percentage) as avg_score
+		FROM grades g
+		JOIN courses c ON c.id = g.course_id AND c.college_id = g.college_id
+		WHERE g.college_id = $1 AND g.student_id = $2
+		GROUP BY c.name, DATE_TRUNC('month', g.created_at)
+		ORDER BY month DESC
+		LIMIT 12`
+
+	rows, err := s.db.Pool.Query(ctx, query, collegeID, studentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	skillPoints := make([]SkillPoint, 0)
+	for rows.Next() {
+		var skillArea string
+		var month time.Time
+		var avgScore float64
+
+		if err := rows.Scan(&skillArea, &month, &avgScore); err != nil {
+			continue
+		}
+
+		skillPoints = append(skillPoints, SkillPoint{
+			Skill:    skillArea,
+			Level:    avgScore / 25, // Convert to 0-4 scale
+			Date:     month,
+		})
+	}
+
+	return skillPoints, nil
+}
+
+// getEngagementTimeline retrieves engagement data over time for a course
+func (s *advancedAnalyticsService) getEngagementTimeline(ctx context.Context, collegeID, courseID int) ([]EngagementPoint, error) {
+	query := `
+		SELECT 
+			DATE_TRUNC('week', activity_date) as week,
+			active_users,
+			assignments_done,
+			quizzes_taken,
+			forum_posts
+		FROM (
+			-- Attendance activity
+			SELECT date as activity_date, COUNT(DISTINCT student_id) as active_users, 0 as assignments_done, 0 as quizzes_taken, 0 as forum_posts
+			FROM attendance WHERE college_id = $1 AND course_id = $2
+			GROUP BY date
+			UNION ALL
+			-- Assignment submissions
+			SELECT DATE(s.created_at) as activity_date, 0 as active_users, COUNT(*) as assignments_done, 0 as quizzes_taken, 0 as forum_posts
+			FROM assignment_submissions s 
+			JOIN assignments a ON a.id = s.assignment_id 
+			WHERE a.college_id = $1 AND a.course_id = $2
+			GROUP BY DATE(s.created_at)
+			UNION ALL
+			-- Quiz attempts
+			SELECT DATE(qa.created_at) as activity_date, 0 as active_users, 0 as assignments_done, COUNT(*) as quizzes_taken, 0 as forum_posts
+			FROM quiz_attempts qa 
+			JOIN quizzes q ON q.id = qa.quiz_id 
+			WHERE qa.college_id = $1 AND q.course_id = $2
+			GROUP BY DATE(qa.created_at)
+		) weekly_activity
+		GROUP BY DATE_TRUNC('week', activity_date), active_users, assignments_done, quizzes_taken, forum_posts
+		ORDER BY week DESC
+		LIMIT 12`
+
+	rows, err := s.db.Pool.Query(ctx, query, collegeID, courseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	timeline := make([]EngagementPoint, 0)
+	for rows.Next() {
+		var week time.Time
+		var activeUsers, assignmentsDone, quizzesTaken, forumPosts int
+
+		if err := rows.Scan(&week, &activeUsers, &assignmentsDone, &quizzesTaken, &forumPosts); err != nil {
+			continue
+		}
+
+		timeline = append(timeline, EngagementPoint{
+			Date:            week,
+			ActiveUsers:     activeUsers,
+			AssignmentsDone: assignmentsDone,
+			QuizzesTaken:    quizzesTaken,
+			ForumPosts:      forumPosts,
+		})
+	}
+
+	return timeline, nil
 }

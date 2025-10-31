@@ -1,14 +1,23 @@
-// Enhanced API client with authentication support
+// Enhanced API client with authentication support, retry logic, and better error handling
 
 import { AuthSession } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const AUTH_STORAGE_KEY = 'edduhub_auth';
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
 
 export class APIError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public code?: string) {
     super(message);
     this.name = 'APIError';
+  }
+}
+
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
   }
 }
 
@@ -34,18 +43,64 @@ type RequestOptions = {
   body?: any;
   headers?: Record<string, string>;
   requireAuth?: boolean;
+  retries?: number;
+  retryDelay?: number;
 };
+
+async function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  retries: number = MAX_RETRIES,
+  delayMs: number = RETRY_DELAY
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry on certain status codes
+      if (error instanceof APIError && [400, 401, 403, 404].includes(error.status)) {
+        throw error;
+      }
+      
+      // Don't retry network errors on the last attempt
+      if (attempt === retries || error instanceof NetworkError) {
+        throw error;
+      }
+      
+      // Exponential backoff
+      const backoffDelay = delayMs * Math.pow(2, attempt);
+      await delay(backoffDelay);
+    }
+  }
+  
+  throw lastError!;
+}
 
 export async function apiClient<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { method = 'GET', body, headers = {}, requireAuth = true } = options;
+  const { 
+    method = 'GET', 
+    body, 
+    headers = {}, 
+    requireAuth = true,
+    retries = MAX_RETRIES,
+    retryDelay = RETRY_DELAY
+  } = options;
 
   const token = getAuthToken();
   
   const requestHeaders: HeadersInit = {
     'Content-Type': 'application/json',
+    'X-Client-Version': '1.0.0',
     ...headers,
   };
 
@@ -64,32 +119,57 @@ export async function apiClient<T>(
     config.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, config);
+  const attemptRequest = async (): Promise<T> => {
+    const response = await fetch(`${API_BASE}${endpoint}`, config);
 
-  if (!response.ok) {
-    let message = 'Request failed';
-    try {
-      const errorData = await response.json();
-      message = errorData.message || errorData.error || message;
-    } catch {
-      message = response.statusText || message;
+    if (!response.ok) {
+      let message = 'Request failed';
+      let code: string | undefined;
+      
+      try {
+        const errorData = await response.json();
+        message = errorData.message || errorData.error || message;
+        code = errorData.code;
+      } catch {
+        message = response.statusText || message;
+      }
+      
+      // Handle authentication errors
+      if (response.status === 401) {
+        // Clear invalid token
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+        }
+        // Redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login';
+        }
+      }
+      
+      throw new APIError(response.status, message, code);
     }
-    throw new APIError(response.status, message);
-  }
 
-  // Handle empty responses
-  const contentType = response.headers.get('content-type');
-  if (!contentType || !contentType.includes('application/json')) {
-    return {} as T;
-  }
+    // Handle empty responses
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      return {} as T;
+    }
 
-  const data = await response.json();
-  // Backend returns {data: ..., message: ...} format
-  // Extract the actual data
-  if (data && typeof data === 'object' && 'data' in data) {
-    return data.data as T;
+    const data = await response.json();
+    // Backend returns {data: ..., message: ...} format
+    // Extract the actual data
+    if (data && typeof data === 'object' && 'data' in data) {
+      return data.data as T;
+    }
+    return data;
+  };
+
+  // Use retry logic for GET requests and non-auth endpoints
+  if (method === 'GET' || !requireAuth) {
+    return retryWithBackoff(attemptRequest, retries, retryDelay);
   }
-  return data;
+  
+  return attemptRequest();
 }
 
 // Convenience methods
@@ -114,10 +194,10 @@ export const api = {
 export const endpoints = {
   // Auth
   auth: {
-    login: '/api/auth/login',
-    register: '/api/auth/register',
-    logout: '/api/auth/logout',
-    refresh: '/api/auth/refresh',
+    login: '/auth/login',
+    register: '/auth/register',
+    logout: '/auth/logout',
+    refresh: '/auth/refresh',
     profile: '/api/profile',
   },
   
@@ -160,13 +240,13 @@ export const endpoints = {
   attendance: {
     myAttendance: '/api/attendance/student/me',
     myCourseStats: '/api/attendance/stats/courses',
-    mark: '/api/attendance/mark',
-    markBulk: '/api/attendance/mark-bulk',
-    generateQR: '/api/attendance/qr/generate',
-    processQR: '/api/attendance/qr/process',
+    mark: (courseId: number, lectureId: number) => `/api/attendance/mark/course/${courseId}/lecture/${lectureId}`,
+    markBulk: (courseId: number, lectureId: number) => `/api/attendance/mark/bulk/course/${courseId}/lecture/${lectureId}`,
+    generateQR: (courseId: number, lectureId: number) => `/api/attendance/course/${courseId}/lecture/${lectureId}/qrcode`,
+    processQR: '/api/attendance/process-qr',
     byStudent: (studentId: number) => `/api/attendance/student/${studentId}`,
     byCourse: (courseId: number) => `/api/attendance/course/${courseId}`,
-    update: (id: number) => `/api/attendance/${id}`,
+    update: (courseId: number, lectureId: number, studentId: number) => `/api/attendance/course/${courseId}/lecture/${lectureId}/student/${studentId}`,
   },
   
   // Grades
@@ -175,10 +255,10 @@ export const endpoints = {
     myCourseGrades: '/api/grades/courses',
     byCourse: (courseId: number) => `/api/grades/course/${courseId}`,
     byStudent: (studentId: number) => `/api/grades/student/${studentId}`,
-    createAssessment: '/api/grades/assessment',
-    updateAssessment: (id: number) => `/api/grades/assessment/${id}`,
-    deleteAssessment: (id: number) => `/api/grades/assessment/${id}`,
-    submitScores: '/api/grades/scores',
+    createAssessment: (courseId: number) => `/api/grades/course/${courseId}`,
+    updateAssessment: (courseId: number, assessmentId: number) => `/api/grades/course/${courseId}/assessment/${assessmentId}`,
+    deleteAssessment: (courseId: number, assessmentId: number) => `/api/grades/course/${courseId}/assessment/${assessmentId}`,
+    submitScores: (courseId: number, assessmentId: number) => `/api/grades/course/${courseId}/assessment/${assessmentId}/scores`,
   },
   
   // Announcements
@@ -224,12 +304,10 @@ export const endpoints = {
   // Quiz Attempts
   quizAttempts: {
     start: (quizId: number) => `/api/quizzes/${quizId}/attempts/start`,
-    submit: (quizId: number, attemptId: number) =>
-      `/api/quizzes/${quizId}/attempts/${attemptId}/submit`,
-    get: (quizId: number, attemptId: number) =>
-      `/api/quizzes/${quizId}/attempts/${attemptId}`,
+    submit: (attemptId: number) => `/api/attempts/${attemptId}/submit`,
+    get: (attemptId: number) => `/api/attempts/${attemptId}`,
     listByQuiz: (quizId: number) => `/api/quizzes/${quizId}/attempts`,
-    listByStudent: (studentId: number) => `/api/students/${studentId}/quiz-attempts`,
+    listByStudent: (studentId: number) => `/api/attempts/student/${studentId}`,
   },
   
   // Analytics

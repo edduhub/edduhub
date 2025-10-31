@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
@@ -145,8 +146,42 @@ func (s *autoGradingService) gradeMultipleChoice(question *models.Question, answ
 
 // gradeShortAnswer grades short answer questions using exact or partial match
 func (s *autoGradingService) gradeShortAnswer(question *models.Question, answer *models.StudentAnswer) (bool, int) {
-	// Short answer grading is not yet implemented - requires manual grading
-	// TODO: Implement short answer grading with correct answer storage
+	// If no correct answer is defined, question requires manual grading
+	if question.CorrectAnswer == nil || *question.CorrectAnswer == "" {
+		return false, 0
+	}
+
+	// If student didn't provide an answer
+	if answer.AnswerText == "" {
+		return false, 0
+	}
+
+	// Normalize both answers for comparison
+	studentAnswer := normalizeAnswer(answer.AnswerText)
+	correctAnswer := normalizeAnswer(*question.CorrectAnswer)
+
+	// Check for exact match
+	if studentAnswer == correctAnswer {
+		return true, question.Points
+	}
+
+	// Check for multiple acceptable answers (separated by semicolons)
+	acceptableAnswers := splitAnswers(*question.CorrectAnswer)
+	for _, acceptable := range acceptableAnswers {
+		if studentAnswer == normalizeAnswer(acceptable) {
+			return true, question.Points
+		}
+	}
+
+	// Check for partial match (contains key terms)
+	// Award partial credit if student answer contains the correct answer
+	if containsAnswer(studentAnswer, correctAnswer) {
+		partialPoints := question.Points / 2
+		if partialPoints > 0 {
+			return false, partialPoints
+		}
+	}
+
 	return false, 0
 }
 
@@ -182,4 +217,69 @@ func (s *autoGradingService) CalculateScore(ctx context.Context, collegeID int, 
 	}
 
 	return totalScore, nil
+}
+
+// normalizeAnswer normalizes an answer string for comparison
+// Converts to lowercase, trims whitespace, and removes extra spaces
+func normalizeAnswer(answer string) string {
+	// Convert to lowercase
+	normalized := strings.ToLower(answer)
+	
+	// Trim leading and trailing whitespace
+	normalized = strings.TrimSpace(normalized)
+	
+	// Replace multiple spaces with single space
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	
+	// Remove common punctuation that doesn't affect meaning
+	normalized = strings.ReplaceAll(normalized, ".", "")
+	normalized = strings.ReplaceAll(normalized, ",", "")
+	normalized = strings.ReplaceAll(normalized, "!", "")
+	normalized = strings.ReplaceAll(normalized, "?", "")
+	
+	return normalized
+}
+
+// splitAnswers splits multiple acceptable answers separated by semicolons
+func splitAnswers(answers string) []string {
+	parts := strings.Split(answers, ";")
+	result := make([]string, 0, len(parts))
+	
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	
+	return result
+}
+
+// containsAnswer checks if the student answer contains the correct answer
+// This is used for partial credit matching
+func containsAnswer(studentAnswer, correctAnswer string) bool {
+	// Check if student answer contains all key words from correct answer
+	correctWords := strings.Fields(correctAnswer)
+	
+	// Ignore very short words (articles, prepositions)
+	minWordLength := 3
+	keyWordCount := 0
+	matchedWords := 0
+	
+	for _, word := range correctWords {
+		if len(word) >= minWordLength {
+			keyWordCount++
+			if strings.Contains(studentAnswer, word) {
+				matchedWords++
+			}
+		}
+	}
+	
+	// Award partial credit if at least 70% of key words are present
+	if keyWordCount > 0 {
+		matchRatio := float64(matchedWords) / float64(keyWordCount)
+		return matchRatio >= 0.7
+	}
+	
+	return false
 }

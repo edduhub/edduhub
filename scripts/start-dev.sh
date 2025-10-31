@@ -80,7 +80,7 @@ start_containers() {
 run_kratos_migrations() {
   echo "Running Kratos SQL migrations..."
   if ! docker compose -f "$COMPOSE_FILE" run --rm --no-deps kratos \
-    migrate sql up "$KRATOS_DSN" --yes \
+    migrate sql "$KRATOS_DSN" -y \
     >/tmp/edduhub-kratos-migrate.log 2>&1; then
     echo "ERROR: Kratos migrations failed. Check /tmp/edduhub-kratos-migrate.log for details." >&2
     tail -n 20 /tmp/edduhub-kratos-migrate.log >&2 || true

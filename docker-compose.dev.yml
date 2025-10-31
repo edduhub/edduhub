@@ -65,7 +65,7 @@ services:
       - edduhub-kratos-data:/var/lib/postgresql/data
 
   kratos:
-    image: oryd/kratos:latest
+    image: oryd/kratos:v1.0.0
     container_name: edduhub-kratos
     depends_on:
       kratos-db:

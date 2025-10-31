@@ -162,8 +162,23 @@ func NewServices(cfg *config.Config) *Services {
 	webhookRepo := repository.NewWebhookRepository(cfg.DB)
 	auditRepo := repository.NewAuditLogRepository(cfg.DB)
 
-	questionService := quiz.NewSimpleQuestionService(questionRepo)
-	quizAttemptService := quiz.NewSimpleQuizAttemptService(quizAttemptRepo, studentAnswerRepo, quizRepo)
+	answerOptionRepo := repository.NewAnswerOptionRepository(cfg.DB)
+    questionService := quiz.NewSimpleQuestionService(questionRepo)
+    // Auto-grading service for quiz attempts
+    autoGradingService := quiz.NewAutoGradingService(
+        questionRepo,
+        studentAnswerRepo,
+        quizAttemptRepo,
+        answerOptionRepo,
+    )
+    quizAttemptService := quiz.NewSimpleQuizAttemptService(
+        quizAttemptRepo,
+        studentAnswerRepo,
+        quizRepo,
+        questionRepo,
+        answerOptionRepo,
+        autoGradingService,
+    )
 	fileRepo := repository.NewFileRepository(cfg.DB)
 	var minioNative *minio.Client
 	if minioClient != nil {
