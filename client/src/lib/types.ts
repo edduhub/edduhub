@@ -247,8 +247,30 @@ export type DashboardMetrics = {
   attendanceRate: number;
   averageGrade?: number;
   announcements: number;
-  upcomingEvents: number;
+  upcomingEvents?: number;
   pendingSubmissions?: number;
+};
+
+export type DashboardEvent = {
+  id: number;
+  title: string;
+  start: string;
+  end?: string;
+  course?: string;
+  type?: string;
+};
+
+export type DashboardActivity = {
+  id: number;
+  message: string;
+  entity: string;
+  timestamp: string;
+};
+
+export type DashboardResponse = {
+  metrics: DashboardMetrics;
+  upcomingEvents: DashboardEvent[];
+  recentActivity: DashboardActivity[];
 };
 
 export type AnalyticsData = {

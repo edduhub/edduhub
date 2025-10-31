@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // AppConfig holds general application configuration settings.
@@ -26,6 +27,11 @@ type AppConfig struct {
 	// Loaded from APP_LOG_LEVEL environment variable.
 	// Default: "info"
 	LogLevel string
+
+	// CORSOrigins specifies allowed origins for CORS requests.
+	// Loaded from CORS_ORIGINS environment variable (comma-separated).
+	// Default: ["http://localhost:3000"] for development
+	CORSOrigins []string
 }
 
 // LoadAppConfig loads the general application configuration from environment variables.
@@ -81,6 +87,26 @@ func LoadAppConfig() (*AppConfig, error) {
 		return nil, fmt.Errorf("invalid APP_LOG_LEVEL: must be one of 'debug', 'info', 'warn', 'error', got %s", logLevel)
 	}
 	config.LogLevel = logLevel
+
+	// Load CORS origins with secure default
+	corsOriginsStr := os.Getenv("CORS_ORIGINS")
+	if corsOriginsStr == "" {
+		// Secure default: only allow localhost in development
+		config.CORSOrigins = []string{"http://localhost:3000"}
+	} else {
+		// Parse comma-separated origins
+		origins := strings.Split(corsOriginsStr, ",")
+		config.CORSOrigins = make([]string, 0, len(origins))
+		for _, origin := range origins {
+			trimmed := strings.TrimSpace(origin)
+			if trimmed != "" {
+				config.CORSOrigins = append(config.CORSOrigins, trimmed)
+			}
+		}
+		if len(config.CORSOrigins) == 0 {
+			return nil, fmt.Errorf("CORS_ORIGINS is set but contains no valid origins")
+		}
+	}
 
 	return config, nil
 }

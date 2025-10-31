@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	"eduhub/server/api/handler"
@@ -24,13 +25,13 @@ type App struct {
 	middleware *middleware.Middleware
 }
 
-func New() *App {
+func New() (*App, error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	if cfg.DB == nil || cfg.DB.Pool == nil {
-		panic("database connection pool is nil")
+		return nil, fmt.Errorf("database connection pool is nil")
 	}
 	// Initialize auth service
 	services := services.NewServices(cfg)
@@ -45,7 +46,7 @@ func New() *App {
 		services:   services,
 		handlers:   handlers,
 		middleware: mid,
-	}
+	}, nil
 }
 
 func (a *App) Start() error {
@@ -63,9 +64,10 @@ func (a *App) Start() error {
 	
 	a.e.Use(echomid.Recover())
 	
-	// OPTIMIZED: Configure CORS with specific settings instead of defaults
+	// OPTIMIZED: Configure CORS with specific settings from config
+	// Uses environment-configured origins or defaults to localhost:3000
 	a.e.Use(echomid.CORSWithConfig(echomid.CORSConfig{
-		AllowOrigins: []string{"*"}, // Configure this properly in production
+		AllowOrigins: a.config.AppConfig.CORSOrigins,
 		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		MaxAge:       3600, // Cache preflight requests for 1 hour

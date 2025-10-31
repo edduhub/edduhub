@@ -37,12 +37,18 @@ func main() {
 	}
 
 	// Create the app instance (which loads config, logger, db, etc.)
-	setup := app.New()
+	setup, err := app.New()
+	if err != nil {
+		logger.Logger.Fatal().Err(err).Msg("failed to create app instance")
+		return
+	}
 	logger.Logger.Debug().Msg("app instance created")
+
 	// Start the application
 	err = setup.Start()
 	if err != nil {
-		logger.Logger.Error().Msg("failed to start application")
+		logger.Logger.Fatal().Err(err).Msg("failed to start application")
+		return
 	}
 
 	logger.Logger.Debug().Msg("server stopped successfully")
