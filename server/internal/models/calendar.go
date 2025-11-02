@@ -29,9 +29,11 @@ type CalendarBlock struct {
 // CalendarBlockFilter can be used for querying lists of calendar blocks
 type CalendarBlockFilter struct {
 	CollegeID *int               `json:"college_id"` // Mandatory for most queries
+	CourseID  *int               `json:"course_id,omitempty"`
 	EventType *CalendarEventType `json:"event_type,omitempty"`
 	StartDate *time.Time         `json:"start_date,omitempty"` // Inclusive
 	EndDate   *time.Time         `json:"end_date,omitempty"`   // Inclusive
+	Search    *string            `json:"search,omitempty"`
 	Limit     uint64             `json:"limit,omitempty"`
 	Offset    uint64             `json:"offset,omitempty"`
 }

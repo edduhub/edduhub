@@ -8,6 +8,10 @@ import (
 )
 
 func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
+	// Initialize rate limiters
+	authRateLimiter := middleware.StrictRateLimiter()       // 5 requests per minute for auth
+	passwordRateLimiter := middleware.StrictRateLimiter()   // 5 requests per minute for password ops
+
 	// Public routes
 	e.GET("/health", a.System.HealthCheck)
 	e.GET("/ready", a.System.ReadinessCheck)
@@ -19,27 +23,28 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 		return c.Redirect(302, "/docs/index.html")
 	})
 	e.GET("/docs/*", echoSwagger.WrapHandler)
-	// Auth routes (public)
+
+	// Auth routes (public) with rate limiting
 	auth := e.Group("/auth")
-	auth.GET("/register", a.Auth.InitiateRegistration)
-	auth.POST("/register/complete", a.Auth.HandleRegistration)
-	auth.POST("/login", a.Auth.HandleLogin)
+	auth.GET("/register", a.Auth.InitiateRegistration, authRateLimiter.Middleware())
+	auth.POST("/register/complete", a.Auth.HandleRegistration, authRateLimiter.Middleware())
+	auth.POST("/login", a.Auth.HandleLogin, authRateLimiter.Middleware())
 	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateSession)
 
 	// Auth routes (require authentication)
 	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateSession)
-	auth.POST("/refresh", a.Auth.RefreshToken)
+	auth.POST("/refresh", a.Auth.RefreshToken, authRateLimiter.Middleware())
 
-	// Password management (public)
-	auth.POST("/password-reset", a.Auth.RequestPasswordReset)
-	auth.POST("/password-reset/complete", a.Auth.CompletePasswordReset)
+	// Password management (public) with strict rate limiting
+	auth.POST("/password-reset", a.Auth.RequestPasswordReset, passwordRateLimiter.Middleware())
+	auth.POST("/password-reset/complete", a.Auth.CompletePasswordReset, passwordRateLimiter.Middleware())
 
 	// Email verification (public)
 	auth.GET("/verify-email", a.Auth.VerifyEmail)
 	auth.POST("/verify-email/initiate", a.Auth.InitiateEmailVerification, m.ValidateJWT)
 
-	// Password change (authenticated)
-	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT)
+	// Password change (authenticated) with rate limiting
+	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT, passwordRateLimiter.Middleware())
 
 	// Protected API routes with audit logging
 	apiGroup := e.Group("/api", m.ValidateSession, m.RequireCollege)
@@ -368,4 +373,50 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	audit.GET("/users/:userID/activity", a.Audit.GetUserActivity)
 	audit.GET("/entities/:entityType/:entityID/history", a.Audit.GetEntityHistory)
 	audit.GET("/stats", a.Audit.GetAuditStats)
+
+	// Role and Permission Management
+	roles := apiGroup.Group("/roles", m.RequireRole(middleware.RoleAdmin))
+	roles.GET("", a.Role.ListRoles)
+	roles.POST("", a.Role.CreateRole)
+	roles.GET("/:roleID", a.Role.GetRole)
+	roles.PATCH("/:roleID", a.Role.UpdateRole)
+	roles.DELETE("/:roleID", a.Role.DeleteRole)
+	roles.POST("/:roleID/permissions", a.Role.AssignPermissionsToRole)
+
+	permissions := apiGroup.Group("/permissions", m.RequireRole(middleware.RoleAdmin))
+	permissions.GET("", a.Role.ListPermissions)
+
+	userRoles := apiGroup.Group("/user-roles", m.RequireRole(middleware.RoleAdmin))
+	userRoles.POST("", a.Role.AssignRoleToUser)
+	userRoles.GET("/users/:userID", a.Role.GetUserRoles)
+
+	// Fee Management
+	fees := apiGroup.Group("/fees")
+	// Fee structures (Admin only)
+	fees.GET("/structures", a.Fee.ListFeeStructures, m.RequireRole(middleware.RoleAdmin))
+	fees.POST("/structures", a.Fee.CreateFeeStructure, m.RequireRole(middleware.RoleAdmin))
+	fees.PATCH("/structures/:feeID", a.Fee.UpdateFeeStructure, m.RequireRole(middleware.RoleAdmin))
+	fees.DELETE("/structures/:feeID", a.Fee.DeleteFeeStructure, m.RequireRole(middleware.RoleAdmin))
+
+	// Fee assignments
+	fees.POST("/assign", a.Fee.AssignFeeToStudent, m.RequireRole(middleware.RoleAdmin))
+	fees.POST("/bulk-assign", a.Fee.BulkAssignFee, m.RequireRole(middleware.RoleAdmin))
+
+	// Student fee operations
+	fees.GET("/my-fees", a.Fee.GetStudentFees, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	fees.GET("/my-fees/summary", a.Fee.GetStudentFeesSummary, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	fees.POST("/payments", a.Fee.MakeFeePayment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	fees.POST("/payments/online", a.Fee.InitiateOnlinePayment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	fees.GET("/my-payments", a.Fee.GetStudentPayments, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+
+	// Timetable Management
+	timetables := apiGroup.Group("/timetable")
+	// Admin/Faculty endpoints
+	timetables.POST("", a.Timetable.CreateTimeTableBlock, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	timetables.GET("", a.Timetable.GetTimeTableBlocks)
+	timetables.PATCH("/:blockID", a.Timetable.UpdateTimeTableBlock, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	timetables.DELETE("/:blockID", a.Timetable.DeleteTimeTableBlock, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Student timetable
+	timetables.GET("/my-timetable", a.Timetable.GetStudentTimetable, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 }

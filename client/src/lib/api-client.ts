@@ -359,6 +359,53 @@ export const endpoints = {
     courseAttendance: (courseId: number) => `/api/reports/courses/${courseId}/attendance`,
     courseReport: (courseId: number) => `/api/reports/courses/${courseId}/report`,
   },
+
+  // Roles and Permissions
+  roles: {
+    list: '/api/roles',
+    get: (id: number) => `/api/roles/${id}`,
+    create: '/api/roles',
+    update: (id: number) => `/api/roles/${id}`,
+    delete: (id: number) => `/api/roles/${id}`,
+    assignPermissions: (id: number) => `/api/roles/${id}/permissions`,
+  },
+
+  permissions: {
+    list: '/api/permissions',
+  },
+
+  userRoles: {
+    assign: '/api/user-roles',
+    getUserRoles: (userId: number) => `/api/user-roles/users/${userId}`,
+  },
+
+  // Fees
+  fees: {
+    structures: {
+      list: '/api/fees/structures',
+      create: '/api/fees/structures',
+      update: (feeId: number) => `/api/fees/structures/${feeId}`,
+      delete: (feeId: number) => `/api/fees/structures/${feeId}`,
+    },
+    assign: '/api/fees/assign',
+    bulkAssign: '/api/fees/bulk-assign',
+    myFees: '/api/fees/my-fees',
+    myFeesSummary: '/api/fees/my-fees/summary',
+    payments: {
+      create: '/api/fees/payments',
+      initiateOnline: '/api/fees/payments/online',
+      list: '/api/fees/my-payments',
+    },
+  },
+
+  // Timetable
+  timetable: {
+    list: '/api/timetable',
+    create: '/api/timetable',
+    update: (blockId: number) => `/api/timetable/${blockId}`,
+    delete: (blockId: number) => `/api/timetable/${blockId}`,
+    myTimetable: '/api/timetable/my-timetable',
+  },
 };
 
 export async function fetchQuizzes() {

@@ -2,6 +2,7 @@ package attendance
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -63,7 +64,13 @@ func (a *attendanceService) GenerateQRCode(ctx context.Context, collegeID int, c
 
 // generateSecureToken generates a cryptographically secure random token
 func generateSecureToken() string {
-	return fmt.Sprintf("%d-%d", time.Now().Unix(), time.Now().Nanosecond())
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		// Fallback to timestamp-based token if crypto/rand fails (extremely rare)
+		return fmt.Sprintf("%d-%d", time.Now().Unix(), time.Now().Nanosecond())
+	}
+	return base64.URLEncoding.EncodeToString(b)
 }
 
 // ProcessQRCode validates and processes QR code for attendance marking

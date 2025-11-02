@@ -58,7 +58,7 @@ func (s *calendarService) DeleteEvent(ctx context.Context, collegeID int, eventI
 
 func (s *calendarService) GetEventsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.CalendarBlock, error) {
 	filter := models.CalendarBlockFilter{
-		CollegeID: collegeID,
+		CollegeID: &collegeID,
 		CourseID:  &courseID,
 		Limit:     100,
 	}
@@ -68,17 +68,16 @@ func (s *calendarService) GetEventsByCourse(ctx context.Context, collegeID, cour
 func (s *calendarService) GetUpcomingEvents(ctx context.Context, collegeID int, limit int) ([]*models.CalendarBlock, error) {
 	now := time.Now()
 	filter := models.CalendarBlockFilter{
-		CollegeID:   collegeID,
-		StartDate:   &now,
-		IncludePast: false,
-		Limit:       limit,
+		CollegeID: &collegeID,
+		StartDate: &now,
+		Limit:     uint64(limit),
 	}
 	return s.calendarRepo.GetCalendarBlocks(ctx, filter)
 }
 
 func (s *calendarService) SearchEvents(ctx context.Context, collegeID int, query string) ([]*models.CalendarBlock, error) {
 	filter := models.CalendarBlockFilter{
-		CollegeID: collegeID,
+		CollegeID: &collegeID,
 		Search:    &query,
 		Limit:     50,
 	}

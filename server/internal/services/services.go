@@ -31,6 +31,9 @@ import (
 	"eduhub/server/internal/services/student"
 	"eduhub/server/internal/services/user"
 	"eduhub/server/internal/services/webhook"
+	"eduhub/server/internal/services/role"
+	"eduhub/server/internal/services/fee"
+	"eduhub/server/internal/services/timetable"
 	storageclient "eduhub/server/internal/storage"
 	"eduhub/server/pkg/jwt"
 	minio "github.com/minio/minio-go/v7"
@@ -66,6 +69,9 @@ type Services struct {
 	WebhookService      webhook.WebhookService
 	AuditService        audit.AuditService
 	EmailService        email.EmailService
+	RoleService         role.RoleService
+	FeeService          fee.FeeService
+	TimetableService    timetable.TimetableService
 	DB                  *repository.DB
 }
 
@@ -156,6 +162,9 @@ func NewServices(cfg *config.Config) *Services {
 	userService := user.NewUserService(userRepo)
 	announcementService := announcement.NewAnnouncementService(announcementRepo)
 	profileService := profile.NewProfileService(profileRepo)
+
+	// Create file repository early for course material service
+	fileRepo := repository.NewFileRepository(cfg.DB)
 	courseMaterialService := course_material.NewCourseMaterialService(courseRepo, courseMaterialRepo, fileRepo, studentRepo)
 
 	// New services
@@ -165,6 +174,9 @@ func NewServices(cfg *config.Config) *Services {
 	notificationRepo := repository.NewNotificationRepository(cfg.DB)
 	webhookRepo := repository.NewWebhookRepository(cfg.DB)
 	auditRepo := repository.NewAuditLogRepository(cfg.DB)
+	roleRepo := repository.NewRoleRepository(cfg.DB)
+	feeRepo := repository.NewFeeRepository(cfg.DB)
+	timetableRepo := repository.NewTimeTableRepository(cfg.DB)
 
 	answerOptionRepo := repository.NewAnswerOptionRepository(cfg.DB)
     questionService := quiz.NewSimpleQuestionService(questionRepo)
@@ -183,7 +195,6 @@ func NewServices(cfg *config.Config) *Services {
         answerOptionRepo,
         autoGradingService,
     )
-	fileRepo := repository.NewFileRepository(cfg.DB)
 	var minioNative *minio.Client
 	if minioClient != nil {
 		minioNative = minioClient.Client()
@@ -195,7 +206,7 @@ func NewServices(cfg *config.Config) *Services {
 		storageUseSSL,
 	)
 	fileService := file.NewFileService(fileRepo, storageService)
-	websocketService := notification.NewWebSocketService(notificationRepo)
+	websocketService := notification.NewWebSocketService(notificationRepo, cfg.AppConfig.CORSOrigins)
 	notificationService := notification.NewNotificationService(notificationRepo, websocketService)
 	analyticsService := analytics.NewAnalyticsService(studentRepo, attendanceRepo, gradeRepo, courseRepo, assignmentRepo, cfg.DB)
 	advancedAnalyticsService := analytics.NewAdvancedAnalyticsService(cfg.DB, analyticsService)
@@ -210,6 +221,9 @@ func NewServices(cfg *config.Config) *Services {
 		cfg.EmailConfig.Password,
 		cfg.EmailConfig.FromAddress,
 	)
+	roleService := role.NewRoleService(roleRepo)
+	feeService := fee.NewFeeService(feeRepo)
+	timetableService := timetable.NewTimetableService(timetableRepo, studentRepo)
 
 	return &Services{
 		Auth:                  authService,
@@ -241,6 +255,9 @@ func NewServices(cfg *config.Config) *Services {
 		WebhookService:      webhookService,
 		AuditService:        auditService,
 		EmailService:        emailService,
+		RoleService:         roleService,
+		FeeService:          feeService,
+		TimetableService:    timetableService,
 		DB:                  cfg.DB,
 	}
 }

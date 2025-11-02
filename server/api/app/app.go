@@ -63,7 +63,19 @@ func (a *App) Start() error {
 	}))
 	
 	a.e.Use(echomid.Recover())
-	
+
+	// Add custom error handler middleware for standardized error responses
+	a.e.Use(middleware.ErrorHandlerMiddleware())
+
+	// Add panic recovery middleware
+	a.e.Use(middleware.RecoverMiddleware())
+
+	// SECURITY: Add comprehensive security headers (OWASP best practices)
+	a.e.Use(middleware.SecurityHeaders())
+
+	// Add validator middleware for input validation
+	a.e.Use(middleware.ValidatorMiddleware())
+
 	// OPTIMIZED: Configure CORS with specific settings from config
 	// Uses environment-configured origins or defaults to localhost:3000
 	a.e.Use(echomid.CORSWithConfig(echomid.CORSConfig{

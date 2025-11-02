@@ -32,13 +32,21 @@ func (m *MockAuthService) ValidateSession(ctx context.Context, sessionToken stri
 	return args.Get(0).(*auth.Identity), args.Error(1)
 }
 
+func (m *MockAuthService) ValidateJWT(ctx context.Context, token string) (*auth.Identity, error) {
+	args := m.Called(ctx, token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*auth.Identity), args.Error(1)
+}
+
 func (m *MockAuthService) HasRole(identity *auth.Identity, role string) bool {
 	args := m.Called(identity, role)
 	return args.Bool(0)
 }
 
-func (m *MockAuthService) CheckPermission(ctx context.Context, identity *auth.Identity, subject, resource, action string) (bool, error) {
-	args := m.Called(ctx, identity, subject, resource, action)
+func (m *MockAuthService) CheckPermission(ctx context.Context, identity *auth.Identity, action, resource string) (bool, error) {
+	args := m.Called(ctx, identity, action, resource)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -89,14 +97,25 @@ func TestAuthMiddleware_ValidateSession(t *testing.T) {
 	assert.NoError(t, err)
 	mockAuthSvc.AssertExpectations(t)
 
-	// No session token
+	// No session token, fallback to JWT
+	mockAuthSvc.On("ValidateJWT", mock.Anything, validToken).Return(identity, nil)
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+validToken)
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+	err = middleware.ValidateSession(next)(c)
+	assert.NoError(t, err)
+	mockAuthSvc.AssertExpectations(t)
+
+	// No valid session or token
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
 	err = middleware.ValidateSession(next)(c)
 	assert.Error(t, err)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	mockAuthSvc.AssertExpectations(t)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
 
 	// Invalid session token
 	mockAuthSvc.On("ValidateSession", mock.Anything, invalidToken).Return(nil, errors.New("invalid session"))
@@ -106,8 +125,9 @@ func TestAuthMiddleware_ValidateSession(t *testing.T) {
 	c = e.NewContext(req, rec)
 	err = middleware.ValidateSession(next)(c)
 	assert.Error(t, err)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	mockAuthSvc.AssertExpectations(t)
+	httpErr, ok = err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
 }
 
 func TestAuthMiddleware_RequireCollege(t *testing.T) {
@@ -136,7 +156,9 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 	c = e.NewContext(req, rec)
 	err = middleware.RequireCollege(next)(c)
 	assert.Error(t, err)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
 }
 
 func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
@@ -149,7 +171,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	studentNotActive := &models.Student{StudentID: studentID, KratosID: kratosID, IsActive: false}
 
 	// Identity in context, student role, student found
-	mockStudentSvc.On("FindByKratosID", mock.Anything, kratosID).Return(student, nil)
+	mockStudentSvc.On("FindByKratosID", mock.Anything, kratosID).Return(student, nil).Once()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -164,7 +186,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	mockStudentSvc.AssertExpectations(t)
 
 	// Identity in context, student role, student NOT found
-	mockStudentSvc.On("FindByKratosID", mock.Anything, kratosID).Return(nil, nil)
+	mockStudentSvc.On("FindByKratosID", mock.Anything, kratosID).Return(nil, nil).Once()
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
@@ -172,11 +194,13 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 
 	err = middleware.LoadStudentProfile(next)(c)
 	assert.Error(t, err)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	httpErr, ok := err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
 	mockStudentSvc.AssertExpectations(t)
 
 	// Identity in context, student role, student NOT active
-	mockStudentSvc.On("FindByKratosID", mock.Anything, kratosID).Return(studentNotActive, nil)
+	mockStudentSvc.On("FindByKratosID", mock.Anything, kratosID).Return(studentNotActive, nil).Once()
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
@@ -184,7 +208,9 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 
 	err = middleware.LoadStudentProfile(next)(c)
 	assert.Error(t, err)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	httpErr, ok = err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
 	mockStudentSvc.AssertExpectations(t)
 
 	// Identity in context, non-student role
@@ -194,7 +220,6 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	c.Set(identityContextKey, &auth.Identity{ID: kratosID, Traits: auth.Traits{Role: RoleAdmin}})
 	err = middleware.LoadStudentProfile(next)(c)
 	assert.NoError(t, err)
-	mockStudentSvc.AssertExpectations(t)
 
 	// No identity in context
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
@@ -202,40 +227,51 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	c = e.NewContext(req, rec)
 	err = middleware.LoadStudentProfile(next)(c)
 	assert.Error(t, err)
-	assert.Equal(t, http.StatusForbidden, rec.Code)
-	mockStudentSvc.AssertExpectations(t)
+	httpErr, ok = err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusForbidden, httpErr.Code)
 }
 
 func TestAuthMiddleware_RequireRole(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
 	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
-	identity := &auth.Identity{ID: "test-id"}
+	identityAdmin := &auth.Identity{ID: "admin-id", Traits: auth.Traits{Role: "admin"}}
+	identityStudent := &auth.Identity{ID: "student-id", Traits: auth.Traits{Role: "student"}}
+	identityFaculty := &auth.Identity{ID: "faculty-id", Traits: auth.Traits{Role: "faculty"}}
+
 	roleAdmin := "admin"
 	roleStudent := "student"
+	roleFaculty := "faculty"
 
 	// User has role
-	mockAuthSvc.On("HasRole", identity, roleAdmin).Return(true)
+	mockAuthSvc.On("HasRole", identityAdmin, roleAdmin).Return(true).Once()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("identity", identity)
+	c.Set("identity", identityAdmin)
+	handlerCalled := false
 	next := func(c echo.Context) error {
-		return nil
+		handlerCalled = true
+		return c.JSON(http.StatusOK, "success")
 	}
 	err := middleware.RequireRole(roleAdmin)(next)(c)
 	assert.NoError(t, err)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, http.StatusOK, rec.Code)
 	mockAuthSvc.AssertExpectations(t)
 
 	// User does not have role
-	mockAuthSvc.On("HasRole", identity, roleStudent).Return(false)
+	mockAuthSvc.On("HasRole", identityStudent, roleAdmin).Return(false).Once()
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	c.Set("identity", identity)
-	err = middleware.RequireRole(roleStudent)(next)(c)
-	assert.Error(t, err)
+	c.Set("identity", identityStudent)
+	handlerCalled = false
+	err = middleware.RequireRole(roleAdmin)(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 	mockAuthSvc.AssertExpectations(t)
 
@@ -243,9 +279,25 @@ func TestAuthMiddleware_RequireRole(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
+	handlerCalled = false
 	err = middleware.RequireRole(roleAdmin)(next)(c)
-	assert.Error(t, err)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	// Multiple roles, user has one
+	mockAuthSvc.On("HasRole", identityFaculty, roleAdmin).Return(false).Once()
+	mockAuthSvc.On("HasRole", identityFaculty, roleFaculty).Return(true).Once()
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+	c.Set("identity", identityFaculty)
+	handlerCalled = false
+	err = middleware.RequireRole(roleAdmin, roleFaculty)(next)(c)
+	assert.NoError(t, err)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	mockAuthSvc.AssertExpectations(t)
 }
 
 func TestAuthMiddleware_RequirePermission(t *testing.T) {
@@ -253,43 +305,50 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 	mockStudentSvc := new(MockStudentService)
 	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
 	identity := &auth.Identity{ID: "test-id"}
-	subject := "test-subject"
-	resource := "test-resource"
-	action := "test-action"
+	resource := "grades"
+	action := "read"
 
 	// User has permission
-	mockAuthSvc.On("CheckPermission", mock.Anything, identity, subject, resource, action).Return(true, nil)
+	mockAuthSvc.On("CheckPermission", mock.Anything, identity, action, resource).Return(true, nil).Once()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.Set("identity", identity)
+	handlerCalled := false
 	next := func(c echo.Context) error {
-		return nil
+		handlerCalled = true
+		return c.JSON(http.StatusOK, "success")
 	}
-	err := middleware.RequirePermission(subject, resource, action)(next)(c)
+	err := middleware.RequirePermission(identity.ID, resource, action)(next)(c)
 	assert.NoError(t, err)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, http.StatusOK, rec.Code)
 	mockAuthSvc.AssertExpectations(t)
 
 	// User does not have permission
-	mockAuthSvc.On("CheckPermission", mock.Anything, identity, subject, resource, action).Return(false, nil)
+	mockAuthSvc.On("CheckPermission", mock.Anything, identity, "write", resource).Return(false, nil).Once()
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
 	c.Set("identity", identity)
-	err = middleware.RequirePermission(subject, resource, action)(next)(c)
-	assert.Error(t, err)
+	handlerCalled = false
+	err = middleware.RequirePermission(identity.ID, resource, "write")(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 	mockAuthSvc.AssertExpectations(t)
 
 	// Permission check error
-	mockAuthSvc.On("CheckPermission", mock.Anything, identity, subject, resource, action).Return(false, errors.New("permission check error"))
+	mockAuthSvc.On("CheckPermission", mock.Anything, identity, action, resource).Return(false, errors.New("permission check error")).Once()
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
 	c.Set("identity", identity)
-	err = middleware.RequirePermission(subject, resource, action)(next)(c)
-	assert.Error(t, err)
+	handlerCalled = false
+	err = middleware.RequirePermission(identity.ID, resource, action)(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	mockAuthSvc.AssertExpectations(t)
 
@@ -297,8 +356,10 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	err = middleware.RequirePermission(subject, resource, action)(next)(c)
-	assert.Error(t, err)
+	handlerCalled = false
+	err = middleware.RequirePermission(identity.ID, resource, action)(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
@@ -308,79 +369,76 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
 	studentID := 123
 	otherStudentID := 456
-	identity := &auth.Identity{ID: "test-id"}
+	studentIdentity := &auth.Identity{ID: "student-id", Traits: auth.Traits{Role: RoleStudent}}
+	adminIdentity := &auth.Identity{ID: "admin-id", Traits: auth.Traits{Role: RoleAdmin}}
 
 	// Student accessing own resource
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set(identityContextKey, identity)
+	c.Set(identityContextKey, studentIdentity)
 	c.Set(studentIDContextKey, studentID)
 	c.SetParamNames("studentID")
 	c.SetParamValues(strconv.Itoa(studentID))
 
+	handlerCalled := false
 	next := func(c echo.Context) error {
+		handlerCalled = true
 		return nil
 	}
-	err := middleware.VerifyStudentOwnership(next)(c)
+	err := middleware.VerifyStudentOwnership()(next)(c)
 	assert.NoError(t, err)
+	assert.True(t, handlerCalled)
 
-	// Student accessing other's resource, no admin/faculty override
-	mockAuthSvc.On("CheckPermission", mock.Anything, identity, strconv.Itoa(otherStudentID), MarkAction, AttendanceResource).Return(false, nil)
+	// Student accessing other's resource
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	c.Set(identityContextKey, identity)
+	c.Set(identityContextKey, studentIdentity)
 	c.Set(studentIDContextKey, studentID)
 	c.SetParamNames("studentID")
 	c.SetParamValues(strconv.Itoa(otherStudentID))
-	err = middleware.VerifyStudentOwnership(next)(c)
-	assert.Error(t, err)
+	handlerCalled = false
+	err = middleware.VerifyStudentOwnership()(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
-	mockAuthSvc.AssertExpectations(t)
 
-	// Student accessing other's resource, with admin/faculty override
-	mockAuthSvc.On("CheckPermission", mock.Anything, identity, strconv.Itoa(otherStudentID), MarkAction, AttendanceResource).Return(true, nil)
+	// Admin accessing student resource
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	c.Set(identityContextKey, identity)
-	c.Set(studentIDContextKey, studentID)
+	c.Set(identityContextKey, adminIdentity)
 	c.SetParamNames("studentID")
-	c.SetParamValues(strconv.Itoa(otherStudentID))
-	err = middleware.VerifyStudentOwnership(next)(c)
+	c.SetParamValues(strconv.Itoa(studentID))
+	handlerCalled = false
+	err = middleware.VerifyStudentOwnership()(next)(c)
 	assert.NoError(t, err)
-	mockAuthSvc.AssertExpectations(t)
+	assert.True(t, handlerCalled)
 
 	// Invalid student ID
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	c.Set(identityContextKey, identity)
-	c.Set(studentIDContextKey, studentID)
+	c.Set(identityContextKey, adminIdentity)
 	c.SetParamNames("studentID")
 	c.SetParamValues("invalid")
-	err = middleware.VerifyStudentOwnership(next)(c)
-	assert.Error(t, err)
+	handlerCalled = false
+	err = middleware.VerifyStudentOwnership()(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 	// No identity
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	err = middleware.VerifyStudentOwnership(next)(c)
-	assert.Error(t, err)
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-
-	// No studentIDContextKey
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	rec = httptest.NewRecorder()
-	c = e.NewContext(req, rec)
-	c.Set(identityContextKey, identity)
 	c.SetParamNames("studentID")
 	c.SetParamValues(strconv.Itoa(studentID))
-	err = middleware.VerifyStudentOwnership(next)(c)
-	assert.Error(t, err)
+	handlerCalled = false
+	err = middleware.VerifyStudentOwnership()(next)(c)
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }

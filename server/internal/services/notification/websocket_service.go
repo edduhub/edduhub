@@ -35,6 +35,7 @@ type websocketService struct {
 	connectionTimes  map[int]map[int]time.Time // Track connection times
 	notificationRepo repository.NotificationRepository
 	upgrader         websocket.Upgrader
+	allowedOrigins   map[string]bool // Allowed origins for CORS
 }
 
 type WebSocketMessage struct {
@@ -46,25 +47,42 @@ type WebSocketMessage struct {
 	CollegeID    int                  `json:"college_id,omitempty"`
 }
 
-func NewWebSocketService(notificationRepo repository.NotificationRepository) WebSocketService {
+func NewWebSocketService(notificationRepo repository.NotificationRepository, allowedOrigins []string) WebSocketService {
+	// Create allowed origins map for fast lookup
+	originsMap := make(map[string]bool)
+	for _, origin := range allowedOrigins {
+		originsMap[origin] = true
+	}
+
+	// Add localhost origins for development if not already included
+	if len(originsMap) == 0 {
+		originsMap["http://localhost:3000"] = true
+		originsMap["http://localhost:8080"] = true
+	}
+
 	ws := &websocketService{
 		clients:         make(map[int]map[int]*websocket.Conn),
 		connectionTimes: make(map[int]map[int]time.Time),
 		notificationRepo: notificationRepo,
+		allowedOrigins:   originsMap,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				// SECURITY: In production, implement proper origin checking
-				// For now, allowing all origins for development
-				return true
+				origin := r.Header.Get("Origin")
+				// If no origin header, reject (security best practice)
+				if origin == "" {
+					return false
+				}
+				// Check if origin is in allowed list
+				return originsMap[origin]
 			},
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
 	}
-	
+
 	// Start heartbeat monitor
 	go ws.heartbeatMonitor()
-	
+
 	return ws
 }
 

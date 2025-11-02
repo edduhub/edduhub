@@ -19,6 +19,12 @@ import {
   Settings,
   Building2,
   UserCog,
+  Upload,
+  Webhook,
+  Shield,
+  Activity,
+  FolderOpen,
+  TrendingUp,
 } from "lucide-react";
 
 type NavItem = {
@@ -39,7 +45,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/students", label: "Students", icon: Users, roles: ["faculty", "admin"] },
   { href: "/departments", label: "Departments", icon: Building2, roles: ["admin"] },
+  { href: "/files", label: "Files", icon: FolderOpen },
   { href: "/analytics", label: "Analytics", icon: BarChart3, roles: ["faculty", "admin"] },
+  { href: "/advanced-analytics", label: "Advanced Analytics", icon: TrendingUp, roles: ["faculty", "admin"] },
+  { href: "/batch-operations", label: "Batch Operations", icon: Upload, roles: ["admin"] },
+  { href: "/webhooks", label: "Webhooks", icon: Webhook, roles: ["admin"] },
+  { href: "/audit-logs", label: "Audit Logs", icon: Shield, roles: ["admin"] },
+  { href: "/system-status", label: "System Status", icon: Activity, roles: ["admin"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

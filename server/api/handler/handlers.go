@@ -34,6 +34,9 @@ type Handlers struct {
 	Report            *ReportHandler
 	Webhook           *WebhookHandler
 	Audit             *AuditHandler
+	Role              *RoleHandler
+	Fee               *FeeHandler
+	Timetable         *TimetableHandler
 }
 
 func NewHandlers(services *services.Services) *Handlers {
@@ -78,5 +81,8 @@ func NewHandlers(services *services.Services) *Handlers {
 		Report:            NewReportHandler(services.ReportService),
 		Webhook:           NewWebhookHandler(services.WebhookService),
 		Audit:             NewAuditHandler(services.AuditService),
+		Role:              NewRoleHandler(services.RoleService),
+		Fee:               NewFeeHandler(services.FeeService),
+		Timetable:         NewTimetableHandler(services.TimetableService),
 	}
 }

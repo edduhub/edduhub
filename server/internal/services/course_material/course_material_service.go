@@ -64,7 +64,7 @@ func (s *courseMaterialService) CreateModule(ctx context.Context, courseID, coll
 	}
 
 	// Verify course exists and belongs to college
-	course, err := s.courseRepo.GetCourseByID(ctx, collegeID, courseID)
+	course, err := s.courseRepo.FindCourseByID(ctx, collegeID, courseID)
 	if err != nil {
 		return nil, fmt.Errorf("course not found: %w", err)
 	}
@@ -173,7 +173,7 @@ func (s *courseMaterialService) CreateMaterial(ctx context.Context, courseID, co
 	}
 
 	// Verify course exists
-	course, err := s.courseRepo.GetCourseByID(ctx, collegeID, courseID)
+	course, err := s.courseRepo.FindCourseByID(ctx, collegeID, courseID)
 	if err != nil || course == nil {
 		return nil, fmt.Errorf("course not found")
 	}
@@ -191,7 +191,7 @@ func (s *courseMaterialService) CreateMaterial(ctx context.Context, courseID, co
 
 	// Verify file if specified
 	if req.FileID != nil {
-		file, err := s.fileRepo.GetFile(ctx, collegeID, *req.FileID)
+		file, err := s.fileRepo.GetFileByID(ctx, collegeID, *req.FileID)
 		if err != nil || file == nil {
 			return nil, fmt.Errorf("file not found")
 		}

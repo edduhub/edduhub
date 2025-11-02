@@ -611,3 +611,8 @@ func (s *analyticsService) overallAveragePercentage(ctx context.Context, college
 	return 0, nil
 }
 
+// roundFloat rounds a float64 to 2 decimal places
+func roundFloat(val float64) float64 {
+	return math.Round(val*100) / 100
+}
+
