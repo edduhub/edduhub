@@ -23,6 +23,7 @@ import {
   Target,
 } from "lucide-react";
 import { format } from "date-fns";
+import { logger } from '@/lib/logger';
 
 type StudentDashboardData = {
   student: {
@@ -130,7 +131,7 @@ export default function StudentDashboardPage() {
           const data = await api.get<StudentDashboardData>("/api/student/dashboard");
           setDashboardData(data);
         } catch (err: any) {
-          console.error('Dashboard fetch error:', err);
+          logger.error('Dashboard fetch error:', err as Error);
           setError(err?.message || "Failed to fetch dashboard data");
         } finally {
           setLoading(false);

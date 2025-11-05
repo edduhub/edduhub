@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Award, TrendingUp, FileText, Loader2 } from "lucide-react";
+import { logger } from '@/lib/logger';
 
  type Grade = {
   id: number;
@@ -83,7 +84,7 @@ export default function GradesPage() {
           }));
           setGrades(normalized);
         } catch (err) {
-          console.warn('Failed to fetch individual grades:', err);
+          logger.warn('Failed to fetch individual grades:', { error: err });
         }
 
         // Course grades summary for student
@@ -100,10 +101,10 @@ export default function GradesPage() {
           }));
           setCourseGrades(normalizedCourses);
         } catch (err) {
-          console.warn('Failed to fetch course grades:', err);
+          logger.warn('Failed to fetch course grades:', { error: err });
         }
       } catch (err) {
-        console.error('Failed to fetch grades:', err);
+        logger.error('Failed to fetch grades:', err as Error);
         setError('Failed to load grades');
       } finally {
         setLoading(false);
@@ -167,7 +168,7 @@ export default function GradesPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError(e?.message || 'Failed to download report');
     } finally {
       setDownloading(false);

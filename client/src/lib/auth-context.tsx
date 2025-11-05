@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, AuthSession } from './types';
+import { logger } from './logger';
 
 type AuthContextType = {
   user: User | null;
@@ -79,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             localStorage.removeItem(AUTH_STORAGE_KEY);
           }
         } catch (error) {
-          console.error('Failed to parse stored auth:', error);
+          logger.error('Failed to parse stored auth', error as Error, { key: AUTH_STORAGE_KEY });
           localStorage.removeItem(AUTH_STORAGE_KEY);
         }
       }
@@ -160,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       saveSession(authSession);
     } catch (error) {
-      console.error('Login error:', error);
+      logger.error('Login failed', error as Error, { email });
       throw error;
     }
   };
@@ -203,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       saveSession(authSession);
     } catch (error) {
-      console.error('Registration error:', error);
+      logger.error('Registration failed', error as Error, { email: data.email });
       throw error;
     }
   };
@@ -216,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: session?.token ? { 'Authorization': `Bearer ${session.token}` } : undefined,
       });
     } catch (error) {
-      console.error('Logout error:', error);
+      logger.error('Logout failed', error as Error);
     } finally {
       clearSession();
     }
@@ -247,7 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSession();
       }
     } catch (error) {
-      console.error('Session refresh error:', error);
+      logger.error('Session refresh failed', error as Error);
       clearSession();
     }
   };

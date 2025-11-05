@@ -5,6 +5,7 @@ import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Loader2 } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type AnalyticsMetric = {
   label: string;
@@ -35,7 +36,7 @@ export default function AnalyticsPage() {
           setMetrics(adaptedMetrics);
         }
       } catch (err) {
-        console.error('Failed to fetch analytics:', err);
+        logger.error('Failed to fetch analytics:', err as Error);
         setError('Failed to load analytics data');
       } finally {
         setLoading(false);

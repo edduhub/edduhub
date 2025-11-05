@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Loader2, AlertCircle, CheckCircle, Trash2, Edit, Download, Upload, FolderPlus, Folder, File, Tag, Clock, Eye } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { logger } from '@/lib/logger';
 
 type FileItem = {
   id: number;
@@ -103,7 +104,7 @@ export default function FilesPage() {
       const response = await api.get(`/api/file-management?${params.toString()}`);
       setFiles(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch files:', err);
+      logger.error('Failed to fetch files:', err as Error);
       setError('Failed to load files');
     } finally {
       setLoading(false);
@@ -118,7 +119,7 @@ export default function FilesPage() {
       const response = await api.get(`/api/folders?${params.toString()}`);
       setFolders(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch folders:', err);
+      logger.error('Failed to fetch folders:', err as Error);
     }
   };
 

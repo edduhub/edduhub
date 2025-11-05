@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Clock, BookOpen, Trophy, Play, Loader2 } from "lucide-react";
 import { api, endpoints } from "@/lib/api-client";
+import { logger } from '@/lib/logger';
 
  type DisplayQuiz = {
   id: number;
@@ -68,7 +69,7 @@ export default function QuizzesPage() {
       }));
       setQuizzes(display);
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Failed to load quizzes');
     } finally {
       setLoading(false);
@@ -102,7 +103,7 @@ export default function QuizzesPage() {
         router.push(`/quizzes/${quizId}/attempt/${attempt.id}`);
       }
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Failed to start quiz');
     }
   };
@@ -124,7 +125,7 @@ export default function QuizzesPage() {
       setShowCreate(false);
       setNewQuiz({ courseId: '', title: '', description: '', duration: 30, totalMarks: 100 });
     } catch (e: any) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError(e?.message || 'Failed to create quiz');
     } finally {
       setCreating(false);

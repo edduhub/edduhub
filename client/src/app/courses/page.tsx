@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Search, Users, BookOpen, Clock, Calendar, Loader2 } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type Course = {
   id: number;
@@ -39,7 +40,7 @@ export default function CoursesPage() {
         const response = await api.get('/api/courses');
         setCourses(Array.isArray(response) ? response : []);
       } catch (err) {
-        console.error('Failed to fetch courses:', err);
+        logger.error('Failed to fetch courses:', err as Error);
         setError('Failed to load courses');
       } finally {
         setLoading(false);

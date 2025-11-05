@@ -1,6 +1,7 @@
 // Enhanced API client with authentication support, retry logic, and better error handling
 
 import { AuthSession } from './types';
+import { logger } from './logger';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const AUTH_STORAGE_KEY = 'edduhub_auth';
@@ -33,7 +34,7 @@ function getAuthToken(): string | null {
       }
     }
   } catch (error) {
-    console.error('Failed to get auth token:', error);
+    logger.error('Failed to get auth token from storage', error as Error);
   }
   return null;
 }
