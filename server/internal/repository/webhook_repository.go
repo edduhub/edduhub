@@ -54,7 +54,8 @@ func (r *webhookRepository) CreateWebhook(ctx context.Context, webhook *models.W
 }
 
 func (r *webhookRepository) GetWebhooksByCollege(ctx context.Context, collegeID int) ([]*models.Webhook, error) {
-	sql := `SELECT * FROM webhooks WHERE college_id = $1 ORDER BY created_at DESC`
+	sql := `SELECT id, college_id, url, event, secret, active, created_at, updated_at
+			FROM webhooks WHERE college_id = $1 ORDER BY created_at DESC`
 
 	var webhooks []*models.Webhook
 	err := pgxscan.Select(ctx, r.DB.Pool, &webhooks, sql, collegeID)
@@ -62,7 +63,8 @@ func (r *webhookRepository) GetWebhooksByCollege(ctx context.Context, collegeID 
 }
 
 func (r *webhookRepository) GetWebhooksByEvent(ctx context.Context, collegeID int, event string) ([]*models.Webhook, error) {
-	sql := `SELECT * FROM webhooks WHERE college_id = $1 AND event = $2 AND active = true`
+	sql := `SELECT id, college_id, url, event, secret, active, created_at, updated_at
+			FROM webhooks WHERE college_id = $1 AND event = $2 AND active = true`
 
 	var webhooks []*models.Webhook
 	err := pgxscan.Select(ctx, r.DB.Pool, &webhooks, sql, collegeID, event)
@@ -70,7 +72,8 @@ func (r *webhookRepository) GetWebhooksByEvent(ctx context.Context, collegeID in
 }
 
 func (r *webhookRepository) GetWebhookByID(ctx context.Context, collegeID, webhookID int) (*models.Webhook, error) {
-	sql := `SELECT * FROM webhooks WHERE id = $1 AND college_id = $2`
+	sql := `SELECT id, college_id, url, event, secret, active, created_at, updated_at
+			FROM webhooks WHERE id = $1 AND college_id = $2`
 
 	var webhook models.Webhook
 	err := pgxscan.Get(ctx, r.DB.Pool, &webhook, sql, webhookID, collegeID)

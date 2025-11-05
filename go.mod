@@ -1,6 +1,6 @@
 module eduhub
 
-go 1.25
+go 1.24
 
 require (
 	github.com/georgysavva/scany/v2 v2.1.4

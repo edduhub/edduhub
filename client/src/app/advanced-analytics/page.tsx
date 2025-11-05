@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, TrendingUp, TrendingDown, Users, Target, Award, BookOpen, Brain, AlertTriangle } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type StudentProgression = {
   student_id: number;
@@ -93,7 +94,7 @@ export default function AdvancedAnalyticsPage() {
         fetchLearningAnalytics(),
       ]);
     } catch (err) {
-      console.error('Failed to fetch initial data:', err);
+      logger.error('Failed to fetch initial data:', err as Error);
       setError('Failed to load analytics data');
     } finally {
       setLoading(false);
@@ -105,7 +106,7 @@ export default function AdvancedAnalyticsPage() {
       const response = await api.get('/api/students');
       setStudents(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch students:', err);
+      logger.error('Failed to fetch students:', err as Error);
     }
   };
 
@@ -114,7 +115,7 @@ export default function AdvancedAnalyticsPage() {
       const response = await api.get('/api/courses');
       setCourses(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch courses:', err);
+      logger.error('Failed to fetch courses:', err as Error);
     }
   };
 
@@ -124,7 +125,7 @@ export default function AdvancedAnalyticsPage() {
       const response = await api.get(`/api/analytics/advanced/students/${studentId}/progression`);
       setStudentProgression(response);
     } catch (err) {
-      console.error('Failed to fetch student progression:', err);
+      logger.error('Failed to fetch student progression:', err as Error);
       setError('Failed to load student progression');
     } finally {
       setLoadingProgression(false);
@@ -137,7 +138,7 @@ export default function AdvancedAnalyticsPage() {
       const response = await api.get(`/api/analytics/advanced/courses/${courseId}/engagement`);
       setCourseEngagement(response);
     } catch (err) {
-      console.error('Failed to fetch course engagement:', err);
+      logger.error('Failed to fetch course engagement:', err as Error);
       setError('Failed to load course engagement');
     } finally {
       setLoadingEngagement(false);
@@ -150,7 +151,7 @@ export default function AdvancedAnalyticsPage() {
       const response = await api.get('/api/analytics/advanced/predictive-insights');
       setInsights(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch insights:', err);
+      logger.error('Failed to fetch insights:', err as Error);
       setError('Failed to load predictive insights');
     } finally {
       setLoadingInsights(false);
@@ -162,7 +163,7 @@ export default function AdvancedAnalyticsPage() {
       const response = await api.get('/api/analytics/advanced/learning-analytics');
       setLearningAnalytics(response);
     } catch (err) {
-      console.error('Failed to fetch learning analytics:', err);
+      logger.error('Failed to fetch learning analytics:', err as Error);
     }
   };
 

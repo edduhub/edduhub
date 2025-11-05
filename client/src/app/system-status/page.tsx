@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, RefreshCw, CheckCircle, XCircle, AlertTriangle, Server, Database, Cpu, HardDrive, Clock } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type HealthStatus = {
   status: string;
@@ -56,7 +57,7 @@ export default function SystemStatusPage() {
       setHealthStatus(result.data || result);
       setLastRefresh(new Date());
     } catch (err: any) {
-      console.error('Failed to fetch health status:', err);
+      logger.error('Failed to fetch health status:', err as Error);
       setError('Failed to fetch system health status');
       setHealthStatus({
         status: 'unhealthy',

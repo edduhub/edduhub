@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, Pin, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { logger } from '@/lib/logger';
 
 type Announcement = {
   id: number;
@@ -51,7 +52,7 @@ export default function AnnouncementsPage() {
         const response = await api.get('/api/announcements');
         setAnnouncements(Array.isArray(response) ? response : []);
       } catch (err) {
-        console.error('Failed to fetch announcements:', err);
+        logger.error('Failed to fetch announcements:', err as Error);
         setError('Failed to load announcements');
       } finally {
         setLoading(false);
@@ -82,7 +83,7 @@ export default function AnnouncementsPage() {
       setFormData({ title: "", content: "", priority: "normal" });
       setDialogOpen(false);
     } catch (err) {
-      console.error('Failed to create announcement:', err);
+      logger.error('Failed to create announcement:', err as Error);
       setError('Failed to create announcement');
     } finally {
       setCreating(false);

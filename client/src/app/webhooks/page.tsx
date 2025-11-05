@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Loader2, AlertCircle, CheckCircle, Trash2, Edit, Send, Power } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { logger } from '@/lib/logger';
 
 type Webhook = {
   id: number;
@@ -61,7 +62,7 @@ export default function WebhooksPage() {
       const response = await api.get('/api/webhooks');
       setWebhooks(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch webhooks:', err);
+      logger.error('Failed to fetch webhooks:', err as Error);
       setError('Failed to load webhooks');
     } finally {
       setLoading(false);

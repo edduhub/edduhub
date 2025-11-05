@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Calendar as CalendarIcon, Clock, MapPin, BookOpen, Loader2 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, parseISO } from "date-fns";
+import { logger } from '@/lib/logger';
 
 type CalendarEvent = {
   id: number;
@@ -46,7 +47,7 @@ export default function CalendarPage() {
         const response = await api.get('/api/calendar');
         setEvents(Array.isArray(response) ? response : []);
       } catch (err) {
-        console.error('Failed to fetch calendar events:', err);
+        logger.error('Failed to fetch calendar events:', err as Error);
         setError('Failed to load calendar events');
       } finally {
         setLoading(false);
@@ -99,7 +100,7 @@ export default function CalendarPage() {
       setShowCreate(false);
       setNewEvent({ title: '', type: 'event', start: '', end: '', location: '', description: '' });
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Failed to create event');
     } finally {
       setCreating(false);

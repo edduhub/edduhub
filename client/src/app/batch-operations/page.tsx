@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Download, Upload, Loader2, AlertCircle, CheckCircle, FileText, Users, GraduationCap } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { logger } from '@/lib/logger';
 
 type ImportResult = {
   success: number;
@@ -45,7 +46,7 @@ export default function BatchOperationsPage() {
       const response = await api.get('/api/courses');
       setCourses(Array.isArray(response) ? response : []);
     } catch (err) {
-      console.error('Failed to fetch courses:', err);
+      logger.error('Failed to fetch courses:', err as Error);
     } finally {
       setLoadingCourses(false);
     }

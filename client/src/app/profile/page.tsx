@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Camera, Mail, Phone, MapPin, Calendar, Edit2 } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type ApiProfile = {
   phone_number?: string;
@@ -71,7 +72,7 @@ export default function ProfilePage() {
           bio: apiProfile.bio || ""
         });
       } catch (err) {
-        console.error(err);
+        logger.error('Error occurred', err as Error);
         setError("Failed to load profile");
       } finally {
         setLoading(false);
@@ -111,7 +112,7 @@ export default function ProfilePage() {
 
       setIsEditing(false);
     } catch (err) {
-      console.error(err);
+      logger.error('Error occurred', err as Error);
       setError("Failed to update profile");
     } finally {
       setLoading(false);

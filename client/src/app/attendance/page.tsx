@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { QrCode, CheckCircle, XCircle, Clock, Calendar, Loader2, Filter, Search, Camera, Download } from "lucide-react";
 import { format } from "date-fns";
+import { logger } from '@/lib/logger';
 
 type AttendanceRecord = {
   id: number;
@@ -82,7 +83,7 @@ export default function AttendancePage() {
           }));
           setRecords(normalizedRecords);
         } catch (err) {
-          console.warn('Failed to fetch attendance records:', err);
+          logger.warn('Failed to fetch attendance records:', { error: err });
         }
 
         // Try to fetch course attendance stats
@@ -97,10 +98,10 @@ export default function AttendancePage() {
           }));
           setCourseStats(normalizedStats);
         } catch (err) {
-          console.warn('Failed to fetch attendance stats:', err);
+          logger.warn('Failed to fetch attendance stats:', { error: err });
         }
       } catch (err) {
-        console.error('Failed to fetch attendance:', err);
+        logger.error('Failed to fetch attendance:', err as Error);
         setError('Failed to load attendance data');
       } finally {
         setLoading(false);
@@ -155,7 +156,7 @@ export default function AttendancePage() {
       const url = URL.createObjectURL(blob);
       setQrImageUrl(url);
     } catch (err) {
-      console.error('QR generation error:', err);
+      logger.error('QR generation error:', err as Error);
       setError(err instanceof Error ? err.message : 'Failed to generate QR code');
     } finally {
       setQrLoading(false);
@@ -179,7 +180,7 @@ export default function AttendancePage() {
         window.location.reload();
       }, 2000);
     } catch (err) {
-      console.error('Attendance marking error:', err);
+      logger.error('Attendance marking error:', err as Error);
       setError(err instanceof Error ? err.message : 'Failed to mark attendance');
     } finally {
       setMarking(false);

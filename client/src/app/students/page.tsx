@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, UserPlus, Download, Loader2 } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type Student = {
   id: number;
@@ -51,7 +52,7 @@ export default function StudentsPage() {
         const response = await api.get('/api/students');
         setStudents(Array.isArray(response) ? response : []);
       } catch (err) {
-        console.error('Failed to fetch students:', err);
+        logger.error('Failed to fetch students:', err as Error);
         setError('Failed to load students');
       } finally {
         setLoading(false);
@@ -110,7 +111,7 @@ export default function StudentsPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Export failed');
     } finally {
       setIsExporting(false);
@@ -136,7 +137,7 @@ export default function StudentsPage() {
       setShowCreate(false);
       setNewStudent({ firstName: '', lastName: '', email: '', rollNo: '', department: '', semester: 1 });
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Failed to create student');
     } finally {
       setCreating(false);
@@ -149,7 +150,7 @@ export default function StudentsPage() {
       await api.patch(`/api/students/${s.id}`, { status: nextStatus });
       setStudents(prev => prev.map(st => st.id === s.id ? { ...st, status: nextStatus } : st));
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Failed to update status');
     }
   };

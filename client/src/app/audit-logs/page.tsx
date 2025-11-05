@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Filter, Search, ChevronLeft, ChevronRight, Activity, FileText, Database } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 type AuditLog = {
   id: number;
@@ -94,7 +95,7 @@ export default function AuditLogsPage() {
       setLogs(logsData);
       setHasMore(logsData.length === limit);
     } catch (err) {
-      console.error('Failed to fetch audit logs:', err);
+      logger.error('Failed to fetch audit logs:', err as Error);
       setError('Failed to load audit logs');
     } finally {
       setLoading(false);
@@ -106,7 +107,7 @@ export default function AuditLogsPage() {
       const response = await api.get('/api/audit/stats');
       setStats(response);
     } catch (err) {
-      console.error('Failed to fetch audit stats:', err);
+      logger.error('Failed to fetch audit stats:', err as Error);
     }
   };
 

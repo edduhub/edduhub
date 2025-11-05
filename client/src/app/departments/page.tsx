@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Users, BookOpen, Search, Building2, Loader2 } from "lucide-react";
 import { api } from "@/lib/api-client";
+import { logger } from '@/lib/logger';
 
 type Department = {
   id: number;
@@ -39,7 +40,7 @@ export default function DepartmentsPage() {
         const data = await api.get<Department[]>("/api/departments");
         setDepartments(Array.isArray(data) ? data : []);
       } catch (e) {
-        console.error(e);
+        logger.error('Error occurred', e as Error);
         setError("Failed to load departments");
       } finally {
         setLoading(false);
@@ -73,7 +74,7 @@ export default function DepartmentsPage() {
       setShowCreate(false);
       setNewDept({ name: "", code: "", description: "" });
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError("Failed to create department");
     } finally {
       setCreating(false);

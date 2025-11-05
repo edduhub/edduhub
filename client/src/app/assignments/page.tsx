@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Calendar, Clock, FileText, CheckCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { logger } from '@/lib/logger';
 
 type Assignment = {
   id: number;
@@ -76,7 +77,7 @@ export default function AssignmentsPage() {
         }));
         setAssignments(normalized);
       } catch (err) {
-        console.error('Failed to fetch assignments:', err);
+        logger.error('Failed to fetch assignments:', err as Error);
         setError('Failed to load assignments');
       } finally {
         setLoading(false);
@@ -126,7 +127,7 @@ export default function AssignmentsPage() {
       setShowCreate(false);
       setNewAssignment({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100 });
     } catch (e: any) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError(e?.message || 'Failed to create assignment');
     } finally {
       setCreating(false);
@@ -142,7 +143,7 @@ export default function AssignmentsPage() {
       await api.post(endpoints.assignments.submit(a.courseId, a.id), { content: 'Submitted via portal' });
       setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, status: 'submitted' } : x));
     } catch (e) {
-      console.error(e);
+      logger.error('Error occurred', e as Error);
       setError('Failed to submit assignment');
     }
   };

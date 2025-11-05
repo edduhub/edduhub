@@ -57,11 +57,13 @@ func (r *notificationRepository) GetNotificationsByUser(ctx context.Context, col
 	var args []interface{}
 
 	if unreadOnly {
-		sql = `SELECT * FROM notifications WHERE college_id = $1 AND user_id = $2 AND is_read = false
+		sql = `SELECT id, user_id, college_id, title, message, type, is_read, created_at
+			   FROM notifications WHERE college_id = $1 AND user_id = $2 AND is_read = false
 			   ORDER BY created_at DESC LIMIT $3`
 		args = []interface{}{collegeID, userID, limit}
 	} else {
-		sql = `SELECT * FROM notifications WHERE college_id = $1 AND user_id = $2
+		sql = `SELECT id, user_id, college_id, title, message, type, is_read, created_at
+			   FROM notifications WHERE college_id = $1 AND user_id = $2
 			   ORDER BY created_at DESC LIMIT $3`
 		args = []interface{}{collegeID, userID, limit}
 	}

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardResponse } from "@/lib/types";
+import { logger } from '@/lib/logger';
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth();
@@ -51,7 +52,7 @@ export default function DashboardPage() {
           };
           setDashboardData(normalized);
         } catch (err: any) {
-          console.error('Dashboard fetch error:', err);
+          logger.error('Dashboard fetch error:', err as Error);
           setError(err?.message || "Failed to fetch dashboard");
         } finally {
           setLoading(false);
@@ -159,7 +160,7 @@ export default function DashboardPage() {
             recentGrades: grades.slice(0, 3)
           });
         } catch (err) {
-          console.error('Failed to fetch student data:', err);
+          logger.error('Failed to fetch student data:', err as Error);
         }
     };
 
