@@ -419,4 +419,74 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 
 	// Student timetable
 	timetables.GET("/my-timetable", a.Timetable.GetStudentTimetable, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+
+	// Exam Management
+	exams := apiGroup.Group("/exams")
+	// Exam CRUD
+	exams.GET("", a.Exam.ListExams)
+	exams.POST("", a.Exam.CreateExam, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.GET("/:examID", a.Exam.GetExam)
+	exams.PUT("/:examID", a.Exam.UpdateExam, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.DELETE("/:examID", a.Exam.DeleteExam, m.RequireRole(middleware.RoleAdmin))
+	exams.GET("/:examID/stats", a.Exam.GetExamStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Enrollment
+	exams.POST("/:examID/enroll", a.Exam.EnrollStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.POST("/:examID/enroll-bulk", a.Exam.EnrollMultipleStudents, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.GET("/:examID/enrollments", a.Exam.ListEnrollments, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.PUT("/:examID/enrollments/:studentID", a.Exam.UpdateEnrollment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.DELETE("/:examID/enrollments/:studentID", a.Exam.DeleteEnrollment, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Seat allocation and hall tickets
+	exams.POST("/:examID/allocate-seats", a.Exam.AllocateSeats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.GET("/:examID/hall-ticket/:studentID", a.Exam.GenerateHallTicket)
+	exams.POST("/:examID/hall-tickets", a.Exam.GenerateAllHallTickets, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Results
+	exams.POST("/:examID/results", a.Exam.CreateResult, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.GET("/:examID/results", a.Exam.ListResults, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.GET("/:examID/results/:studentID", a.Exam.GetResult)
+	exams.POST("/:examID/bulk-grade", a.Exam.BulkGradeResults, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	exams.GET("/:examID/result-stats", a.Exam.GetResultStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Student exam views
+	apiGroup.GET("/students/:studentID/exam-enrollments", a.Exam.GetStudentEnrollments)
+	apiGroup.GET("/students/:studentID/exam-results", a.Exam.GetStudentResults)
+
+	// Course exams
+	apiGroup.GET("/courses/:courseID/exams", a.Exam.ListExamsByCourse)
+
+	// Revaluation
+	revaluation := apiGroup.Group("/revaluation-requests")
+	revaluation.POST("", a.Exam.CreateRevaluationRequest, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	revaluation.GET("", a.Exam.ListRevaluationRequests, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	revaluation.PUT("/:requestID/approve", a.Exam.ApproveRevaluationRequest, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	revaluation.PUT("/:requestID/reject", a.Exam.RejectRevaluationRequest, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Exam Rooms
+	examRooms := apiGroup.Group("/exam-rooms")
+	examRooms.GET("", a.Exam.ListRooms)
+	examRooms.POST("", a.Exam.CreateRoom, m.RequireRole(middleware.RoleAdmin))
+	examRooms.GET("/:roomID", a.Exam.GetRoom)
+	examRooms.PUT("/:roomID", a.Exam.UpdateRoom, m.RequireRole(middleware.RoleAdmin))
+	examRooms.DELETE("/:roomID", a.Exam.DeleteRoom, m.RequireRole(middleware.RoleAdmin))
+	examRooms.GET("/:roomID/availability", a.Exam.CheckRoomAvailability)
+
+	// Placement Management
+	placements := apiGroup.Group("/placements")
+	// Placement CRUD
+	placements.GET("", a.Placement.ListPlacements)
+	placements.POST("", a.Placement.CreatePlacement, m.RequireRole(middleware.RoleAdmin))
+	placements.GET("/:placementID", a.Placement.GetPlacement)
+	placements.PUT("/:placementID", a.Placement.UpdatePlacement, m.RequireRole(middleware.RoleAdmin))
+	placements.DELETE("/:placementID", a.Placement.DeletePlacement, m.RequireRole(middleware.RoleAdmin))
+
+	// Placement statistics
+	placements.GET("/stats", a.Placement.GetPlacementStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	placements.GET("/company-stats", a.Placement.GetCompanyStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	placements.GET("/company/:companyName", a.Placement.ListPlacementsByCompany, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Student placements
+	apiGroup.GET("/students/:studentID/placements", a.Placement.ListPlacementsByStudent)
+	apiGroup.GET("/students/:studentID/placement-count", a.Placement.GetStudentPlacementCount)
 }
