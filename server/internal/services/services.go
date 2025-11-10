@@ -34,6 +34,8 @@ import (
 	"eduhub/server/internal/services/role"
 	"eduhub/server/internal/services/fee"
 	"eduhub/server/internal/services/timetable"
+	"eduhub/server/internal/services/exam"
+	"eduhub/server/internal/services/placement"
 	storageclient "eduhub/server/internal/storage"
 	"eduhub/server/pkg/jwt"
 	minio "github.com/minio/minio-go/v7"
@@ -72,6 +74,8 @@ type Services struct {
 	RoleService         role.RoleService
 	FeeService          fee.FeeService
 	TimetableService    timetable.TimetableService
+	ExamService         exam.ExamService
+	PlacementService    placement.PlacementService
 	DB                  *repository.DB
 }
 
@@ -177,6 +181,8 @@ func NewServices(cfg *config.Config) *Services {
 	roleRepo := repository.NewRoleRepository(cfg.DB)
 	feeRepo := repository.NewFeeRepository(cfg.DB)
 	timetableRepo := repository.NewTimeTableRepository(cfg.DB)
+	examRepo := repository.NewExamRepository(cfg.DB)
+	placementRepo := repository.NewPlacementRepository(cfg.DB)
 
 	answerOptionRepo := repository.NewAnswerOptionRepository(cfg.DB)
     questionService := quiz.NewSimpleQuestionService(questionRepo)
@@ -224,6 +230,8 @@ func NewServices(cfg *config.Config) *Services {
 	roleService := role.NewRoleService(roleRepo)
 	feeService := fee.NewFeeService(feeRepo)
 	timetableService := timetable.NewTimetableService(timetableRepo, studentRepo)
+	examService := exam.NewExamService(examRepo, studentRepo, courseRepo)
+	placementService := placement.NewPlacementService(placementRepo, studentRepo)
 
 	return &Services{
 		Auth:                  authService,
@@ -258,6 +266,8 @@ func NewServices(cfg *config.Config) *Services {
 		RoleService:         roleService,
 		FeeService:          feeService,
 		TimetableService:    timetableService,
+		ExamService:         examService,
+		PlacementService:    placementService,
 		DB:                  cfg.DB,
 	}
 }

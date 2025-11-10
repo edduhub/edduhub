@@ -37,6 +37,8 @@ type Handlers struct {
 	Role              *RoleHandler
 	Fee               *FeeHandler
 	Timetable         *TimetableHandler
+	Exam              *ExamHandler
+	Placement         *PlacementHandler
 }
 
 func NewHandlers(services *services.Services) *Handlers {
@@ -84,5 +86,7 @@ func NewHandlers(services *services.Services) *Handlers {
 		Role:              NewRoleHandler(services.RoleService),
 		Fee:               NewFeeHandler(services.FeeService),
 		Timetable:         NewTimetableHandler(services.TimetableService),
+		Exam:              NewExamHandler(services.ExamService),
+		Placement:         NewPlacementHandler(services.PlacementService),
 	}
 }
