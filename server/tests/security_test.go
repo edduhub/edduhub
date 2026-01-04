@@ -18,29 +18,29 @@ func TestMultiTenantIsolation(t *testing.T) {
 	// and authorization middleware. It needs to be refactored to use a real router
 	// or a mocked middleware implementation.
 	t.Skip("Skipping flawed multi-tenancy test until it can be refactored")
-	
+
 	// Setup test server
 	e := echo.New()
-	
+
 	t.Run("Cannot access different college data", func(t *testing.T) {
 		// Create request for college 1 data with college 2 token
 		req := httptest.NewRequest(http.MethodGet, "/api/students", nil)
 		req.Header.Set("Authorization", "Bearer fake-college-2-token")
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		// This should fail with 403 Forbidden
 		// In a real test, you would set up proper token and middleware
 		assert.NotEqual(t, http.StatusOK, rec.Code)
 		_ = c // Use the context to avoid unused variable error
 	})
-	
+
 	t.Run("College ID validation in middleware", func(t *testing.T) {
 		// Test that RequireCollege middleware validates college existence
 		req := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		// Without proper college ID, should return error
 		assert.NotNil(t, c)
 	})
@@ -54,11 +54,11 @@ func TestJWTTokenSecurity(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer expired-token")
 		rec := httptest.NewRecorder()
 		e.NewContext(req, rec)
-		
+
 		// Should return 401 Unauthorized
 		// In real test, generate actual expired token
 	})
-	
+
 	t.Run("Token rotation works", func(t *testing.T) {
 		// Test that refresh token endpoint generates new token
 		e := echo.New()
@@ -66,17 +66,17 @@ func TestJWTTokenSecurity(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer valid-token")
 		rec := httptest.NewRecorder()
 		e.NewContext(req, rec)
-		
+
 		// Should return new token
 	})
-	
+
 	t.Run("Invalid signature rejected", func(t *testing.T) {
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
 		req.Header.Set("Authorization", "Bearer tampered.token.signature")
 		rec := httptest.NewRecorder()
 		e.NewContext(req, rec)
-		
+
 		// Should return 401 Unauthorized
 	})
 }
@@ -86,14 +86,14 @@ func TestErrorSanitization(t *testing.T) {
 	t.Run("Database errors sanitized in production", func(t *testing.T) {
 		// Simulate production environment
 		t.Setenv("APP_ENV", "production")
-		
+
 		// Database error should not leak SQL details
 		// Should return generic error message
 	})
-	
+
 	t.Run("Stack traces hidden in production", func(t *testing.T) {
 		t.Setenv("APP_ENV", "production")
-		
+
 		// Panic recovery should not expose stack trace
 	})
 }
@@ -105,13 +105,13 @@ func TestQRCodeSecurity(t *testing.T) {
 		// Attempt to use it
 		// Should be rejected
 	})
-	
+
 	t.Run("QR code college validation", func(t *testing.T) {
 		// Create QR code for college 1
 		// Try to use it with college 2 student token
 		// Should be rejected
 	})
-	
+
 	t.Run("Screenshot protection", func(t *testing.T) {
 		// QR codes older than 20 minutes should be rejected
 		// Even if not expired
@@ -122,17 +122,17 @@ func TestQRCodeSecurity(t *testing.T) {
 func TestInputValidation(t *testing.T) {
 	t.Run("SQL injection prevented", func(t *testing.T) {
 		e := echo.New()
-		
+
 		// Try SQL injection in query parameters (URL encoded)
 		maliciousInput := "1%27%20OR%20%271%27%3D%271"
 		req := httptest.NewRequest(http.MethodGet, "/api/students?id="+maliciousInput, nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		
+
 		// Should be safely handled
 		assert.NotNil(t, c)
 	})
-	
+
 	t.Run("XSS prevented in responses", func(t *testing.T) {
 		// Input with script tags should be escaped
 		xssInput := "<script>alert('xss')</script>"
@@ -145,14 +145,14 @@ func TestInputValidation(t *testing.T) {
 func TestRateLimiting(t *testing.T) {
 	t.Run("Too many requests blocked", func(t *testing.T) {
 		e := echo.New()
-		
+
 		// Make 100+ requests rapidly
 		for i := 0; i < 101; i++ {
 			req := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
 			rec := httptest.NewRecorder()
 			e.NewContext(req, rec)
 		}
-		
+
 		// Last request should be rate limited
 		// Should return 429 Too Many Requests
 	})
@@ -162,16 +162,16 @@ func TestRateLimiting(t *testing.T) {
 func TestAuthorizationChecks(t *testing.T) {
 	t.Run("Student cannot access admin endpoints", func(t *testing.T) {
 		e := echo.New()
-		
+
 		// Student token trying to access admin endpoint
 		req := httptest.NewRequest(http.MethodPost, "/api/users", nil)
 		req.Header.Set("Authorization", "Bearer student-token")
 		rec := httptest.NewRecorder()
 		e.NewContext(req, rec)
-		
+
 		// Should return 403 Forbidden
 	})
-	
+
 	t.Run("Faculty can access course management", func(t *testing.T) {
 		// Faculty should be able to manage courses
 	})
@@ -186,11 +186,29 @@ func TestDatabaseSSL(t *testing.T) {
 		t.Setenv("DB_USER", "testuser")
 		t.Setenv("DB_PASSWORD", "testpass")
 		t.Setenv("DB_NAME", "testdb")
-		
+
 		t.Setenv("APP_ENV", "production")
 		t.Setenv("DB_SSLMODE", "disable")
-		
-		// Should log warning about disabled SSL in production
+
+		// Should return error when SSL is disabled in production (security enforcement)
+		cfg, err := config.LoadDatabaseConfig()
+		assert.Error(t, err)
+		assert.Nil(t, cfg)
+		assert.Contains(t, err.Error(), "SSL cannot be disabled in production")
+	})
+
+	t.Run("SSL allowed in non-production", func(t *testing.T) {
+		// Set up database environment variables for testing
+		t.Setenv("DB_HOST", "localhost")
+		t.Setenv("DB_PORT", "5432")
+		t.Setenv("DB_USER", "testuser")
+		t.Setenv("DB_PASSWORD", "testpass")
+		t.Setenv("DB_NAME", "testdb")
+
+		t.Setenv("APP_ENV", "development")
+		t.Setenv("DB_SSLMODE", "disable")
+
+		// Should succeed in non-production environments
 		cfg, err := config.LoadDatabaseConfig()
 		assert.NoError(t, err)
 		assert.NotNil(t, cfg)
@@ -203,7 +221,7 @@ func TestWebSocketSecurity(t *testing.T) {
 		// Try to connect without valid token
 		// Should be rejected
 	})
-	
+
 	t.Run("College isolation in WebSocket", func(t *testing.T) {
 		// User from college 1 should not receive
 		// notifications from college 2
@@ -215,7 +233,7 @@ func BenchmarkAuthMiddleware(b *testing.B) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rec := httptest.NewRecorder()

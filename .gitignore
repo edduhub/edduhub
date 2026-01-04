@@ -1,8 +1,28 @@
 
+# OS-specific files
+.DS_Store
+Thumbs.db
 
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
 .env
 .envrc
+.env.*.local
 
-.env.*.local 
-.vscode / 
-.out 
+# Go build artifacts
+bin/
+build/
+main
+*.out
+coverage.txt
+
+# Node.js
+node_modules/
+
+# Logs
+*.log

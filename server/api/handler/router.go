@@ -9,8 +9,8 @@ import (
 
 func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Initialize rate limiters
-	authRateLimiter := middleware.StrictRateLimiter()       // 5 requests per minute for auth
-	passwordRateLimiter := middleware.StrictRateLimiter()   // 5 requests per minute for password ops
+	authRateLimiter := middleware.StrictRateLimiter()     // 5 requests per minute for auth
+	passwordRateLimiter := middleware.StrictRateLimiter() // 5 requests per minute for password ops
 
 	// Public routes
 	e.GET("/health", a.System.HealthCheck)
@@ -342,8 +342,8 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Report Generation management
 	reports := apiGroup.Group("/reports")
 	// Student convenience endpoints (access own reports)
-	reports.GET("/students/me/gradecard", a.Report.GenerateMyGradeCard, 
-		m.RequireRole(middleware.RoleStudent), 
+	reports.GET("/students/me/gradecard", a.Report.GenerateMyGradeCard,
+		m.RequireRole(middleware.RoleStudent),
 		m.LoadStudentProfile)
 	reports.GET("/students/me/transcript", a.Report.GenerateMyTranscript,
 		m.RequireRole(middleware.RoleStudent),
@@ -407,6 +407,8 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	fees.GET("/my-fees/summary", a.Fee.GetStudentFeesSummary, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	fees.POST("/payments", a.Fee.MakeFeePayment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	fees.POST("/payments/online", a.Fee.InitiateOnlinePayment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	fees.POST("/payments/verify", a.Fee.VerifyPayment, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	fees.POST("/webhook", a.Fee.HandleWebhook) // Razorpay Webhook is public
 	fees.GET("/my-payments", a.Fee.GetStudentPayments, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 
 	// Timetable Management
@@ -487,6 +489,13 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	placements.GET("/company/:companyName", a.Placement.ListPlacementsByCompany, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	// Student placements
-	apiGroup.GET("/students/:studentID/placements", a.Placement.ListPlacementsByStudent)
 	apiGroup.GET("/students/:studentID/placement-count", a.Placement.GetStudentPlacementCount)
+
+	// Forum Management
+	forum := apiGroup.Group("/forum")
+	forum.GET("/threads", a.Forum.ListThreads)
+	forum.POST("/threads", a.Forum.CreateThread)
+	forum.GET("/threads/:threadID", a.Forum.GetThread)
+	forum.GET("/threads/:threadID/replies", a.Forum.ListReplies)
+	forum.POST("/threads/:threadID/replies", a.Forum.CreateReply)
 }

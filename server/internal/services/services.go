@@ -20,63 +20,66 @@ import (
 	"eduhub/server/internal/services/department"
 	"eduhub/server/internal/services/email"
 	"eduhub/server/internal/services/enrollment"
+	"eduhub/server/internal/services/exam"
+	"eduhub/server/internal/services/fee"
 	"eduhub/server/internal/services/file"
+	"eduhub/server/internal/services/forum"
 	"eduhub/server/internal/services/grades"
 	"eduhub/server/internal/services/lecture"
 	"eduhub/server/internal/services/notification"
+	"eduhub/server/internal/services/placement"
 	"eduhub/server/internal/services/profile"
 	"eduhub/server/internal/services/quiz"
 	"eduhub/server/internal/services/report"
+	"eduhub/server/internal/services/role"
 	storageservice "eduhub/server/internal/services/storage"
 	"eduhub/server/internal/services/student"
+	"eduhub/server/internal/services/timetable"
 	"eduhub/server/internal/services/user"
 	"eduhub/server/internal/services/webhook"
-	"eduhub/server/internal/services/role"
-	"eduhub/server/internal/services/fee"
-	"eduhub/server/internal/services/timetable"
-	"eduhub/server/internal/services/exam"
-	"eduhub/server/internal/services/placement"
 	storageclient "eduhub/server/internal/storage"
 	"eduhub/server/pkg/jwt"
+
 	minio "github.com/minio/minio-go/v7"
 )
 
 type Services struct {
-	Auth                auth.AuthService
-	Attendance          attendance.AttendanceService
-	StudentService      student.StudentService
-	CollegeService        college.CollegeService
-	CourseService         course.CourseService
-	CourseMaterialService course_material.CourseMaterialService
-	EnrollmentService     enrollment.EnrollmentService
-	GradeService        grades.GradeServices
-	LectureService      lecture.LectureService
-	QuizService         quiz.QuizService
-	CalendarService     calendar.CalendarService
-	DepartmentService   department.DepartmentService
-	AssignmentService   assignment.AssignmentService
-	UserService         user.UserService
-	AnnouncementService announcement.AnnouncementService
-	ProfileService      profile.ProfileService
-	QuestionService     quiz.QuestionServiceSimple
-	QuizAttemptService  quiz.QuizAttemptServiceSimple
-	StorageService      storageservice.StorageService
-	FileService         file.FileService
-	NotificationService notification.NotificationService
-	WebSocketService    notification.WebSocketService
-	AnalyticsService    analytics.AnalyticsService
+	Auth                     auth.AuthService
+	Attendance               attendance.AttendanceService
+	StudentService           student.StudentService
+	CollegeService           college.CollegeService
+	CourseService            course.CourseService
+	CourseMaterialService    course_material.CourseMaterialService
+	EnrollmentService        enrollment.EnrollmentService
+	GradeService             grades.GradeServices
+	LectureService           lecture.LectureService
+	QuizService              quiz.QuizService
+	CalendarService          calendar.CalendarService
+	DepartmentService        department.DepartmentService
+	AssignmentService        assignment.AssignmentService
+	UserService              user.UserService
+	AnnouncementService      announcement.AnnouncementService
+	ProfileService           profile.ProfileService
+	QuestionService          quiz.QuestionServiceSimple
+	QuizAttemptService       quiz.QuizAttemptServiceSimple
+	StorageService           storageservice.StorageService
+	FileService              file.FileService
+	NotificationService      notification.NotificationService
+	WebSocketService         notification.WebSocketService
+	AnalyticsService         analytics.AnalyticsService
 	AdvancedAnalyticsService analytics.AdvancedAnalyticsService
-	BatchService        batch.BatchService
-	ReportService       report.ReportService
-	WebhookService      webhook.WebhookService
-	AuditService        audit.AuditService
-	EmailService        email.EmailService
-	RoleService         role.RoleService
-	FeeService          fee.FeeService
-	TimetableService    timetable.TimetableService
-	ExamService         exam.ExamService
-	PlacementService    placement.PlacementService
-	DB                  *repository.DB
+	BatchService             batch.BatchService
+	ReportService            report.ReportService
+	WebhookService           webhook.WebhookService
+	AuditService             audit.AuditService
+	EmailService             email.EmailService
+	RoleService              role.RoleService
+	FeeService               fee.FeeService
+	TimetableService         timetable.TimetableService
+	ExamService              exam.ExamService
+	PlacementService         placement.PlacementService
+	ForumService             forum.ForumService
+	DB                       *repository.DB
 }
 
 func NewServices(cfg *config.Config) *Services {
@@ -183,24 +186,25 @@ func NewServices(cfg *config.Config) *Services {
 	timetableRepo := repository.NewTimeTableRepository(cfg.DB)
 	examRepo := repository.NewExamRepository(cfg.DB)
 	placementRepo := repository.NewPlacementRepository(cfg.DB)
+	forumRepo := repository.NewForumRepository(cfg.DB)
 
 	answerOptionRepo := repository.NewAnswerOptionRepository(cfg.DB)
-    questionService := quiz.NewSimpleQuestionService(questionRepo)
-    // Auto-grading service for quiz attempts
-    autoGradingService := quiz.NewAutoGradingService(
-        questionRepo,
-        studentAnswerRepo,
-        quizAttemptRepo,
-        answerOptionRepo,
-    )
-    quizAttemptService := quiz.NewSimpleQuizAttemptService(
-        quizAttemptRepo,
-        studentAnswerRepo,
-        quizRepo,
-        questionRepo,
-        answerOptionRepo,
-        autoGradingService,
-    )
+	questionService := quiz.NewSimpleQuestionService(questionRepo)
+	// Auto-grading service for quiz attempts
+	autoGradingService := quiz.NewAutoGradingService(
+		questionRepo,
+		studentAnswerRepo,
+		quizAttemptRepo,
+		answerOptionRepo,
+	)
+	quizAttemptService := quiz.NewSimpleQuizAttemptService(
+		quizAttemptRepo,
+		studentAnswerRepo,
+		quizRepo,
+		questionRepo,
+		answerOptionRepo,
+		autoGradingService,
+	)
 	var minioNative *minio.Client
 	if minioClient != nil {
 		minioNative = minioClient.Client()
@@ -228,46 +232,48 @@ func NewServices(cfg *config.Config) *Services {
 		cfg.EmailConfig.FromAddress,
 	)
 	roleService := role.NewRoleService(roleRepo)
-	feeService := fee.NewFeeService(feeRepo)
+	feeService := fee.NewFeeService(feeRepo, cfg.AppConfig.RazorpayKey, cfg.AppConfig.RazorpaySecret, cfg.AppConfig.RazorpayWebhookSecret)
 	timetableService := timetable.NewTimetableService(timetableRepo, studentRepo)
-	examService := exam.NewExamService(examRepo, studentRepo, courseRepo)
+	examService := exam.NewExamService(examRepo, studentRepo, courseRepo, userRepo)
 	placementService := placement.NewPlacementService(placementRepo, studentRepo)
+	forumService := forum.NewForumService(forumRepo)
 
 	return &Services{
-		Auth:                  authService,
-		Attendance:            attendanceService,
-		StudentService:        studentService,
-		CollegeService:        collegeService,
-		CourseService:         courseService,
-		CourseMaterialService: courseMaterialService,
-		EnrollmentService:     enrollmentService,
-		GradeService:        gradeService,
-		LectureService:      lectureService,
-		QuizService:         quizService,
-		CalendarService:     calendarService,
-		DepartmentService:   departmentService,
-		AssignmentService:   assignmentService,
-		UserService:         userService,
-		AnnouncementService: announcementService,
-		ProfileService:      profileService,
-		QuestionService:     questionService,
-		QuizAttemptService:  quizAttemptService,
-		StorageService:      storageService,
-		FileService:         fileService,
-		NotificationService: notificationService,
-		WebSocketService:    websocketService,
-		AnalyticsService:    analyticsService,
+		Auth:                     authService,
+		Attendance:               attendanceService,
+		StudentService:           studentService,
+		CollegeService:           collegeService,
+		CourseService:            courseService,
+		CourseMaterialService:    courseMaterialService,
+		EnrollmentService:        enrollmentService,
+		GradeService:             gradeService,
+		LectureService:           lectureService,
+		QuizService:              quizService,
+		CalendarService:          calendarService,
+		DepartmentService:        departmentService,
+		AssignmentService:        assignmentService,
+		UserService:              userService,
+		AnnouncementService:      announcementService,
+		ProfileService:           profileService,
+		QuestionService:          questionService,
+		QuizAttemptService:       quizAttemptService,
+		StorageService:           storageService,
+		FileService:              fileService,
+		NotificationService:      notificationService,
+		WebSocketService:         websocketService,
+		AnalyticsService:         analyticsService,
 		AdvancedAnalyticsService: advancedAnalyticsService,
-		BatchService:        batchService,
-		ReportService:       reportService,
-		WebhookService:      webhookService,
-		AuditService:        auditService,
-		EmailService:        emailService,
-		RoleService:         roleService,
-		FeeService:          feeService,
-		TimetableService:    timetableService,
-		ExamService:         examService,
-		PlacementService:    placementService,
-		DB:                  cfg.DB,
+		BatchService:             batchService,
+		ReportService:            reportService,
+		WebhookService:           webhookService,
+		AuditService:             auditService,
+		EmailService:             emailService,
+		RoleService:              roleService,
+		FeeService:               feeService,
+		TimetableService:         timetableService,
+		ExamService:              examService,
+		PlacementService:         placementService,
+		ForumService:             forumService,
+		DB:                       cfg.DB,
 	}
 }

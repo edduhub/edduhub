@@ -22,8 +22,12 @@ type CollegeConfig struct {
 func LoadAuthConfig() (*AuthConfig, error) {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		// Use a default secret for development (NEVER use this in production)
-		jwtSecret = "your-super-secret-jwt-key-change-this-in-production"
+		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
+	}
+
+	// SECURITY: Enforce minimum secret length for security
+	if len(jwtSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters for adequate security")
 	}
 
 	config := &AuthConfig{

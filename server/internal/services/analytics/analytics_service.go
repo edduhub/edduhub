@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math"
 	"time"
 
 	"eduhub/server/internal/repository"
@@ -103,7 +102,7 @@ func (s *analyticsService) GetStudentPerformance(ctx context.Context, collegeID,
 	if err != nil {
 		return nil, err
 	}
-	metrics.OverallGPA = percentageToGPA(avgPercentage)
+	metrics.OverallGPA = PercentageToGPA(avgPercentage)
 
 	attendanceRate, err := s.attendanceRate(ctx, collegeID, studentID, courseID)
 	if err != nil {
@@ -156,7 +155,7 @@ func (s *analyticsService) GetCourseAnalytics(ctx context.Context, collegeID, co
 	if err != nil {
 		return nil, err
 	}
-	analytics.AverageGrade = percentageToGPA(avgGrade)
+	analytics.AverageGrade = PercentageToGPA(avgGrade)
 
 	assignmentSubmissionRate, err := s.courseAssignmentSubmissionRate(ctx, collegeID, courseID, totalStudents)
 	if err != nil {
@@ -210,7 +209,7 @@ func (s *analyticsService) GetCollegeDashboard(ctx context.Context, collegeID in
 	if err != nil {
 		return nil, err
 	}
-	dashboard.OverallGPA = percentageToGPA(avgPercentage)
+	dashboard.OverallGPA = PercentageToGPA(avgPercentage)
 
 	if err := s.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM announcements WHERE college_id = $1 AND is_published = TRUE AND (expires_at IS NULL OR expires_at > NOW())`, collegeID).Scan(&dashboard.ActiveAnnouncements); err != nil {
 		return nil, fmt.Errorf("GetCollegeDashboard: failed to count announcements: %w", err)
@@ -255,7 +254,7 @@ func (s *analyticsService) GetAttendanceTrends(ctx context.Context, collegeID in
 		trend.TotalPresent = present
 		trend.TotalExpected = expected
 		if expected > 0 {
-			trend.AttendanceRate = roundFloat(float64(present) / float64(expected) * 100)
+			trend.AttendanceRate = roundFloat(float64(present)/float64(expected)*100, 2)
 		}
 
 		trends = append(trends, trend)
@@ -312,7 +311,7 @@ func (s *analyticsService) averageGradePercentage(ctx context.Context, collegeID
 	}
 
 	if avg.Valid {
-		return roundFloat(avg.Float64), nil
+		return roundFloat(avg.Float64, 2), nil
 	}
 
 	return 0, nil
@@ -339,7 +338,7 @@ func (s *analyticsService) attendanceRate(ctx context.Context, collegeID, studen
 		return 0, nil
 	}
 
-	return roundFloat(float64(present) / float64(total) * 100), nil
+	return roundFloat(float64(present)/float64(total)*100, 2), nil
 }
 
 func (s *analyticsService) assignmentStats(ctx context.Context, collegeID, studentID int, courseID *int) (int, int, error) {
@@ -392,7 +391,7 @@ func (s *analyticsService) quizStats(ctx context.Context, collegeID, studentID i
 	}
 
 	if avg.Valid {
-		return count, roundFloat(avg.Float64), nil
+		return count, roundFloat(avg.Float64, 2), nil
 	}
 
 	return count, 0, nil
@@ -426,10 +425,10 @@ func (s *analyticsService) studentCourseMetrics(ctx context.Context, collegeID, 
 		}
 
 		if avgPercentage.Valid {
-			cm.GPA = percentageToGPA(avgPercentage.Float64)
+			cm.GPA = PercentageToGPA(avgPercentage.Float64)
 		}
 		if attendance.Valid {
-			cm.AttendanceRate = roundFloat(attendance.Float64)
+			cm.AttendanceRate = roundFloat(attendance.Float64, 2)
 		}
 
 		metrics = append(metrics, cm)
@@ -455,7 +454,7 @@ func (s *analyticsService) courseAttendanceRate(ctx context.Context, collegeID, 
 	if total == 0 {
 		return 0, nil
 	}
-	return roundFloat(float64(present) / float64(total) * 100), nil
+	return roundFloat(float64(present)/float64(total)*100, 2), nil
 }
 
 func (s *analyticsService) courseAverageGrade(ctx context.Context, collegeID, courseID int) (float64, error) {
@@ -464,7 +463,7 @@ func (s *analyticsService) courseAverageGrade(ctx context.Context, collegeID, co
 		return 0, fmt.Errorf("courseAverageGrade: query failed: %w", err)
 	}
 	if avg.Valid {
-		return roundFloat(avg.Float64), nil
+		return roundFloat(avg.Float64, 2), nil
 	}
 	return 0, nil
 }
@@ -495,7 +494,7 @@ func (s *analyticsService) courseAssignmentSubmissionRate(ctx context.Context, c
 		return 0, nil
 	}
 
-	return roundFloat(float64(submissions) / float64(denominator) * 100), nil
+	return roundFloat(float64(submissions)/float64(denominator)*100, 2), nil
 }
 
 func (s *analyticsService) courseQuizParticipation(ctx context.Context, collegeID, courseID, totalStudents int) (float64, error) {
@@ -524,7 +523,7 @@ func (s *analyticsService) courseQuizParticipation(ctx context.Context, collegeI
 		return 0, nil
 	}
 
-	return roundFloat(float64(attempts) / float64(denominator) * 100), nil
+	return roundFloat(float64(attempts)/float64(denominator)*100, 2), nil
 }
 
 func (s *analyticsService) topPerformers(ctx context.Context, collegeID, courseID, limit int) ([]int, error) {
@@ -595,7 +594,7 @@ func (s *analyticsService) overallAttendanceRate(ctx context.Context, collegeID 
 		return 0, nil
 	}
 
-	return roundFloat(float64(present) / float64(total) * 100), nil
+	return roundFloat(float64(present)/float64(total)*100, 2), nil
 }
 
 func (s *analyticsService) overallAveragePercentage(ctx context.Context, collegeID int) (float64, error) {
@@ -605,14 +604,8 @@ func (s *analyticsService) overallAveragePercentage(ctx context.Context, college
 	}
 
 	if avg.Valid {
-		return roundFloat(avg.Float64), nil
+		return roundFloat(avg.Float64, 2), nil
 	}
 
 	return 0, nil
 }
-
-// roundFloat rounds a float64 to 2 decimal places
-func roundFloat(val float64) float64 {
-	return math.Round(val*100) / 100
-}
-

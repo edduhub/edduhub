@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -192,6 +194,74 @@ func (h *FeeHandler) InitiateOnlinePayment(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"data": response,
+	})
+}
+
+func (h *FeeHandler) VerifyPayment(c echo.Context) error {
+	var req models.ConfirmOnlinePaymentRequest
+	if err := middleware.BindAndValidate(c, &req); err != nil {
+		return err
+	}
+
+	if err := h.feeService.VerifyPayment(c.Request().Context(), &req); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to verify payment: "+err.Error())
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Payment verified and completed successfully",
+	})
+}
+
+// HandleWebhook processes Razorpay webhook events with proper signature verification.
+// Security: Implements HMAC-SHA256 signature verification to prevent fraudulent webhook calls.
+func (h *FeeHandler) HandleWebhook(c echo.Context) error {
+	// Read raw body for signature verification (must be done before any parsing)
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Failed to read request body",
+		})
+	}
+
+	// Get the signature from header
+	signature := c.Request().Header.Get("X-Razorpay-Signature")
+	if signature == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Missing X-Razorpay-Signature header",
+		})
+	}
+
+	// Verify the signature
+	if !h.feeService.VerifyWebhookSignature(body, signature) {
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "Invalid webhook signature",
+		})
+	}
+
+	// Parse the webhook payload
+	var payload struct {
+		Event   string                 `json:"event"`
+		Payload map[string]interface{} `json:"payload"`
+	}
+
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Invalid JSON payload",
+		})
+	}
+
+	// Process the webhook event
+	if err := h.feeService.ProcessWebhookEvent(c.Request().Context(), payload.Event, payload.Payload); err != nil {
+		// Log the error but return 200 to prevent Razorpay from retrying indefinitely
+		// In production, you'd want to log this to a monitoring service
+		return c.JSON(http.StatusOK, map[string]string{
+			"status": "acknowledged",
+			"note":   "Event processing had issues but acknowledged",
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"status": "processed",
 	})
 }
 

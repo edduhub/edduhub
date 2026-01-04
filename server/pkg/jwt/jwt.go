@@ -69,6 +69,8 @@ func (m *JWTManager) Generate(kratosID, email, role, collegeID, firstName, lastN
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.tokenDuration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "eduhub",                   // Identify token issuer
+			Audience:  jwt.ClaimStrings{"eduhub"}, // Intended audience
 		},
 	}
 

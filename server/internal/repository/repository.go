@@ -16,6 +16,7 @@ type Repository struct {
 	LectureRepository    LectureRepository
 	CollegeRepository    CollegeRepository
 	GradeRepository      GradeRepository
+	ForumRepository      ForumRepository // Added Forum
 }
 
 // NewRepository creates a new repository with all required sub-repositories
@@ -35,6 +36,7 @@ func NewRepository(DB *DB, minioCient *storage.MinioClient) *Repository {
 	lectureRepo := NewLectureRepository(DB)
 	collegeRepo := NewCollegeRepository(DB)
 	gradeRepo := NewGradeRepository(DB)
+	forumRepo := NewForumRepository(DB) // Instantiate Forum
 	return &Repository{
 		AttendanceRepository: attendanceRepo,
 		StudentRepository:    studentRepo,
@@ -49,5 +51,6 @@ func NewRepository(DB *DB, minioCient *storage.MinioClient) *Repository {
 		LectureRepository:    lectureRepo,
 		CollegeRepository:    collegeRepo,
 		GradeRepository:      gradeRepo,
+		ForumRepository:      forumRepo,
 	}
 }

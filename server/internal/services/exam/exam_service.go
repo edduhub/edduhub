@@ -93,17 +93,20 @@ type examService struct {
 	repo        repository.ExamRepository
 	studentRepo repository.StudentRepository
 	courseRepo  repository.CourseRepository
+	userRepo    repository.UserRepository
 }
 
 func NewExamService(
 	repo repository.ExamRepository,
 	studentRepo repository.StudentRepository,
 	courseRepo repository.CourseRepository,
+	userRepo repository.UserRepository,
 ) ExamService {
 	return &examService{
 		repo:        repo,
 		studentRepo: studentRepo,
 		courseRepo:  courseRepo,
+		userRepo:    userRepo,
 	}
 }
 
@@ -342,15 +345,29 @@ func (s *examService) AllocateSeats(ctx context.Context, examID int) error {
 		return err
 	}
 
+	if len(enrollments) == 0 {
+		return nil
+	}
+
+	// Fetch exam to get question paper sets configuration
+	exam, err := s.repo.GetExamByID(ctx, enrollments[0].CollegeID, examID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch exam for seat allocation: %w", err)
+	}
+
 	// Simple sequential seat allocation
 	for i, enrollment := range enrollments {
 		seatNum := fmt.Sprintf("S%03d", i+1)
 		enrollment.SeatNumber = &seatNum
 
 		// Assign question paper set (cycle through available sets)
-		// Assuming exam has QuestionPaperSets field
+		if exam.QuestionPaperSets > 0 {
+			set := (i % exam.QuestionPaperSets) + 1
+			enrollment.QuestionPaperSet = &set
+		}
+
 		if err := s.repo.UpdateEnrollment(ctx, enrollment); err != nil {
-			return err
+			return fmt.Errorf("failed to update enrollment for student %d: %w", enrollment.StudentID, err)
 		}
 	}
 
@@ -373,10 +390,16 @@ func (s *examService) GenerateHallTicket(ctx context.Context, examID, studentID 
 		return nil, err
 	}
 
+	// Fetch user to get the name (Name field is on User model, not Student)
+	user, err := s.userRepo.GetUserByID(ctx, student.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user for student: %w", err)
+	}
+
 	hallTicket := &models.HallTicketResponse{
 		ExamID:      examID,
 		StudentID:   studentID,
-		StudentName: student.Name,
+		StudentName: user.Name,
 		ExamTitle:   exam.Title,
 		ExamDate:    exam.StartTime,
 		StartTime:   exam.StartTime,
@@ -403,6 +426,7 @@ func (s *examService) GenerateHallTicket(ctx context.Context, examID, studentID 
 
 	return hallTicket, nil
 }
+
 
 func (s *examService) GenerateAllHallTickets(ctx context.Context, examID int) error {
 	enrollments, err := s.repo.ListEnrollments(ctx, examID)
@@ -649,8 +673,32 @@ func (s *examService) ApproveRevaluationRequest(ctx context.Context, requestID i
 	request.ReviewedAt = &now
 
 	// Update the original result
-	// Note: This would need the exam_result_id to be accessible
-	// Implementation depends on your requirements
+	result, err := s.repo.GetResultByID(ctx, request.ExamResultID)
+	if err != nil {
+		return fmt.Errorf("failed to get associated result: %w", err)
+	}
+
+		// Re-calculate result fields
+		exam, err := s.repo.GetExamByID(ctx, result.CollegeID, result.ExamID)
+		if err != nil {
+			return fmt.Errorf("failed to get exam details: %w", err)
+		}
+
+		result.MarksObtained = &revisedMarks
+		percentage := (revisedMarks / exam.TotalMarks) * 100
+		result.Percentage = &percentage
+		grade := s.CalculateGrade(revisedMarks, exam.TotalMarks)
+		result.Grade = &grade
+		
+		if revisedMarks >= exam.PassingMarks {
+			result.Result = "Pass"
+		} else {
+			result.Result = "Fail"
+		}
+
+		if err := s.repo.UpdateResult(ctx, result); err != nil {
+			return fmt.Errorf("failed to update exam result: %w", err)
+		}
 
 	return s.repo.UpdateRevaluationRequest(ctx, request)
 }

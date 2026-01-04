@@ -76,13 +76,17 @@ session:
 log:
   level: debug
   format: text
-  leak_sensitive_values: true
+  # SECURITY: Set to false in production to prevent sensitive data exposure in logs
+  leak_sensitive_values: false
 
+# SECURITY WARNING: These are development defaults only!
+# For production, set KRATOS_COOKIE_SECRET and KRATOS_CIPHER_SECRET environment variables
+# with cryptographically secure random values (32+ characters recommended)
 secrets:
   cookie:
-    - PLEASE-CHANGE-ME-I-AM-VERY-INSECURE
+    - ${KRATOS_COOKIE_SECRET:-development-cookie-secret-change-in-prod}
   cipher:
-    - 32-LONG-SECRET-NOT-SECURE-AT-ALL
+    - ${KRATOS_CIPHER_SECRET:-development-cipher-secret-32chars}
 
 ciphers:
   algorithm: xchacha20-poly1305

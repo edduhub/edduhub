@@ -123,23 +123,42 @@ export default function StudentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchDashboardData = async () => {
       if (user) {
         try {
           setLoading(true);
           setError(null);
           const data = await api.get<StudentDashboardData>("/api/student/dashboard");
-          setDashboardData(data);
-        } catch (err: any) {
-          logger.error('Dashboard fetch error:', err as Error);
-          setError(err?.message || "Failed to fetch dashboard data");
+          // Check if component is still mounted
+          if (!abortController.signal.aborted) {
+            setDashboardData(data);
+          }
+        } catch (err: unknown) {
+          // Ignore abort errors - they're expected on unmount
+          if (err instanceof Error && err.name === 'AbortError') {
+            return;
+          }
+          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch dashboard data';
+          logger.error('Dashboard fetch error:', err instanceof Error ? err : new Error(errorMessage));
+          if (!abortController.signal.aborted) {
+            setError(errorMessage);
+          }
         } finally {
-          setLoading(false);
+          if (!abortController.signal.aborted) {
+            setLoading(false);
+          }
         }
       }
     };
 
     fetchDashboardData();
+
+    // Cleanup: abort request on unmount
+    return () => {
+      abortController.abort();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -224,7 +243,7 @@ export default function StudentDashboardPage() {
             <CardTitle className="text-3xl font-bold">
               {academicOverview.enrolledCourses}
             </CardTitle>
-          </CardContent>
+          </CardHeader>
           <CardContent>
             <div className="text-xs text-muted-foreground">
               Active enrollment
@@ -241,7 +260,7 @@ export default function StudentDashboardPage() {
             <CardTitle className="text-3xl font-bold">
               {academicOverview.attendanceRate.toFixed(1)}%
             </CardTitle>
-          </CardContent>
+          </CardHeader>
           <CardContent>
             <div className="text-xs text-muted-foreground">
               {academicOverview.totalPresentSessions}/{academicOverview.totalAttendanceSessions} sessions
@@ -258,7 +277,7 @@ export default function StudentDashboardPage() {
             <CardTitle className="text-3xl font-bold">
               {assignments.summary.upcomingCount + assignments.summary.overdueCount}
             </CardTitle>
-          </CardContent>
+          </CardHeader>
           <CardContent>
             <div className="text-xs text-destructive">
               {assignments.summary.overdueCount} overdue
@@ -710,7 +729,7 @@ export default function StudentDashboardPage() {
                   <h4 className="font-semibold">{announcement.title}</h4>
                   <Badge variant={
                     announcement.priority === 'urgent' ? 'destructive' :
-                    announcement.priority === 'high' ? 'default' : 'secondary'
+                      announcement.priority === 'high' ? 'default' : 'secondary'
                   }>
                     {announcement.priority}
                   </Badge>

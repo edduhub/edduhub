@@ -39,6 +39,7 @@ type Handlers struct {
 	Timetable         *TimetableHandler
 	Exam              *ExamHandler
 	Placement         *PlacementHandler
+	Forum             *ForumHandler
 }
 
 func NewHandlers(services *services.Services) *Handlers {
@@ -56,25 +57,25 @@ func NewHandlers(services *services.Services) *Handlers {
 			services.EnrollmentService,
 			services.GradeService,
 		),
-		Attendance:   NewAttendanceHandler(services.Attendance, services.CourseService),
-		Student:        NewStudentHandler(services.StudentService),
-		College:        NewCollegeHandler(services.CollegeService),
-		Course:         NewCourseHandler(services.CourseService, services.EnrollmentService, services.StudentService),
-		CourseMaterial: NewCourseMaterialHandler(services.CourseMaterialService),
-		Lecture:        NewLectureHandler(services.LectureService),
-		Quiz:         NewQuizHandler(services.QuizService, services.EnrollmentService, services.CourseService),
-		Grade:        NewGradeHandler(services.GradeService, services.CourseService),
-		Calendar:     NewCalendarHandler(services.CalendarService),
-		Department:   NewDepartmentHandler(services.DepartmentService),
-		Assignment:   NewAssignmentHandler(services.AssignmentService, services.EnrollmentService, services.CourseService),
-		User:         NewUserHandler(services.UserService),
-		Announcement: NewAnnouncementHandler(services.AnnouncementService),
-		Profile:      NewProfileHandler(services.ProfileService, services.AuditService, services.StorageService),
-		System:       NewSystemHandler(services.DB),
-		Question:     NewQuestionHandler(services.QuestionService),
-		QuizAttempt:  NewQuizAttemptHandler(services.QuizAttemptService),
-		FileUpload:   NewFileUploadHandler(services.StorageService),
-		File:         NewFileHandler(services.FileService),
+		Attendance:        NewAttendanceHandler(services.Attendance, services.CourseService),
+		Student:           NewStudentHandler(services.StudentService),
+		College:           NewCollegeHandler(services.CollegeService),
+		Course:            NewCourseHandler(services.CourseService, services.EnrollmentService, services.StudentService),
+		CourseMaterial:    NewCourseMaterialHandler(services.CourseMaterialService),
+		Lecture:           NewLectureHandler(services.LectureService),
+		Quiz:              NewQuizHandler(services.QuizService, services.EnrollmentService, services.CourseService),
+		Grade:             NewGradeHandler(services.GradeService, services.CourseService),
+		Calendar:          NewCalendarHandler(services.CalendarService),
+		Department:        NewDepartmentHandler(services.DepartmentService),
+		Assignment:        NewAssignmentHandler(services.AssignmentService, services.EnrollmentService, services.CourseService),
+		User:              NewUserHandler(services.UserService),
+		Announcement:      NewAnnouncementHandler(services.AnnouncementService),
+		Profile:           NewProfileHandler(services.ProfileService, services.AuditService, services.StorageService),
+		System:            NewSystemHandler(services.DB),
+		Question:          NewQuestionHandler(services.QuestionService),
+		QuizAttempt:       NewQuizAttemptHandler(services.QuizAttemptService),
+		FileUpload:        NewFileUploadHandler(services.StorageService),
+		File:              NewFileHandler(services.FileService),
 		Notification:      NewNotificationHandler(services.NotificationService),
 		WebSocket:         NewWebSocketHandler(services.WebSocketService),
 		Analytics:         NewAnalyticsHandler(services.AnalyticsService),
@@ -88,5 +89,6 @@ func NewHandlers(services *services.Services) *Handlers {
 		Timetable:         NewTimetableHandler(services.TimetableService),
 		Exam:              NewExamHandler(services.ExamService),
 		Placement:         NewPlacementHandler(services.PlacementService),
+		Forum:             NewForumHandler(services.ForumService),
 	}
 }

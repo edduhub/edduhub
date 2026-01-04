@@ -31,6 +31,7 @@ type FeeRepository interface {
 	GetFeePayment(ctx context.Context, paymentID int) (*models.FeePayment, error)
 	GetStudentPayments(ctx context.Context, studentID int) ([]*models.FeePayment, error)
 	UpdatePaymentStatus(ctx context.Context, paymentID int, status string, transactionID *string) error
+	UpdatePaymentStatusByTransactionID(ctx context.Context, orderID string, status string, paymentID *string) error
 
 	// Summary operations
 	GetStudentFeesSummary(ctx context.Context, studentID int) (*models.StudentFeesSummary, error)
@@ -339,4 +340,32 @@ func (r *feeRepository) GetTotalPaidAmount(ctx context.Context, assignmentID int
 		return 0, fmt.Errorf("GetTotalPaidAmount: %w", err)
 	}
 	return total, nil
+}
+
+// UpdatePaymentStatusByTransactionID updates payment status by the Razorpay order ID (transaction_id)
+// This is used for webhook processing where we receive order_id instead of internal payment_id
+func (r *feeRepository) UpdatePaymentStatusByTransactionID(ctx context.Context, orderID string, status string, paymentID *string) error {
+	var sql string
+	var result interface{ RowsAffected() int64 }
+	var err error
+
+	if paymentID != nil {
+		// Update both status and the actual Razorpay payment ID
+		sql = `UPDATE fee_payments SET payment_status = $1, transaction_id = $2, updated_at = $3 
+		       WHERE transaction_id = $4 OR (transaction_id IS NULL AND id IN (
+		           SELECT id FROM fee_payments WHERE payment_status = 'pending' LIMIT 1
+		       ))`
+		result, err = r.DB.Pool.Exec(ctx, sql, status, *paymentID, time.Now(), orderID)
+	} else {
+		sql = `UPDATE fee_payments SET payment_status = $1, updated_at = $2 WHERE transaction_id = $3`
+		result, err = r.DB.Pool.Exec(ctx, sql, status, time.Now(), orderID)
+	}
+
+	if err != nil {
+		return fmt.Errorf("UpdatePaymentStatusByTransactionID: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("payment with order_id %s not found", orderID)
+	}
+	return nil
 }

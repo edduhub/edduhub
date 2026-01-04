@@ -2,8 +2,13 @@
 package main
 
 import (
+	"context"
 	"eduhub/server/api/app"
 	"eduhub/server/logger"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -30,26 +35,48 @@ import (
 func main() {
 	// Load .env file FIRST
 	err := godotenv.Load()
-	logger := logger.NewZeroLogger(true)
+	log := logger.NewZeroLogger(true)
 
 	if err != nil {
-		logger.Logger.Warn().Msg("unable to load  env variables")
+		log.Logger.Warn().Msg("unable to load  env variables")
 	}
 
 	// Create the app instance (which loads config, logger, db, etc.)
 	setup, err := app.New()
 	if err != nil {
-		logger.Logger.Fatal().Err(err).Msg("failed to create app instance")
+		log.Logger.Fatal().Err(err).Msg("failed to create app instance")
 		return
 	}
-	logger.Logger.Debug().Msg("app instance created")
+	log.Logger.Debug().Msg("app instance created")
 
-	// Start the application
-	err = setup.Start()
-	if err != nil {
-		logger.Logger.Fatal().Err(err).Msg("failed to start application")
+	// Setup graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start the application in a goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		if err := setup.Start(); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// Wait for shutdown signal or error
+	select {
+	case <-sigChan:
+		log.Logger.Info().Msg("shutdown signal received, gracefully shutting down...")
+	case err := <-errChan:
+		log.Logger.Fatal().Err(err).Msg("failed to start application")
 		return
 	}
 
-	logger.Logger.Debug().Msg("server stopped successfully")
+	// Shutdown the application
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err := setup.Shutdown(shutdownCtx); err != nil {
+		log.Logger.Error().Err(err).Msg("error during shutdown")
+	} else {
+		log.Logger.Info().Msg("server stopped successfully")
+	}
 }

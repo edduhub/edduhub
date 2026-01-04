@@ -98,13 +98,30 @@ class Logger {
   }
 
   private sendToMonitoringService(entry: LogEntry): void {
-    // TODO: Implement integration with monitoring service (e.g., Sentry, LogRocket)
-    // This is a placeholder for production error tracking
+    // Integration with Sentry for production error tracking
     try {
-      // Example: Send to your error tracking service
-      // Sentry.captureException(entry.error, { extra: entry.context });
+      if (typeof window !== 'undefined' && entry.level === 'error') {
+        // Client-side: Use @sentry/nextjs
+        const Sentry = require('@sentry/nextjs');
+        
+        if (entry.error) {
+          Sentry.captureException(entry.error, {
+            level: 'error',
+            extra: entry.context,
+            tags: {
+              component: 'Logger',
+            },
+          });
+        } else {
+          Sentry.captureMessage(entry.message, {
+            level: 'error',
+            extra: entry.context,
+          });
+        }
+      }
     } catch (err) {
       // Silently fail - don't break the app if monitoring fails
+      console.error('Failed to send to monitoring service:', err);
     }
   }
 

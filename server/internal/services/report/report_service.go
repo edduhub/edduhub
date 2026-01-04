@@ -285,16 +285,18 @@ func addHeader(pdf *gofpdf.Fpdf, title string) {
 
 func drawTableHeader(pdf *gofpdf.Fpdf, headers []string) {
 	pdf.SetFont("Helvetica", "B", 9)
+	colWidth := 190.0 / float64(len(headers))
 	for _, header := range headers {
-		pdf.CellFormat(0, 6, header, gofpdf.BorderBottom, 0, gofpdf.AlignLeft, false, 0, "")
+		pdf.CellFormat(colWidth, 6, header, gofpdf.BorderBottom, 0, gofpdf.AlignLeft, false, 0, "")
 	}
 	pdf.Ln(-1)
 }
 
 func drawTableRow(pdf *gofpdf.Fpdf, columns []string) {
 	pdf.SetFont("Helvetica", "", 9)
+	colWidth := 190.0 / float64(len(columns))
 	for _, col := range columns {
-		pdf.CellFormat(0, 6, col, gofpdf.BorderNone, 0, gofpdf.AlignLeft, false, 0, "")
+		pdf.CellFormat(colWidth, 6, col, gofpdf.BorderNone, 0, gofpdf.AlignLeft, false, 0, "")
 	}
 	pdf.Ln(-1)
 }
@@ -319,13 +321,13 @@ func generateSimplePDF(title string, lines []string) ([]byte, error) {
 
 func gradeBucket(percentage float64) string {
 	switch {
-	case percentage >= 85:
+	case percentage >= 90:
 		return "A"
-	case percentage >= 70:
+	case percentage >= 80:
 		return "B"
-	case percentage >= 55:
+	case percentage >= 70:
 		return "C"
-	case percentage >= 40:
+	case percentage >= 60:
 		return "D"
 	default:
 		return "F"

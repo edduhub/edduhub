@@ -15,6 +15,7 @@ func TestLoadAuthConfig(t *testing.T) {
 		{
 			name: "valid configuration",
 			envVars: map[string]string{
+				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
 				"KRATOS_DOMAIN":     "example.com",
@@ -26,6 +27,7 @@ func TestLoadAuthConfig(t *testing.T) {
 				AdminURL:  "http://admin.example.com",
 				Domain:    "example.com",
 				Port:      "8080",
+				JWTSecret: "this-is-a-test-secret-key-at-least-32-chars-long",
 				College: CollegeConfig{
 					RequireVerification: true,
 					AllowedRoles:        []string{"admin", "faculty", "student"},
@@ -33,8 +35,30 @@ func TestLoadAuthConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "missing JWT_SECRET",
+			envVars: map[string]string{
+				"KRATOS_PUBLIC_URL": "http://public.example.com",
+				"KRATOS_ADMIN_URL":  "http://admin.example.com",
+				"KRATOS_DOMAIN":     "example.com",
+				"PORT":              "8080",
+			},
+			expectError: true,
+		},
+		{
+			name: "JWT_SECRET too short",
+			envVars: map[string]string{
+				"JWT_SECRET":        "short-secret",
+				"KRATOS_PUBLIC_URL": "http://public.example.com",
+				"KRATOS_ADMIN_URL":  "http://admin.example.com",
+				"KRATOS_DOMAIN":     "example.com",
+				"PORT":              "8080",
+			},
+			expectError: true,
+		},
+		{
 			name: "missing public URL",
 			envVars: map[string]string{
+				"JWT_SECRET":       "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_ADMIN_URL": "http://admin.example.com",
 				"KRATOS_DOMAIN":    "example.com",
 				"PORT":             "8080",
@@ -44,6 +68,7 @@ func TestLoadAuthConfig(t *testing.T) {
 		{
 			name: "missing admin URL",
 			envVars: map[string]string{
+				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_DOMAIN":     "example.com",
 				"PORT":              "8080",
@@ -53,6 +78,7 @@ func TestLoadAuthConfig(t *testing.T) {
 		{
 			name: "optional fields can be empty",
 			envVars: map[string]string{
+				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
 			},
@@ -60,6 +86,7 @@ func TestLoadAuthConfig(t *testing.T) {
 			expectedValue: &AuthConfig{
 				PublicURL: "http://public.example.com",
 				AdminURL:  "http://admin.example.com",
+				JWTSecret: "this-is-a-test-secret-key-at-least-32-chars-long",
 				College: CollegeConfig{
 					RequireVerification: true,
 					AllowedRoles:        []string{"admin", "faculty", "student"},

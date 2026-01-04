@@ -52,9 +52,9 @@ func LoadDatabaseConfig() (*DBConfig, error) {
 	sslCert := os.Getenv("DB_SSL_CERT")          // e.g., "/path/to/client.crt"
 	sslKey := os.Getenv("DB_SSL_KEY")            // e.g., "/path/to/client.key"
 
-	// SECURITY RECOMMENDATION: In production, enforce SSL
+	// SECURITY: Enforce SSL in production - disabled SSL is a security vulnerability
 	if os.Getenv("APP_ENV") == "production" && dbSSLMode == "disable" {
-		fmt.Println("WARNING: Database SSL is disabled in production environment. This is insecure!")
+		return nil, fmt.Errorf("SECURITY ERROR: Database SSL cannot be disabled in production environment. Set DB_SSL_MODE to 'require' or higher")
 	}
 
 	return &DBConfig{
@@ -70,20 +70,22 @@ func LoadDatabaseConfig() (*DBConfig, error) {
 	}, nil
 }
 
-func LoadDatabase() *repository.DB {
+// LoadDatabaseWithRetry loads the database with proper error handling instead of panics.
+// It supports retry logic and graceful failure.
+func LoadDatabaseWithRetry(maxRetries int) (*repository.DB, error) {
 	if os.Getenv("DB_SKIP_CONNECT") == "1" {
-		return &repository.DB{}
+		return &repository.DB{}, nil
 	}
 
 	dbConfig, err := LoadDatabaseConfig()
 	if err != nil {
-		panic(fmt.Errorf("failed to load database config: %w", err))
+		return nil, fmt.Errorf("failed to load database config: %w", err)
 	}
 
 	dsn := buildDSN(*dbConfig)
 	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		panic(fmt.Errorf("unable to parse config: %w", err))
+		return nil, fmt.Errorf("unable to parse config: %w", err)
 	}
 
 	// OPTIMIZED: Low-resource configuration for better performance on limited hardware
@@ -101,25 +103,51 @@ func LoadDatabase() *repository.DB {
 		"statement_timeout": "30000", // 30 seconds max per query
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	var pool *pgxpool.Pool
+	var lastErr error
 
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	// Retry logic with exponential backoff
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+		pool, err = pgxpool.NewWithConfig(ctx, poolConfig)
+		if err != nil {
+			cancel()
+			lastErr = fmt.Errorf("attempt %d: failed to connect to database: %w", attempt+1, err)
+			time.Sleep(time.Duration(attempt+1) * time.Second) // Exponential backoff
+			continue
+		}
+
+		// ping the database to ensure the connection is healthy
+		pingCtx, pingCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err = pool.Ping(pingCtx)
+		pingCancel()
+		cancel()
+
+		if err != nil {
+			pool.Close()
+			lastErr = fmt.Errorf("attempt %d: failed to ping database: %w", attempt+1, err)
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+			continue
+		}
+
+		// Success
+		return &repository.DB{Pool: pool}, nil
+	}
+
+	return nil, fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, lastErr)
+}
+
+// LoadDatabase loads the database connection, panics on failure for backward compatibility.
+// DEPRECATED: Prefer using LoadDatabaseWithRetry for graceful error handling.
+func LoadDatabase() *repository.DB {
+	db, err := LoadDatabaseWithRetry(3)
 	if err != nil {
-		panic(fmt.Errorf("failed to connect to database: %w", err))
+		// Log the error before panicking for better debugging
+		fmt.Fprintf(os.Stderr, "FATAL: Database connection failed: %v\n", err)
+		panic(err)
 	}
-
-	// ping the database to ensure the connection is healthy
-	pingCtx, pingCancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer pingCancel()
-	err = pool.Ping(pingCtx)
-	if err != nil {
-		panic(fmt.Errorf("failed to ping database: %w", err))
-	}
-
-	return &repository.DB{
-		Pool: pool,
-	}
+	return db
 }
 
 func buildDSN(config DBConfig) string {

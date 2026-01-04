@@ -18,12 +18,12 @@ type AdvancedAnalyticsService interface {
 }
 
 type StudentProgression struct {
-	StudentID         int                    `json:"student_id"`
-	OverallTrend      string                 `json:"overall_trend"` // improving, declining, stable
-	GradeProgression  []GradeProgressPoint   `json:"grade_progression"`
-	AttendanceTrend   []AttendanceTrendPoint `json:"attendance_trend"`
-	SkillDevelopment  []SkillPoint          `json:"skill_development"`
-	Recommendations   []string              `json:"recommendations"`
+	StudentID        int                    `json:"student_id"`
+	OverallTrend     string                 `json:"overall_trend"` // improving, declining, stable
+	GradeProgression []GradeProgressPoint   `json:"grade_progression"`
+	AttendanceTrend  []AttendanceTrendPoint `json:"attendance_trend"`
+	SkillDevelopment []SkillPoint           `json:"skill_development"`
+	Recommendations  []string               `json:"recommendations"`
 }
 
 type GradeProgressPoint struct {
@@ -33,50 +33,50 @@ type GradeProgressPoint struct {
 }
 
 type AttendanceTrendPoint struct {
-	Date            time.Time `json:"date"`
-	AttendanceRate  float64   `json:"attendance_rate"`
-	CourseID        int       `json:"course_id,omitempty"`
+	Date           time.Time `json:"date"`
+	AttendanceRate float64   `json:"attendance_rate"`
+	CourseID       int       `json:"course_id,omitempty"`
 }
 
 type SkillPoint struct {
-	Skill     string    `json:"skill"`
-	Level     float64   `json:"level"`
-	Date      time.Time `json:"date"`
-	CourseID  int       `json:"course_id,omitempty"`
+	Skill    string    `json:"skill"`
+	Level    float64   `json:"level"`
+	Date     time.Time `json:"date"`
+	CourseID int       `json:"course_id,omitempty"`
 }
 
 type CourseEngagement struct {
-	CourseID              int                    `json:"course_id"`
-	TotalStudents         int                    `json:"total_students"`
-	ActiveStudents        int                    `json:"active_students"`
-	EngagementRate        float64                `json:"engagement_rate"`
-	ActivityBreakdown     map[string]int         `json:"activity_breakdown"`
-	PeakActivityHours     []int                  `json:"peak_activity_hours"`
-	DropoutRiskStudents   []int                  `json:"dropout_risk_students"`
-	EngagementTimeline    []EngagementPoint      `json:"engagement_timeline"`
+	CourseID            int               `json:"course_id"`
+	TotalStudents       int               `json:"total_students"`
+	ActiveStudents      int               `json:"active_students"`
+	EngagementRate      float64           `json:"engagement_rate"`
+	ActivityBreakdown   map[string]int    `json:"activity_breakdown"`
+	PeakActivityHours   []int             `json:"peak_activity_hours"`
+	DropoutRiskStudents []int             `json:"dropout_risk_students"`
+	EngagementTimeline  []EngagementPoint `json:"engagement_timeline"`
 }
 
 type EngagementPoint struct {
-	Date             time.Time `json:"date"`
-	ActiveUsers      int       `json:"active_users"`
-	AssignmentsDone  int       `json:"assignments_done"`
-	QuizzesTaken     int       `json:"quizzes_taken"`
-	ForumPosts       int       `json:"forum_posts"`
+	Date            time.Time `json:"date"`
+	ActiveUsers     int       `json:"active_users"`
+	AssignmentsDone int       `json:"assignments_done"`
+	QuizzesTaken    int       `json:"quizzes_taken"`
+	ForumPosts      int       `json:"forum_posts"`
 }
 
 type PredictiveInsights struct {
-	AtRiskStudents         []RiskStudent         `json:"at_risk_students"`
-	CourseCompletionRates  []CompletionRate      `json:"course_completion_rates"`
-	GradePredictions       []GradePrediction     `json:"grade_predictions"`
-	AttendancePredictions  []AttendancePrediction `json:"attendance_predictions"`
-	Recommendations        []string              `json:"recommendations"`
+	AtRiskStudents        []RiskStudent          `json:"at_risk_students"`
+	CourseCompletionRates []CompletionRate       `json:"course_completion_rates"`
+	GradePredictions      []GradePrediction      `json:"grade_predictions"`
+	AttendancePredictions []AttendancePrediction `json:"attendance_predictions"`
+	Recommendations       []string               `json:"recommendations"`
 }
 
 type RiskStudent struct {
-	StudentID     int     `json:"student_id"`
-	RiskLevel     string  `json:"risk_level"` // high, medium, low
+	StudentID     int      `json:"student_id"`
+	RiskLevel     string   `json:"risk_level"` // high, medium, low
 	RiskFactors   []string `json:"risk_factors"`
-	Probability   float64 `json:"probability"`
+	Probability   float64  `json:"probability"`
 	Interventions []string `json:"interventions"`
 }
 
@@ -88,10 +88,10 @@ type CompletionRate struct {
 }
 
 type GradePrediction struct {
-	StudentID     int     `json:"student_id"`
-	CourseID      int     `json:"course_id"`
-	PredictedGPA  float64 `json:"predicted_gpa"`
-	Confidence    float64 `json:"confidence"`
+	StudentID    int     `json:"student_id"`
+	CourseID     int     `json:"course_id"`
+	PredictedGPA float64 `json:"predicted_gpa"`
+	Confidence   float64 `json:"confidence"`
 }
 
 type AttendancePrediction struct {
@@ -102,14 +102,14 @@ type AttendancePrediction struct {
 }
 
 type LearningAnalytics struct {
-	Period               string                 `json:"period"`
-	TotalStudents        int                    `json:"total_students"`
-	TotalCourses         int                    `json:"total_courses"`
-	AverageEngagement    float64                `json:"average_engagement"`
-	TopPerformingCourses []CoursePerformance    `json:"top_performing_courses"`
-	LearningPatterns     []LearningPattern      `json:"learning_patterns"`
-	ResourceUtilization  map[string]int         `json:"resource_utilization"`
-	TimeSpentAnalytics   []TimeSpentPoint       `json:"time_spent_analytics"`
+	Period               string              `json:"period"`
+	TotalStudents        int                 `json:"total_students"`
+	TotalCourses         int                 `json:"total_courses"`
+	AverageEngagement    float64             `json:"average_engagement"`
+	TopPerformingCourses []CoursePerformance `json:"top_performing_courses"`
+	LearningPatterns     []LearningPattern   `json:"learning_patterns"`
+	ResourceUtilization  map[string]int      `json:"resource_utilization"`
+	TimeSpentAnalytics   []TimeSpentPoint    `json:"time_spent_analytics"`
 }
 
 type CoursePerformance struct {
@@ -121,8 +121,8 @@ type CoursePerformance struct {
 }
 
 type LearningPattern struct {
-	Pattern   string  `json:"pattern"`
-	Students  int     `json:"students"`
+	Pattern     string  `json:"pattern"`
+	Students    int     `json:"students"`
 	SuccessRate float64 `json:"success_rate"`
 }
 
@@ -141,17 +141,17 @@ type PerformanceTrend struct {
 
 type ComparativeAnalysis struct {
 	CourseComparisons []CourseComparison `json:"course_comparisons"`
-	OverallInsights   []string          `json:"overall_insights"`
-	Recommendations   []string          `json:"recommendations"`
+	OverallInsights   []string           `json:"overall_insights"`
+	Recommendations   []string           `json:"recommendations"`
 }
 
 type CourseComparison struct {
-	CourseID1      int               `json:"course_id_1"`
-	CourseID2      int               `json:"course_id_2"`
-	CourseName1    string            `json:"course_name_1"`
-	CourseName2    string            `json:"course_name_2"`
-	Metrics        map[string]float64 `json:"metrics"`
-	SignificantDiff []string          `json:"significant_differences"`
+	CourseID1       int                `json:"course_id_1"`
+	CourseID2       int                `json:"course_id_2"`
+	CourseName1     string             `json:"course_name_1"`
+	CourseName2     string             `json:"course_name_2"`
+	Metrics         map[string]float64 `json:"metrics"`
+	SignificantDiff []string           `json:"significant_differences"`
 }
 
 type advancedAnalyticsService struct {
@@ -373,7 +373,7 @@ func (s *advancedAnalyticsService) getGradeProgression(ctx context.Context, coll
 		if err := rows.Scan(&point.Date, &point.AverageGPA); err != nil {
 			continue
 		}
-		point.AverageGPA = percentageToGPA(point.AverageGPA)
+		point.AverageGPA = PercentageToGPA(point.AverageGPA)
 		points = append(points, point)
 	}
 
@@ -1123,29 +1123,6 @@ func (s *advancedAnalyticsService) getCoursePerformanceTrends(ctx context.Contex
 
 	return trends, nil
 }
-// percentageToGPA converts percentage score to GPA scale (0.0-4.0)
-func percentageToGPA(percentage float64) float64 {
-	if percentage >= 90 {
-		return 4.0
-	} else if percentage >= 85 {
-		return 3.7
-	} else if percentage >= 82 {
-		return 3.3
-	} else if percentage >= 78 {
-		return 3.0
-	} else if percentage >= 75 {
-		return 2.7
-	} else if percentage >= 72 {
-		return 2.3
-	} else if percentage >= 68 {
-		return 2.0
-	} else if percentage >= 64 {
-		return 1.5
-	} else if percentage >= 60 {
-		return 1.0
-	}
-	return 0.0
-}
 
 // getSkillDevelopment calculates skill development over time based on grades and performance
 func (s *advancedAnalyticsService) getSkillDevelopment(ctx context.Context, collegeID, studentID int) ([]SkillPoint, error) {
@@ -1178,9 +1155,9 @@ func (s *advancedAnalyticsService) getSkillDevelopment(ctx context.Context, coll
 		}
 
 		skillPoints = append(skillPoints, SkillPoint{
-			Skill:    skillArea,
-			Level:    avgScore / 25, // Convert to 0-4 scale
-			Date:     month,
+			Skill: skillArea,
+			Level: avgScore / 25, // Convert to 0-4 scale
+			Date:  month,
 		})
 	}
 

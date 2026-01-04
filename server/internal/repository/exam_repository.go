@@ -27,6 +27,7 @@ type ExamRepository interface {
 	// Exam Results
 	CreateResult(ctx context.Context, result *models.ExamResult) error
 	GetResult(ctx context.Context, examID, studentID int) (*models.ExamResult, error)
+	GetResultByID(ctx context.Context, resultID int) (*models.ExamResult, error)
 	ListResults(ctx context.Context, examID int) ([]*models.ExamResult, error)
 	UpdateResult(ctx context.Context, result *models.ExamResult) error
 	GetStudentResults(ctx context.Context, studentID, collegeID int) ([]*models.ExamResult, error)
@@ -330,6 +331,24 @@ func (r *examRepository) GetResult(ctx context.Context, examID, studentID int) (
 
 	res := &models.ExamResult{}
 	err := r.db.Pool.QueryRow(ctx, sql, examID, studentID).Scan(
+		&res.ID, &res.ExamID, &res.StudentID, &res.CollegeID, &res.MarksObtained,
+		&res.Grade, &res.Percentage, &res.Result, &res.Remarks, &res.EvaluatedBy,
+		&res.EvaluatedAt, &res.RevaluationStatus, &res.CreatedAt, &res.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("result not found: %w", err)
+	}
+	return res, nil
+}
+
+// GetResultByID retrieves a result by its ID
+func (r *examRepository) GetResultByID(ctx context.Context, resultID int) (*models.ExamResult, error) {
+	sql := `SELECT id, exam_id, student_id, college_id, marks_obtained, grade, percentage,
+			result, remarks, evaluated_by, evaluated_at, revaluation_status, created_at, updated_at
+			FROM exam_results WHERE id = $1`
+
+	res := &models.ExamResult{}
+	err := r.db.Pool.QueryRow(ctx, sql, resultID).Scan(
 		&res.ID, &res.ExamID, &res.StudentID, &res.CollegeID, &res.MarksObtained,
 		&res.Grade, &res.Percentage, &res.Result, &res.Remarks, &res.EvaluatedBy,
 		&res.EvaluatedAt, &res.RevaluationStatus, &res.CreatedAt, &res.UpdatedAt,

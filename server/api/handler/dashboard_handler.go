@@ -181,22 +181,23 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	// Extract college ID and user info
 	collegeID, err := helpers.ExtractCollegeID(c)
 	if err != nil {
-		return helpers.ErrorResponse(c, 400, "Unable to extract college ID", err.Error())
+		return helpers.Error(c, "Unable to extract college ID", 400)
 	}
 
-	userID, err := helpers.ExtractUserID(c)
+	// Get the kratos ID from identity context to find student
+	kratosID, err := helpers.GetKratosID(c)
 	if err != nil {
-		return helpers.ErrorResponse(c, 400, "Unable to extract user ID", err.Error())
+		return helpers.Error(c, "Unable to extract user identity", 401)
 	}
 
 	// Get student record from Kratos ID
-	student, err := h.studentService.FindByKratosID(ctx, userID)
+	student, err := h.studentService.FindByKratosID(ctx, kratosID)
 	if err != nil {
-		return helpers.ErrorResponse(c, 404, "Student not found", err.Error())
+		return helpers.Error(c, "Student not found", 404)
 	}
 
 	// Get enrolled courses
-	enrollments, err := h.enrollmentService.FindEnrollmentsByStudent(ctx, collegeID, student.ID, 100, 0)
+	enrollments, err := h.enrollmentService.FindEnrollmentsByStudent(ctx, collegeID, student.StudentID, 100, 0)
 	if err != nil {
 		enrollments = []*models.Enrollment{}
 	}
@@ -207,14 +208,14 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	weightedGradePoints := 0.0
 
 	for _, enr := range enrollments {
-		course, err := h.courseService.GetCourseByID(ctx, collegeID, enr.CourseID)
+		course, err := h.courseService.FindCourseByID(ctx, collegeID, enr.CourseID)
 		if err != nil {
 			continue
 		}
 
 		// Get grades for this course
 		gradeFilter := models.GradeFilter{
-			StudentID: &student.ID,
+			StudentID: &student.StudentID,
 			CourseID:  &course.ID,
 			CollegeID: &collegeID,
 		}
@@ -234,7 +235,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 		}
 
 		// Get attendance for this course
-		attendanceRecords, err := h.attendanceService.GetAttendanceByCourseAndStudent(ctx, collegeID, course.ID, student.ID)
+		attendanceRecords, err := h.attendanceService.GetAttendanceByStudentAndCourse(ctx, collegeID, student.StudentID, course.ID, 1000, 0)
 		if err != nil {
 			attendanceRecords = []*models.Attendance{}
 		}
@@ -261,17 +262,16 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 		}
 
 		courseData = append(courseData, map[string]interface{}{
-			"id":                 course.ID,
-			"code":               course.Code,
-			"name":               course.Name,
-			"credits":            course.Credits,
-			"semester":           course.Semester,
-			"instructorName":     course.InstructorID,
-			"averageGrade":       math.Round(avgPercentage*100) / 100,
-			"attendanceRate":     attendancePercentage,
-			"totalSessions":      totalSessions,
-			"presentSessions":    presentCount,
-			"enrollmentStatus":   enr.Status,
+			"id":               course.ID,
+			"name":             course.Name,
+			"description":      course.Description,
+			"credits":          course.Credits,
+			"instructorID":     course.InstructorID,
+			"averageGrade":     math.Round(avgPercentage*100) / 100,
+			"attendanceRate":   attendancePercentage,
+			"totalSessions":    totalSessions,
+			"presentSessions":  presentCount,
+			"enrollmentStatus": enr.Status,
 		})
 	}
 
@@ -281,66 +281,50 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 		gpa = math.Round((weightedGradePoints/totalCredits)*100) / 100
 	}
 
-	// Get all assignments across all courses
-	assignmentFilter := models.AssignmentFilter{
-		CollegeID: &collegeID,
-		Limit:     100,
-	}
-	allAssignments, err := h.assignmentService.ListAssignments(ctx, assignmentFilter)
-	if err != nil {
-		allAssignments = []*models.Assignment{}
-	}
-
-	// Filter and categorize assignments
+	// Get assignments for enrolled courses
 	upcomingAssignments := []map[string]interface{}{}
 	completedAssignments := []map[string]interface{}{}
 	overdueAssignments := []map[string]interface{}{}
 	now := time.Now()
 
-	for _, assignment := range allAssignments {
-		// Check if student is enrolled in this course
-		enrolled := false
-		for _, enr := range enrollments {
-			if enr.CourseID == assignment.CourseID {
-				enrolled = true
-				break
-			}
-		}
-		if !enrolled {
+	for _, enr := range enrollments {
+		courseAssignments, err := h.assignmentService.GetAssignmentsByCourse(ctx, collegeID, enr.CourseID)
+		if err != nil {
 			continue
 		}
 
-		// Get submission status
-		submission, err := h.assignmentService.GetSubmissionByStudentAndAssignment(ctx, collegeID, student.ID, assignment.ID)
-		isSubmitted := err == nil && submission != nil
+		for _, assignment := range courseAssignments {
+			// Get submission status
+			submission, err := h.assignmentService.GetSubmissionByStudentAndAssignment(ctx, student.StudentID, assignment.ID)
+			isSubmitted := err == nil && submission != nil
 
-		assignmentData := map[string]interface{}{
-			"id":          assignment.ID,
-			"title":       assignment.Title,
-			"courseID":    assignment.CourseID,
-			"dueDate":     assignment.DueDate,
-			"maxScore":    assignment.MaxScore,
-			"isSubmitted": isSubmitted,
-		}
+			assignmentData := map[string]interface{}{
+				"id":          assignment.ID,
+				"title":       assignment.Title,
+				"courseID":    assignment.CourseID,
+				"dueDate":     assignment.DueDate,
+				"maxPoints":   assignment.MaxPoints,
+				"isSubmitted": isSubmitted,
+			}
 
-		if isSubmitted {
-			assignmentData["submittedAt"] = submission.SubmittedAt
-			assignmentData["score"] = submission.Score
-			assignmentData["feedback"] = submission.Feedback
-			completedAssignments = append(completedAssignments, assignmentData)
-		} else {
-			dueDate, _ := time.Parse(time.RFC3339, assignment.DueDate)
-			if dueDate.Before(now) {
-				overdueAssignments = append(overdueAssignments, assignmentData)
+			if isSubmitted {
+				assignmentData["submittedAt"] = submission.SubmissionTime
+				assignmentData["grade"] = submission.Grade
+				assignmentData["feedback"] = submission.Feedback
+				completedAssignments = append(completedAssignments, assignmentData)
 			} else {
-				upcomingAssignments = append(upcomingAssignments, assignmentData)
+				if assignment.DueDate.Before(now) {
+					overdueAssignments = append(overdueAssignments, assignmentData)
+				} else {
+					upcomingAssignments = append(upcomingAssignments, assignmentData)
+				}
 			}
 		}
 	}
 
 	// Get recent grades (last 10)
 	recentGradesFilter := models.GradeFilter{
-		StudentID: &student.ID,
+		StudentID: &student.StudentID,
 		CollegeID: &collegeID,
 		Limit:     10,
 	}
@@ -352,24 +336,21 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	recentGradesData := []map[string]interface{}{}
 	for _, grade := range recentGrades {
 		// Get course name
-		course, err := h.courseService.GetCourseByID(ctx, collegeID, grade.CourseID)
+		course, err := h.courseService.FindCourseByID(ctx, collegeID, grade.CourseID)
 		courseName := "Unknown Course"
-		courseCode := ""
 		if err == nil {
 			courseName = course.Name
-			courseCode = course.Code
 		}
 
 		recentGradesData = append(recentGradesData, map[string]interface{}{
 			"id":             grade.ID,
 			"courseName":     courseName,
-			"courseCode":     courseCode,
 			"assessmentName": grade.AssessmentName,
 			"assessmentType": grade.AssessmentType,
 			"obtainedMarks":  grade.ObtainedMarks,
 			"totalMarks":     grade.TotalMarks,
 			"percentage":     math.Round(grade.Percentage*100) / 100,
-			"gradedDate":     grade.GradedDate,
+			"gradedAt":       grade.GradedAt,
 		})
 	}
 
@@ -404,7 +385,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 				"title":       event.Title,
 				"description": event.Description,
 				"date":        event.Date,
-				"type":        event.Type,
+				"eventType":   event.EventType,
 			})
 		}
 	}
@@ -432,20 +413,16 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	// Build comprehensive response
 	response := map[string]interface{}{
 		"student": map[string]interface{}{
-			"id":         student.ID,
-			"rollNo":     student.RollNo,
-			"firstName":  student.FirstName,
-			"lastName":   student.LastName,
-			"email":      student.Email,
-			"semester":   student.Semester,
-			"department": student.DepartmentID,
+			"id":        student.StudentID,
+			"rollNo":    student.RollNo,
+			"collegeID": student.CollegeID,
 		},
 		"academicOverview": map[string]interface{}{
-			"gpa":                    gpa,
-			"totalCredits":           totalCredits,
-			"enrolledCourses":        len(courseData),
-			"attendanceRate":         overallAttendanceRate,
-			"totalPresentSessions":   totalPresentSessions,
+			"gpa":                     gpa,
+			"totalCredits":            totalCredits,
+			"enrolledCourses":         len(courseData),
+			"attendanceRate":          overallAttendanceRate,
+			"totalPresentSessions":    totalPresentSessions,
 			"totalAttendanceSessions": totalAttendanceRecords,
 		},
 		"courses": courseData,
@@ -459,36 +436,16 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 				"overdueCount":   len(overdueAssignments),
 			},
 		},
-		"recentGrades":    recentGradesData,
-		"upcomingEvents":  upcomingEvents,
-		"announcements":   announcements,
+		"recentGrades":   recentGradesData,
+		"upcomingEvents": upcomingEvents,
+		"announcements":  announcements,
 	}
 
 	return helpers.Success(c, response, 200)
 }
 
 // calculateGradePoint converts percentage to GPA point (4.0 scale)
+// Uses the shared PercentageToGPA from analytics for consistency across the app.
 func calculateGradePoint(percentage float64) float64 {
-	switch {
-	case percentage >= 90:
-		return 4.0 // A
-	case percentage >= 85:
-		return 3.7 // A-
-	case percentage >= 80:
-		return 3.3 // B+
-	case percentage >= 75:
-		return 3.0 // B
-	case percentage >= 70:
-		return 2.7 // B-
-	case percentage >= 65:
-		return 2.3 // C+
-	case percentage >= 60:
-		return 2.0 // C
-	case percentage >= 55:
-		return 1.7 // C-
-	case percentage >= 50:
-		return 1.0 // D
-	default:
-		return 0.0 // F
-	}
+	return analytics.PercentageToGPA(percentage)
 }

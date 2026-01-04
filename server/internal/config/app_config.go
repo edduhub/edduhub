@@ -32,6 +32,11 @@ type AppConfig struct {
 	// Loaded from CORS_ORIGINS environment variable (comma-separated).
 	// Default: ["http://localhost:3000"] for development
 	CORSOrigins []string
+
+	// Razorpay configuration
+	RazorpayKey           string
+	RazorpaySecret        string
+	RazorpayWebhookSecret string
 }
 
 // LoadAppConfig loads the general application configuration from environment variables.
@@ -105,6 +110,25 @@ func LoadAppConfig() (*AppConfig, error) {
 		}
 		if len(config.CORSOrigins) == 0 {
 			return nil, fmt.Errorf("CORS_ORIGINS is set but contains no valid origins")
+		}
+	}
+
+	config.RazorpayKey = os.Getenv("RAZORPAY_KEY_ID")
+	config.RazorpaySecret = os.Getenv("RAZORPAY_KEY_SECRET")
+	config.RazorpayWebhookSecret = os.Getenv("RAZORPAY_WEBHOOK_SECRET")
+
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "production" {
+		if config.RazorpayWebhookSecret == "" {
+			return nil, fmt.Errorf("SECURITY ERROR: RAZORPAY_WEBHOOK_SECRET must be set in production environment")
+		}
+		if config.RazorpayKey == "" || config.RazorpaySecret == "" {
+			return nil, fmt.Errorf("SECURITY ERROR: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in production environment")
+		}
+		for _, origin := range config.CORSOrigins {
+			if origin == "http://localhost:3000" || origin == "http://localhost:8080" {
+				return nil, fmt.Errorf("SECURITY ERROR: CORS origins contain localhost in production environment")
+			}
 		}
 	}
 

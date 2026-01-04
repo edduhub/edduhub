@@ -5,6 +5,7 @@ package repository
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"eduhub/server/internal/models"
@@ -15,7 +16,11 @@ import (
 )
 
 func setupUserTest(t *testing.T) (*pgxpool.Pool, *DB, UserRepository, context.Context) {
-	databaseURL := "postgres://your_db_user:your_db_password@localhost:5432/edduhub"
+	// Use environment variable for database URL - never hardcode credentials
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL not set, skipping integration test")
+	}
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	require.NoError(t, err)

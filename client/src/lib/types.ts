@@ -1,6 +1,34 @@
 // Core type definitions for EdduHub
 
-export type UserRole = 'student' | 'faculty' | 'admin' | 'super_admin';
+export type UserRole = 'student' | 'faculty' | 'admin' | 'super_admin' | 'parent';
+
+export type Parent = {
+  id: number;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  relation: 'father' | 'mother' | 'guardian';
+  studentIds: number[];
+  students?: Student[];
+  collegeId: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StudentParentRelationship = {
+  id: number;
+  studentId: number;
+  studentName?: string;
+  parentId: number;
+  parentName?: string;
+  relation: 'father' | 'mother' | 'guardian';
+  primaryContact: boolean;
+  receiveNotifications: boolean;
+  createdAt: string;
+};
 
 export type User = {
   id: string;
@@ -14,6 +42,24 @@ export type User = {
   verified: boolean;
 };
 
+export type UserPreferences = {
+  emailNotifications?: boolean;
+  pushNotifications?: boolean;
+  theme?: 'light' | 'dark' | 'system';
+  language?: string;
+  timezone?: string;
+  dateFormat?: string;
+  [key: string]: string | boolean | number | undefined;
+};
+
+export type SocialLinks = {
+  linkedin?: string;
+  twitter?: string;
+  github?: string;
+  website?: string;
+  [key: string]: string | undefined;
+};
+
 export type Profile = {
   id: number;
   user_id: string;
@@ -25,8 +71,8 @@ export type Profile = {
   date_of_birth: string;
   joined_at: string;
   last_active: string;
-  preferences: Record<string, any>;
-  social_links: Record<string, any>;
+  preferences: UserPreferences;
+  social_links: SocialLinks;
   created_at: string;
   updated_at: string;
 };
@@ -166,6 +212,17 @@ export type CalendarEvent = {
   collegeId: string;
 };
 
+export type NotificationMetadata = {
+  courseId?: number;
+  courseName?: string;
+  studentId?: number;
+  studentName?: string;
+  assignmentId?: number;
+  quizId?: number;
+  eventId?: number;
+  [key: string]: string | number | undefined;
+};
+
 export type Notification = {
   id: number;
   userId: string;
@@ -175,7 +232,7 @@ export type Notification = {
   category: string;
   isRead: boolean;
   actionUrl?: string;
-  metadata?: Record<string, any>;
+  metadata?: NotificationMetadata;
   createdAt: string;
 };
 
@@ -361,6 +418,15 @@ export type StudentProgress = {
 };
 
 // File Management
+export type FileMetadata = {
+  alt?: string;
+  description?: string;
+  author?: string;
+  category?: string;
+  tags?: string[];
+  [key: string]: string | string[] | undefined;
+};
+
 export type FileRecord = {
   id: number;
   collegeId: string;
@@ -374,7 +440,7 @@ export type FileRecord = {
   folderName?: string;
   storageType: 'local' | 's3' | 'minio';
   tags?: string[];
-  metadata?: Record<string, any>;
+  metadata?: FileMetadata;
   currentVersion?: number;
   createdAt: string;
   updatedAt: string;
@@ -511,7 +577,7 @@ export type AuditLog = {
   action: string;
   entityType: string;
   entityId?: string;
-  changes?: Record<string, any>;
+  changes?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
   timestamp: string;
@@ -541,10 +607,20 @@ export type Webhook = {
   updatedAt: string;
 };
 
+export type WebhookEventData = {
+  entityType: string;
+  entityId: string | number;
+  action: string;
+  changes?: Record<string, unknown>;
+  userId?: string;
+  timestamp?: string;
+  [key: string]: unknown;
+};
+
 export type WebhookEvent = {
   event: string;
   timestamp: string;
-  data: Record<string, any>;
+  data: WebhookEventData;
 };
 
 // Analytics Types
@@ -646,6 +722,57 @@ export type StudentDashboardData = {
   courseProgress: StudentProgress[];
 };
 
+// Discussion Forums
+export type ForumCategory = 'general' | 'academic' | 'assignment' | 'question' | 'announcement';
+
+export type ForumThread = {
+  id: number;
+  courseId: number;
+  courseName?: string;
+  category: ForumCategory;
+  title: string;
+  content: string;
+  authorId: number;
+  authorName: string;
+  authorAvatar?: string;
+  isPinned: boolean;
+  isLocked: boolean;
+  viewCount: number;
+  replyCount: number;
+  lastReplyAt?: string;
+  lastReplyBy?: number;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  collegeId: number;
+};
+
+export type ForumReply = {
+  id: number;
+  threadId: number;
+  parentId?: number;
+  content: string;
+  authorId: number;
+  authorName: string;
+  authorAvatar?: string;
+  isAcceptedAnswer: boolean;
+  likeCount: number;
+  hasLiked: boolean;
+  createdAt: string;
+  updatedAt: string;
+  collegeId: number;
+};
+
+export type ForumSearchFilters = {
+  courseId?: number;
+  category?: ForumCategory;
+  tag?: string;
+  authorId?: string;
+  searchQuery?: string;
+  sortBy?: 'latest' | 'popular' | 'unanswered';
+  pinnedOnly?: boolean;
+};
+
 // Role & Permission Types
 export type Permission = {
   id: number;
@@ -687,7 +814,7 @@ export type AppError = {
 export type ValidationError = {
   field: string;
   message: string;
-  value?: any;
+  value?: unknown;
 };
 
 export type ApiError = {
@@ -696,6 +823,7 @@ export type ApiError = {
   code?: string;
   statusCode: number;
   validationErrors?: ValidationError[];
+  details?: Record<string, unknown>;
 };
 
 // Logger Types
@@ -705,7 +833,7 @@ export type LogEntry = {
   timestamp: string;
   level: LogLevel;
   message: string;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   error?: Error;
 };
 
@@ -719,7 +847,7 @@ export type BatchImportResult = {
 
 export type BatchExportOptions = {
   format: 'csv' | 'xlsx' | 'json';
-  filters?: Record<string, any>;
+  filters?: Record<string, string | number | boolean | (string | number | boolean)[]>;
   fields?: string[];
 };
 
@@ -817,3 +945,25 @@ export type CollegeStats = {
   overallAttendanceRate: number;
   averageCGPA: number;
 };
+
+/**
+ * Get the appropriate dashboard path based on user role
+ * @param role - The user's role
+ * @returns The path to redirect to after login
+ */
+export function getDashboardPathForRole(role: UserRole): string {
+  switch (role) {
+    case 'student':
+      return '/student-dashboard';
+    case 'faculty':
+      return '/faculty-dashboard';
+    case 'admin':
+      return '/admin-dashboard';
+    case 'super_admin':
+      return '/super-admin';
+    case 'parent':
+      return '/parent-portal';
+    default:
+      return '/';
+  }
+}

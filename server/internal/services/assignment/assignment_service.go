@@ -3,6 +3,7 @@ package assignment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"eduhub/server/internal/models"
@@ -127,11 +128,14 @@ func (a *assignmentService) CountPendingSubmissionsByCollege(ctx context.Context
 
 // BulkGradeSubmissions grades multiple submissions at once
 func (a *assignmentService) BulkGradeSubmissions(ctx context.Context, collegeID int, grades map[int]*GradeInput) error {
+	var errs []error
 	for submissionID, gradeInput := range grades {
 		if err := a.GradeSubmission(ctx, collegeID, submissionID, gradeInput.Grade, gradeInput.Feedback); err != nil {
-			// Log error but continue with other submissions
-			continue
+			errs = append(errs, fmt.Errorf("failed to grade submission %d: %w", submissionID, err))
 		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("bulk grading encountered %d errors: %v", len(errs), errs)
 	}
 	return nil
 }
@@ -160,11 +164,15 @@ func (a *assignmentService) CalculateLatePenalty(submission *models.AssignmentSu
 	return penalty
 }
 
-// GetGradingStats retrieves grading statistics for an assignment
 func (a *assignmentService) GetGradingStats(ctx context.Context, collegeID, assignmentID int) (*GradingStats, error) {
 	submissions, err := a.GetSubmissionsByAssignment(ctx, collegeID, assignmentID)
 	if err != nil {
 		return nil, err
+	}
+
+	assignment, err := a.GetAssignment(ctx, collegeID, assignmentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assignment for grading stats: %w", err)
 	}
 
 	stats := &GradingStats{
@@ -172,6 +180,7 @@ func (a *assignmentService) GetGradingStats(ctx context.Context, collegeID, assi
 	}
 
 	totalGrades := 0
+
 	for _, sub := range submissions {
 		if sub.Grade != nil {
 			stats.GradedSubmissions++
@@ -180,9 +189,7 @@ func (a *assignmentService) GetGradingStats(ctx context.Context, collegeID, assi
 			stats.PendingGrading++
 		}
 
-		// Check if late
-		assignment, err := a.GetAssignment(ctx, collegeID, assignmentID)
-		if err == nil && sub.SubmissionTime.After(assignment.DueDate) {
+		if sub.SubmissionTime.After(assignment.DueDate) {
 			stats.LateSubmissions++
 		}
 	}

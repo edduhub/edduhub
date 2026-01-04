@@ -36,6 +36,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const bootstrap = async () => {
       try {
         // Prefer cookie-based session via server profile endpoint
@@ -43,7 +45,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           method: 'GET',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
+          signal: abortController.signal,
         });
+
+        // Check if request was aborted
+        if (abortController.signal.aborted) return;
+
         if (resp.ok) {
           const result = await resp.json();
           const data = result.data || result;
@@ -64,9 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
           return;
         }
-      } catch {
-        // ignore and fallback to local storage
+      } catch (error) {
+        // Ignore abort errors, they're expected on unmount
+        if (error instanceof Error && error.name === 'AbortError') return;
+        // ignore other errors and fallback to local storage
       }
+
+      // Check if component was unmounted during fetch
+      if (abortController.signal.aborted) return;
 
       // Fallback: Load session from localStorage
       const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -88,6 +100,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     bootstrap();
+
+    // Cleanup: abort any in-flight requests when component unmounts
+    return () => {
+      abortController.abort();
+    };
   }, []);
 
   const saveSession = (authSession: AuthSession) => {
@@ -116,7 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const error = await response.json();
           msg = error.message || error.error || msg;
-        } catch {}
+        } catch { }
         throw new Error(msg);
       }
 
@@ -157,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             avatar: p.user?.avatar ?? p.avatar,
           } as User;
         }
-      } catch {}
+      } catch { }
 
       saveSession(authSession);
     } catch (error) {
@@ -180,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const error = await response.json();
           msg = error.message || error.error || msg;
-        } catch {}
+        } catch { }
         throw new Error(msg);
       }
 

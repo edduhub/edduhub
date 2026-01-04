@@ -2,11 +2,17 @@ package fee
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
+
+	"github.com/razorpay/razorpay-go"
+	"github.com/rs/zerolog/log"
 )
 
 type FeeService interface {
@@ -30,16 +36,30 @@ type FeeService interface {
 
 	// Online payment flow
 	InitiateOnlinePayment(ctx context.Context, req *models.InitiateOnlinePaymentRequest, studentID int) (*models.OnlinePaymentResponse, error)
-	ConfirmOnlinePayment(ctx context.Context, req *models.ConfirmOnlinePaymentRequest) error
+	VerifyPayment(ctx context.Context, req *models.ConfirmOnlinePaymentRequest) error
+
+	// Webhook processing
+	VerifyWebhookSignature(body []byte, signature string) bool
+	ProcessWebhookEvent(ctx context.Context, eventType string, payload map[string]interface{}) error
 }
 
 type feeService struct {
-	feeRepo repository.FeeRepository
+	feeRepo       repository.FeeRepository
+	rzp           *razorpay.Client
+	webhookSecret string
 }
 
-func NewFeeService(feeRepo repository.FeeRepository) FeeService {
+func NewFeeService(feeRepo repository.FeeRepository, rzpKey, rzpSecret, webhookSecret string) FeeService {
+	client := razorpay.NewClient(rzpKey, rzpSecret)
+
+	if webhookSecret == "" {
+		log.Warn().Msg("RAZORPAY_WEBHOOK_SECRET is not set - payment and webhook signature verification will fail")
+	}
+
 	return &feeService{
-		feeRepo: feeRepo,
+		feeRepo:       feeRepo,
+		rzp:           client,
+		webhookSecret: webhookSecret,
 	}
 }
 
@@ -168,6 +188,19 @@ func (s *feeService) BulkAssignFeeToStudents(ctx context.Context, req *models.Bu
 
 	// Assign fee to each student
 	for _, studentID := range req.StudentIDs {
+		// Check for existing assignment to prevent duplicates
+		existing, _ := s.feeRepo.GetStudentFeeAssignments(ctx, studentID)
+		isDuplicate := false
+		for _, e := range existing {
+			if e.FeeStructureID == req.FeeStructureID {
+				isDuplicate = true
+				break
+			}
+		}
+		if isDuplicate {
+			continue // Skip if already assigned
+		}
+
 		assignment := &models.FeeAssignment{
 			StudentID:      studentID,
 			FeeStructureID: req.FeeStructureID,
@@ -254,17 +287,31 @@ func (s *feeService) InitiateOnlinePayment(ctx context.Context, req *models.Init
 		return nil, fmt.Errorf("fee assignment does not belong to this student")
 	}
 
-	// Create pending payment record
-	transactionID := fmt.Sprintf("TXN-%d-%d-%d", studentID, req.FeeAssignmentID, time.Now().Unix())
+	// For Razorpay, we create an order
+	amountInPaise := int(req.Amount * 100)
+	orderData := map[string]interface{}{
+		"amount":          amountInPaise,
+		"currency":        "INR", // Razorpay usually expects INR
+		"receipt":         fmt.Sprintf("rcpt_%d_%d", studentID, time.Now().Unix()),
+		"payment_capture": 1,
+	}
 
+	body, err := s.rzp.Order.Create(orderData, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Razorpay order: %w", err)
+	}
+
+	razorpayOrderID := body["id"].(string)
+
+	// Create pending payment record
 	payment := &models.FeePayment{
 		FeeAssignmentID: req.FeeAssignmentID,
 		StudentID:       studentID,
 		Amount:          req.Amount,
-		Currency:        "USD",
+		Currency:        "INR",
 		PaymentMethod:   "online",
 		PaymentStatus:   "pending",
-		TransactionID:   &transactionID,
+		TransactionID:   &razorpayOrderID, // Store order ID as transaction ID initially
 		Gateway:         &req.Gateway,
 	}
 
@@ -272,27 +319,41 @@ func (s *feeService) InitiateOnlinePayment(ctx context.Context, req *models.Init
 		return nil, fmt.Errorf("failed to create payment record: %w", err)
 	}
 
-	// In a real implementation, this would integrate with actual payment gateway
-	// For now, return a mock response
-	checkoutURL := fmt.Sprintf("https://payment-gateway.example.com/checkout/%s", transactionID)
-
 	return &models.OnlinePaymentResponse{
 		PaymentID:     payment.ID,
-		CheckoutURL:   checkoutURL,
-		TransactionID: transactionID,
+		TransactionID: razorpayOrderID,
 		Status:        "pending",
 	}, nil
 }
 
-func (s *feeService) ConfirmOnlinePayment(ctx context.Context, req *models.ConfirmOnlinePaymentRequest) error {
-	// In a real implementation, verify payment with gateway
-	// For now, just update status
+func (s *feeService) VerifyPayment(ctx context.Context, req *models.ConfirmOnlinePaymentRequest) error {
+	if req.OrderID == "" || req.TransactionID == "" || req.Signature == "" {
+		return fmt.Errorf("invalid payment verification request: missing order_id, payment_id, or signature")
+	}
+
+	signatureString := req.OrderID + "|" + req.TransactionID
+
+	signature := hmac.New(sha256.New, []byte(s.webhookSecret))
+	signature.Write([]byte(signatureString))
+	digest := hex.EncodeToString(signature.Sum(nil))
+
+	if !hmac.Equal([]byte(digest), []byte(req.Signature)) {
+		log.Error().
+			Str("order_id", req.OrderID).
+			Str("payment_id", req.TransactionID).
+			Msg("Payment signature verification failed")
+		return fmt.Errorf("invalid payment signature: verification failed")
+	}
+
+	log.Info().
+		Str("order_id", req.OrderID).
+		Str("payment_id", req.TransactionID).
+		Msg("Payment signature verified successfully")
 
 	if err := s.feeRepo.UpdatePaymentStatus(ctx, req.PaymentID, "completed", &req.TransactionID); err != nil {
 		return fmt.Errorf("failed to update payment status: %w", err)
 	}
 
-	// Get payment to update assignment status
 	payment, err := s.feeRepo.GetFeePayment(ctx, req.PaymentID)
 	if err != nil {
 		return err
@@ -313,4 +374,104 @@ func (s *feeService) ConfirmOnlinePayment(ctx context.Context, req *models.Confi
 	}
 
 	return nil
+}
+
+func (s *feeService) VerifyWebhookSignature(body []byte, signature string) bool {
+	if s.webhookSecret == "" {
+		log.Error().Msg("Webhook signature verification failed: RAZORPAY_WEBHOOK_SECRET is not configured")
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(s.webhookSecret))
+	mac.Write(body)
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	isValid := hmac.Equal([]byte(expectedSignature), []byte(signature))
+	if !isValid {
+		log.Error().Msg("Webhook signature verification failed: invalid signature")
+	} else {
+		log.Debug().Msg("Webhook signature verified successfully")
+	}
+
+	return isValid
+}
+
+// ProcessWebhookEvent processes Razorpay webhook events (payment.captured, payment.failed, etc.)
+func (s *feeService) ProcessWebhookEvent(ctx context.Context, eventType string, payload map[string]interface{}) error {
+	switch eventType {
+	case "payment.captured":
+		return s.handlePaymentCaptured(ctx, payload)
+	case "payment.failed":
+		return s.handlePaymentFailed(ctx, payload)
+	case "order.paid":
+		return s.handleOrderPaid(ctx, payload)
+	default:
+		// Unhandled event type - log and ignore
+		return nil
+	}
+}
+
+// handlePaymentCaptured processes successful payment webhooks
+func (s *feeService) handlePaymentCaptured(ctx context.Context, payload map[string]interface{}) error {
+	paymentData, ok := payload["payment"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid payment payload structure")
+	}
+
+	entity, ok := paymentData["entity"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid payment entity structure")
+	}
+
+	orderID, _ := entity["order_id"].(string)
+	paymentID, _ := entity["id"].(string)
+
+	if orderID == "" || paymentID == "" {
+		return fmt.Errorf("missing order_id or payment_id in webhook payload")
+	}
+
+	// Update payment status in database using order_id (which is our transaction_id)
+	return s.feeRepo.UpdatePaymentStatusByTransactionID(ctx, orderID, "completed", &paymentID)
+}
+
+// handlePaymentFailed processes failed payment webhooks
+func (s *feeService) handlePaymentFailed(ctx context.Context, payload map[string]interface{}) error {
+	paymentData, ok := payload["payment"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid payment payload structure")
+	}
+
+	entity, ok := paymentData["entity"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid payment entity structure")
+	}
+
+	orderID, _ := entity["order_id"].(string)
+	if orderID == "" {
+		return fmt.Errorf("missing order_id in webhook payload")
+	}
+
+	// Update payment status to failed
+	return s.feeRepo.UpdatePaymentStatusByTransactionID(ctx, orderID, "failed", nil)
+}
+
+// handleOrderPaid processes order.paid webhooks (alternative to payment.captured)
+func (s *feeService) handleOrderPaid(ctx context.Context, payload map[string]interface{}) error {
+	orderData, ok := payload["order"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid order payload structure")
+	}
+
+	entity, ok := orderData["entity"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid order entity structure")
+	}
+
+	orderID, _ := entity["id"].(string)
+	if orderID == "" {
+		return fmt.Errorf("missing order_id in webhook payload")
+	}
+
+	// Update payment status to completed
+	return s.feeRepo.UpdatePaymentStatusByTransactionID(ctx, orderID, "completed", nil)
 }

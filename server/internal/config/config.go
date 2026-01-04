@@ -69,8 +69,11 @@ func NewConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to load database config: %w", err)
 	}
 
-	// Load database connection
-	db := LoadDatabase()
+	// Load database connection with retry logic
+	db, err := LoadDatabaseWithRetry(3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
 
 	// Load authentication configuration
 	authConfig, err := LoadAuthConfig()

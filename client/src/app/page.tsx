@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardResponse } from "@/lib/types";
-import { logger } from '@/lib/logger';
+import { logger } from "@/lib/logger";
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth();
@@ -32,6 +32,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [studentData, setStudentData] = useState<any>({
+    enrolledCourses: 0,
+    gpa: 0,
+    attendanceRate: 0,
+    pendingTasks: 0,
+    courseGrades: [],
+    recentGrades: []
+  });
+  const [studentLoading, setStudentLoading] = useState(false);
+  const [studentError, setStudentError] = useState<string | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
@@ -39,7 +50,6 @@ export default function DashboardPage() {
           setLoading(true);
           setError(null);
           const data = await api.get<any>("/api/dashboard");
-          // Backend returns metrics object with basic data, normalize it
           const normalized: DashboardResponse = {
             metrics: {
               totalStudents: data?.metrics?.totalStudents ?? 0,
@@ -69,106 +79,99 @@ export default function DashboardPage() {
     }
   }, [user, isLoading, router]);
 
-  if (isLoading || loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  if (error) {
-    return (
-      <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Dashboard</CardTitle>
-            <CardDescription>Unable to load data</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-destructive">{error}</div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const [studentData, setStudentData] = useState<any>({
-    enrolledCourses: 0,
-    gpa: 0,
-    attendanceRate: 0,
-    pendingTasks: 0,
-    courseGrades: [],
-    recentGrades: []
-  });
-
   useEffect(() => {
     const fetchStudentData = async () => {
-      if (user?.role !== 'student') return;
-        try {
-          // Fetch student-specific data from various endpoints
-          const [courseGrades, attendance, assignments, grades] = await Promise.all([
-            api.get<any[]>('/api/grades/courses').catch(() => []),
-            api.get<any[]>('/api/attendance/stats/courses').catch(() => []),
-            api.get<any[]>('/api/assignments').catch(() => []),
-            api.get<any[]>('/api/grades').catch(() => [])
-          ]);
+      if (user?.role !== 'student') {
+        return;
+      }
 
-          const enrolledCourses = courseGrades.length;
-          
-          // Calculate GPA
-          let gpa = 0;
-          if (courseGrades.length > 0) {
-            const gradePoints: Record<string, number> = {
-              'A+': 4.0, 'A': 3.7, 'A-': 3.3,
-              'B+': 3.0, 'B': 2.7, 'B-': 2.3,
-              'C+': 2.0, 'C': 1.7, 'C-': 1.3,
-              'D': 1.0, 'F': 0.0
-            };
-            const totalCredits = courseGrades.reduce((acc: number, c: any) => acc + (c.credits || 3), 0);
-            if (totalCredits > 0) {
-              const totalPoints = courseGrades.reduce((acc: number, c: any) => {
-                const grade = c.letterGrade || c.grade || 'C';
-                return acc + (gradePoints[grade] || 0) * (c.credits || 3);
-              }, 0);
-              gpa = totalPoints / totalCredits;
-            }
+      setStudentLoading(true);
+      setStudentError(null);
+
+      try {
+        const [courseGrades, attendance, assignments, grades] = await Promise.all([
+          api.get<any[]>('/api/grades/courses'),
+          api.get<any[]>('/api/attendance/stats/courses'),
+          api.get<any[]>('/api/assignments'),
+          api.get<any[]>('/api/grades')
+        ]);
+
+        const enrolledCourses = courseGrades?.length || 0;
+
+        let gpa = 0;
+        if (courseGrades && courseGrades.length > 0) {
+          const gradePoints: Record<string, number> = {
+            'A+': 4.0, 'A': 3.7, 'A-': 3.3,
+            'B+': 3.0, 'B': 2.7, 'B-': 2.3,
+            'C+': 2.0, 'C': 1.7, 'C-': 1.3,
+            'D': 1.0, 'F': 0.0
+          };
+          const totalCredits = courseGrades.reduce((acc: number, c: any) => acc + (c.credits || 3), 0);
+          if (totalCredits > 0) {
+            const totalPoints = courseGrades.reduce((acc: number, c: any) => {
+              const grade = c.letterGrade || c.grade || 'C';
+              return acc + (gradePoints[grade] || 0) * (c.credits || 3);
+            }, 0);
+            gpa = totalPoints / totalCredits;
           }
-
-          // Calculate attendance rate
-          let attendanceRate = 0;
-          if (attendance.length > 0) {
-            const totalSessions = attendance.reduce((acc: number, c: any) => acc + (c.totalSessions || c.total || 0), 0);
-            const presentSessions = attendance.reduce((acc: number, c: any) => acc + (c.presentCount || c.present || 0), 0);
-            if (totalSessions > 0) {
-              attendanceRate = Math.round((presentSessions / totalSessions) * 100);
-            }
-          }
-
-          const pendingTasks = assignments.filter((a: any) => a.status === 'pending').length;
-
-          setStudentData({
-            enrolledCourses,
-            gpa: gpa.toFixed(2),
-            attendanceRate,
-            pendingTasks,
-            courseGrades: courseGrades.slice(0, 4),
-            recentGrades: grades.slice(0, 3)
-          });
-        } catch (err) {
-          logger.error('Failed to fetch student data:', err as Error);
         }
+
+        let attendanceRate = 0;
+        if (attendance && attendance.length > 0) {
+          const totalSessions = attendance.reduce((acc: number, c: any) => acc + (c.totalSessions || c.total || 0), 0);
+          const presentSessions = attendance.reduce((acc: number, c: any) => acc + (c.presentCount || c.present || 0), 0);
+          if (totalSessions > 0) {
+            attendanceRate = Math.round((presentSessions / totalSessions) * 100);
+          }
+        }
+
+        const pendingTasks = assignments?.filter((a: any) => a.status === 'pending').length || 0;
+
+        setStudentData({
+          enrolledCourses,
+          gpa: gpa.toFixed(2),
+          attendanceRate,
+          pendingTasks,
+          courseGrades: (courseGrades || []).slice(0, 4),
+          recentGrades: (grades || []).slice(0, 3)
+        });
+      } catch (err: any) {
+        logger.error('Failed to fetch student data:', err as Error);
+        setStudentError(err?.message || "Failed to load student data");
+      } finally {
+        setStudentLoading(false);
+      }
     };
 
     fetchStudentData();
   }, [user?.role]);
 
-  // Student Dashboard
   if (user.role === 'student') {
+    if (studentLoading) {
+      return (
+        <div className="flex h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+        </div>
+      );
+    }
+
+    if (studentError) {
+      return (
+        <div className="p-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Student Dashboard</CardTitle>
+              <CardDescription>Unable to load student data</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-destructive mb-4">{studentError}</div>
+              <Button onClick={() => window.location.reload()} size="sm">Retry</Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <div>

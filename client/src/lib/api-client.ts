@@ -1,6 +1,6 @@
 // Enhanced API client with authentication support, retry logic, and better error handling
 
-import { AuthSession } from './types';
+import { AuthSession, ApiError, ValidationError, Quiz, Profile, User } from './types';
 import { logger } from './logger';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -8,8 +8,20 @@ const AUTH_STORAGE_KEY = 'edduhub_auth';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const auth = localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!auth) return null;
+  try {
+    const session = JSON.parse(auth) as AuthSession;
+    return session.token;
+  } catch {
+    return null;
+  }
+}
+
 export class APIError extends Error {
-  constructor(public status: number, message: string, public code?: string) {
+  constructor(public status: number, message: string, public code?: string, public details?: unknown) {
     super(message);
     this.name = 'APIError';
   }
@@ -22,26 +34,17 @@ export class NetworkError extends Error {
   }
 }
 
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  
-  try {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (stored) {
-      const session: AuthSession = JSON.parse(stored);
-      if (new Date(session.expiresAt) > new Date()) {
-        return session.token;
-      }
-    }
-  } catch (error) {
-    logger.error('Failed to get auth token from storage', error as Error);
-  }
-  return null;
-}
+type RequestBody =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: RequestBody | RequestBody[] }
+  | RequestBody[];
 
 type RequestOptions = {
   method?: string;
-  body?: any;
+  body?: RequestBody;
   headers?: Record<string, string>;
   requireAuth?: boolean;
   retries?: number;
@@ -58,29 +61,29 @@ async function retryWithBackoff<T>(
   delayMs: number = RETRY_DELAY
 ): Promise<T> {
   let lastError: Error;
-  
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error as Error;
-      
+
       // Don't retry on certain status codes
       if (error instanceof APIError && [400, 401, 403, 404].includes(error.status)) {
         throw error;
       }
-      
+
       // Don't retry network errors on the last attempt
       if (attempt === retries || error instanceof NetworkError) {
         throw error;
       }
-      
+
       // Exponential backoff
       const backoffDelay = delayMs * Math.pow(2, attempt);
       await delay(backoffDelay);
     }
   }
-  
+
   throw lastError!;
 }
 
@@ -88,17 +91,17 @@ export async function apiClient<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { 
-    method = 'GET', 
-    body, 
-    headers = {}, 
+  const {
+    method = 'GET',
+    body,
+    headers = {},
     requireAuth = true,
     retries = MAX_RETRIES,
     retryDelay = RETRY_DELAY
   } = options;
 
   const token = getAuthToken();
-  
+
   const requestHeaders: HeadersInit = {
     'Content-Type': 'application/json',
     'X-Client-Version': '1.0.0',
@@ -126,15 +129,19 @@ export async function apiClient<T>(
     if (!response.ok) {
       let message = 'Request failed';
       let code: string | undefined;
-      
+      let details: unknown;
+      let validationErrors: ValidationError[] | undefined;
+
       try {
         const errorData = await response.json();
-        message = errorData.message || errorData.error || message;
-        code = errorData.code;
+        message = (errorData as ApiError).message || (errorData as ApiError).error || message;
+        code = (errorData as ApiError).code;
+        details = (errorData as ApiError).details;
+        validationErrors = (errorData as ApiError).validationErrors;
       } catch {
         message = response.statusText || message;
       }
-      
+
       // Handle authentication errors
       if (response.status === 401) {
         // Clear invalid token
@@ -146,8 +153,10 @@ export async function apiClient<T>(
           window.location.href = '/auth/login';
         }
       }
-      
-      throw new APIError(response.status, message, code);
+
+      const error = new APIError(response.status, message, code, details);
+      (error as any).validationErrors = validationErrors;
+      throw error;
     }
 
     // Handle empty responses
@@ -169,7 +178,7 @@ export async function apiClient<T>(
   if (method === 'GET' || !requireAuth) {
     return retryWithBackoff(attemptRequest, retries, retryDelay);
   }
-  
+
   return attemptRequest();
 }
 
@@ -177,16 +186,16 @@ export async function apiClient<T>(
 export const api = {
   get: <T>(endpoint: string, requireAuth = true) =>
     apiClient<T>(endpoint, { method: 'GET', requireAuth }),
-  
-  post: <T>(endpoint: string, data: any, requireAuth = true) =>
+
+  post: <T>(endpoint: string, data: RequestBody, requireAuth = true) =>
     apiClient<T>(endpoint, { method: 'POST', body: data, requireAuth }),
-  
-  put: <T>(endpoint: string, data: any, requireAuth = true) =>
+
+  put: <T>(endpoint: string, data: RequestBody, requireAuth = true) =>
     apiClient<T>(endpoint, { method: 'PUT', body: data, requireAuth }),
-  
-  patch: <T>(endpoint: string, data: any, requireAuth = true) =>
+
+  patch: <T>(endpoint: string, data: RequestBody, requireAuth = true) =>
     apiClient<T>(endpoint, { method: 'PATCH', body: data, requireAuth }),
-  
+
   delete: <T>(endpoint: string, requireAuth = true) =>
     apiClient<T>(endpoint, { method: 'DELETE', requireAuth }),
 };
@@ -201,7 +210,7 @@ export const endpoints = {
     refresh: '/auth/refresh',
     profile: '/api/profile',
   },
-  
+
   // Students
   students: {
     list: '/api/students',
@@ -211,7 +220,7 @@ export const endpoints = {
     delete: (id: number) => `/api/students/${id}`,
     freeze: (id: number) => `/api/students/${id}/freeze`,
   },
-  
+
   // Courses
   courses: {
     list: '/api/courses',
@@ -222,7 +231,7 @@ export const endpoints = {
     enroll: (id: number) => `/api/courses/${id}/enroll`,
     students: (id: number) => `/api/courses/${id}/students`,
   },
-  
+
   // Assignments
   assignments: {
     // Student convenience endpoint (list all assignments across enrolled courses)
@@ -236,7 +245,7 @@ export const endpoints = {
     submit: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}/submit`,
     grade: (submissionId: number) => `/api/courses/0/assignments/submissions/${submissionId}/grade`,
   },
-  
+
   // Attendance
   attendance: {
     myAttendance: '/api/attendance/student/me',
@@ -249,7 +258,7 @@ export const endpoints = {
     byCourse: (courseId: number) => `/api/attendance/course/${courseId}`,
     update: (courseId: number, lectureId: number, studentId: number) => `/api/attendance/course/${courseId}/lecture/${lectureId}/student/${studentId}`,
   },
-  
+
   // Grades
   grades: {
     myGrades: '/api/grades',
@@ -261,7 +270,7 @@ export const endpoints = {
     deleteAssessment: (courseId: number, assessmentId: number) => `/api/grades/course/${courseId}/assessment/${assessmentId}`,
     submitScores: (courseId: number, assessmentId: number) => `/api/grades/course/${courseId}/assessment/${assessmentId}/scores`,
   },
-  
+
   // Announcements
   announcements: {
     list: '/api/announcements',
@@ -270,7 +279,7 @@ export const endpoints = {
     update: (id: number) => `/api/announcements/${id}`,
     delete: (id: number) => `/api/announcements/${id}`,
   },
-  
+
   // Calendar
   calendar: {
     list: '/api/calendar',
@@ -279,7 +288,7 @@ export const endpoints = {
     update: (id: number) => `/api/calendar/${id}`,
     delete: (id: number) => `/api/calendar/${id}`,
   },
-  
+
   // Notifications
   notifications: {
     list: '/api/notifications',
@@ -288,7 +297,7 @@ export const endpoints = {
     markAllAsRead: '/api/notifications/mark-all-read',
     delete: (id: number) => `/api/notifications/${id}`,
   },
-  
+
   // Quizzes
   quizzes: {
     // Student convenience endpoint (list all quizzes across enrolled courses)
@@ -301,7 +310,7 @@ export const endpoints = {
     delete: (courseId: number, id: number) => `/api/courses/${courseId}/quizzes/${id}`,
     questions: (id: number) => `/api/quizzes/${id}/questions`,
   },
-  
+
   // Quiz Attempts
   quizAttempts: {
     start: (quizId: number) => `/api/quizzes/${quizId}/attempts/start`,
@@ -310,7 +319,7 @@ export const endpoints = {
     listByQuiz: (quizId: number) => `/api/quizzes/${quizId}/attempts`,
     listByStudent: (studentId: number) => `/api/attempts/student/${studentId}`,
   },
-  
+
   // Analytics
   analytics: {
     collegeDashboard: '/api/analytics/dashboard',
@@ -321,7 +330,7 @@ export const endpoints = {
       `/api/analytics/students/${studentId}/performance`,
     attendanceTrends: '/api/analytics/attendance/trends',
   },
-  
+
   // Departments
   departments: {
     list: '/api/departments',
@@ -341,14 +350,14 @@ export const endpoints = {
     updateRole: (id: number) => `/api/users/${id}/role`,
     updateStatus: (id: number) => `/api/users/${id}/status`,
   },
-  
+
   // File Upload
   files: {
     upload: '/api/files/upload',
     delete: (key: string) => `/api/files/${key}`,
     getUrl: (key: string) => `/api/files/${key}/url`,
   },
-  
+
   // Reports
   reports: {
     // Student convenience endpoints
@@ -407,16 +416,38 @@ export const endpoints = {
     delete: (blockId: number) => `/api/timetable/${blockId}`,
     myTimetable: '/api/timetable/my-timetable',
   },
+
+  // Placements
+  placements: {
+    list: '/api/placements',
+    get: (id: number) => `/api/placements/${id}`,
+    create: '/api/placements',
+    update: (id: number) => `/api/placements/${id}`,
+    delete: (id: number) => `/api/placements/${id}`,
+    stats: '/api/placements/stats',
+    companyStats: '/api/placements/company-stats',
+    company: (name: string) => `/api/placements/company/${name}`,
+    studentPlacements: (studentId: number) => `/api/students/${studentId}/placements`,
+  },
+
+  // Forum
+  forum: {
+    threads: '/api/forum/threads',
+    thread: (threadId: number) => `/api/forum/threads/${threadId}`,
+    replies: (threadId: number) => `/api/forum/threads/${threadId}/replies`,
+    createThread: '/api/forum/threads',
+    createReply: (threadId: number) => `/api/forum/threads/${threadId}/replies`,
+  },
 };
 
 export async function fetchQuizzes() {
-  return api.get<any[]>(endpoints.quizzes.myQuizzes);
+  return api.get<Quiz[]>(endpoints.quizzes.myQuizzes);
 }
 
 export async function fetchProfile() {
-  return api.get<any>(endpoints.auth.profile);
+  return api.get<Profile>(endpoints.auth.profile);
 }
 
 export async function fetchUsers() {
-  return api.get<any[]>(endpoints.users.list);
+  return api.get<User[]>(endpoints.users.list);
 }

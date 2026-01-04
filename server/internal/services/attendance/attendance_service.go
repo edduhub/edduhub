@@ -97,7 +97,7 @@ func (a *attendanceService) VerifyStudentStateAndEnrollment(ctx context.Context,
 func (a *attendanceService) GenerateAndProcessQRCode(ctx context.Context, collegeID, studentID int, courseID int, lectureID int) error {
 	qrCode, err := a.GenerateQRCode(ctx, collegeID, courseID, lectureID)
 	if err != nil {
-		return nil
+		return err
 	}
 	err = a.ProcessQRCode(ctx, collegeID, studentID, qrCode)
 	if err != nil {

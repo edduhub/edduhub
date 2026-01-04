@@ -38,9 +38,9 @@ type FeeAssignment struct {
 	UpdatedAt      time.Time  `db:"updated_at" json:"updated_at"`
 
 	// Relations - not stored in DB
-	FeeStructure *FeeStructure `db:"-" json:"fee_structure,omitempty"`
-	PaidAmount   float64       `db:"-" json:"paid_amount,omitempty"`
-	RemainingAmount float64    `db:"-" json:"remaining_amount,omitempty"`
+	FeeStructure    *FeeStructure `db:"-" json:"fee_structure,omitempty"`
+	PaidAmount      float64       `db:"-" json:"paid_amount,omitempty"`
+	RemainingAmount float64       `db:"-" json:"remaining_amount,omitempty"`
 }
 
 // FeePayment represents a payment made by a student
@@ -142,7 +142,9 @@ type OnlinePaymentResponse struct {
 
 type ConfirmOnlinePaymentRequest struct {
 	PaymentID     int    `json:"payment_id" validate:"required"`
-	TransactionID string `json:"transaction_id" validate:"required"`
+	OrderID       string `json:"order_id" validate:"required"`
+	TransactionID string `json:"razorpay_payment_id" validate:"required"`
+	Signature     string `json:"razorpay_signature" validate:"required"`
 	Gateway       string `json:"gateway" validate:"required"`
 }
 
@@ -180,13 +182,13 @@ type FeePaymentFilter struct {
 
 // StudentFeesSummary represents a summary of a student's fees
 type StudentFeesSummary struct {
-	TotalFees       float64 `json:"total_fees"`
-	PaidAmount      float64 `json:"paid_amount"`
-	PendingAmount   float64 `json:"pending_amount"`
-	OverdueAmount   float64 `json:"overdue_amount"`
-	WaiverAmount    float64 `json:"waiver_amount"`
-	TotalAssignments int    `json:"total_assignments"`
-	PaidAssignments  int    `json:"paid_assignments"`
-	PendingAssignments int  `json:"pending_assignments"`
-	OverdueAssignments int  `json:"overdue_assignments"`
+	TotalFees          float64 `json:"total_fees"`
+	PaidAmount         float64 `json:"paid_amount"`
+	PendingAmount      float64 `json:"pending_amount"`
+	OverdueAmount      float64 `json:"overdue_amount"`
+	WaiverAmount       float64 `json:"waiver_amount"`
+	TotalAssignments   int     `json:"total_assignments"`
+	PaidAssignments    int     `json:"paid_assignments"`
+	PendingAssignments int     `json:"pending_assignments"`
+	OverdueAssignments int     `json:"overdue_assignments"`
 }

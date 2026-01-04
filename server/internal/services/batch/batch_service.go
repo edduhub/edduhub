@@ -140,6 +140,14 @@ func (s *batchService) ImportGrades(ctx context.Context, collegeID, courseID int
 
 		assessmentName := strings.TrimSpace(record[1])
 		assessmentType := strings.TrimSpace(record[2])
+
+		// Verify enrollment
+		enrolled, err := s.enrollmentRepo.IsStudentEnrolled(ctx, collegeID, studentID, courseID)
+		if err != nil || !enrolled {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: student %d not enrolled in course %d", line, studentID, courseID))
+			continue
+		}
 		totalMarks, err := strconv.Atoi(strings.TrimSpace(record[3]))
 		if err != nil || totalMarks <= 0 {
 			result.Failed++

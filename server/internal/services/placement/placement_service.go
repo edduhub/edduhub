@@ -284,19 +284,23 @@ func (s *placementService) GetCompanyStats(ctx context.Context, collegeID int) (
 		return nil, err
 	}
 
-	// Group placements by company
+	// Group placements by company and calculate stats in one pass
 	companyMap := make(map[string]*CompanyStats)
+	companyTotals := make(map[string]float64)
 
 	for _, placement := range placements {
-		if companyMap[placement.CompanyName] == nil {
-			companyMap[placement.CompanyName] = &CompanyStats{
+		stats, exists := companyMap[placement.CompanyName]
+		if !exists {
+			stats = &CompanyStats{
 				CompanyName:    placement.CompanyName,
-				LowestPackage:  999999999,
+				LowestPackage:  placement.Package,
+				HighestPackage: placement.Package,
 			}
+			companyMap[placement.CompanyName] = stats
 		}
 
-		stats := companyMap[placement.CompanyName]
 		stats.TotalPlacements++
+		companyTotals[placement.CompanyName] += placement.Package
 
 		if placement.Package > stats.HighestPackage {
 			stats.HighestPackage = placement.Package
@@ -308,17 +312,8 @@ func (s *placementService) GetCompanyStats(ctx context.Context, collegeID int) (
 
 	// Calculate averages
 	for companyName, stats := range companyMap {
-		companyPlacements, _ := s.repo.FindPlacementsByCompany(ctx, collegeID, companyName, 10000, 0)
-		var total float64
-		for _, p := range companyPlacements {
-			total += p.Package
-		}
-		if len(companyPlacements) > 0 {
-			stats.AveragePackage = total / float64(len(companyPlacements))
-		}
-
-		if stats.LowestPackage == 999999999 {
-			stats.LowestPackage = 0
+		if stats.TotalPlacements > 0 {
+			stats.AveragePackage = companyTotals[companyName] / float64(stats.TotalPlacements)
 		}
 	}
 

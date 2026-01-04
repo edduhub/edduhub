@@ -52,7 +52,7 @@ func (s *timetableService) GetTimeTableBlocks(ctx context.Context, filter models
 
 func (s *timetableService) GetStudentTimetable(ctx context.Context, studentID int) ([]*models.TimeTableBlock, error) {
 	// Get student to find their college
-	student, err := s.studentRepo.GetStudentByID(ctx, studentID, 0) // College ID will be fetched from student record
+	student, err := s.studentRepo.GetStudentByID(ctx, 0, studentID) // Note: Using 0 for collegeID to find student first
 	if err != nil {
 		return nil, fmt.Errorf("student not found: %w", err)
 	}

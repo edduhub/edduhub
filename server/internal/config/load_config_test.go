@@ -19,6 +19,7 @@ func TestLoadConfig(t *testing.T) {
 				"DB_USER":           "testuser",
 				"DB_PASSWORD":       "testpass",
 				"DB_NAME":           "testdb",
+				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
 				"KRATOS_DOMAIN":     "example.com",
@@ -30,6 +31,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "missing database config",
 			envVars: map[string]string{
+				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
 				"APP_PORT":          "3000",
@@ -56,6 +58,7 @@ func TestLoadConfig(t *testing.T) {
 				"DB_USER":           "testuser",
 				"DB_PASSWORD":       "testpass",
 				"DB_NAME":           "testdb",
+				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
 				"KRATOS_PUBLIC_URL": "http://public.example.com",
 				"KRATOS_ADMIN_URL":  "http://admin.example.com",
 				"KRATOS_DOMAIN":     "example.com",
