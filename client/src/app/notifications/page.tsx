@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { logger } from '@/lib/logger';
 import { api, endpoints } from '@/lib/api-client';
 import type { Notification } from '@/lib/types';
 import {
@@ -20,13 +21,11 @@ import {
 import {
     Card,
     CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle
+    CardHeader
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, formatDistanceToNow } from '@/lib/utils';
 import {
     DropdownMenu,
@@ -51,7 +50,7 @@ export default function NotificationsPage() {
             const countData = await api.get<{ unread_count: number }>(endpoints.notifications.unreadCount);
             setUnreadCount(countData.unread_count);
         } catch (error) {
-            console.error('Failed to fetch notifications:', error);
+            logger.error('Failed to fetch notifications:', error as Error);
         } finally {
             setIsLoading(false);
         }
@@ -60,7 +59,6 @@ export default function NotificationsPage() {
     const setupWebSocket = useCallback(() => {
         if (!user) return;
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, 'ws')}/api/notifications/ws`;
 
         const ws = new WebSocket(wsUrl);
@@ -72,17 +70,17 @@ export default function NotificationsPage() {
                 setNotifications(prev => [newNotification, ...prev]);
                 setUnreadCount(prev => prev + 1);
             } catch (err) {
-                console.error('WebSocket message parsing error:', err);
+                logger.error('WebSocket message parsing error:', err as Error);
             }
         };
 
         ws.onclose = () => {
-            console.log('WebSocket connection closed. Reconnecting...');
+            logger.info('WebSocket connection closed. Reconnecting...');
             setTimeout(setupWebSocket, 3000);
         };
 
         ws.onerror = (err) => {
-            console.error('WebSocket error:', err);
+            logger.error('WebSocket error:', err as unknown as Error);
         };
 
         return () => {
@@ -96,6 +94,7 @@ export default function NotificationsPage() {
             const cleanup = setupWebSocket();
             return cleanup;
         }
+        return undefined;
     }, [user, fetchNotifications, setupWebSocket]);
 
     const markAsRead = async (id: number) => {
@@ -106,7 +105,7 @@ export default function NotificationsPage() {
             );
             setUnreadCount(prev => Math.max(0, prev - 1));
         } catch (error) {
-            console.error('Failed to mark notification as read:', error);
+            logger.error('Failed to mark notification as read:', error as Error);
         }
     };
 
@@ -116,7 +115,7 @@ export default function NotificationsPage() {
             setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
             setUnreadCount(0);
         } catch (error) {
-            console.error('Failed to mark all as read:', error);
+            logger.error('Failed to mark all as read:', error as Error);
         }
     };
 
@@ -131,7 +130,7 @@ export default function NotificationsPage() {
                 return prev.filter(item => item.id !== id);
             });
         } catch (error) {
-            console.error('Failed to delete notification:', error);
+            logger.error('Failed to delete notification:', error as Error);
         }
     };
 

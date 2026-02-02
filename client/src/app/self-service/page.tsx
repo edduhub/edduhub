@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from 'react';
+import { useSelfServiceRequests } from '@/lib/api-hooks';
+import { logger } from '@/lib/logger';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -15,8 +17,7 @@ import {
   Send,
   CheckCircle,
   Clock,
-  AlertCircle,
-  Plus
+  AlertCircle
 } from 'lucide-react';
 
 type RequestStatus = 'pending' | 'approved' | 'rejected' | 'processing';
@@ -33,26 +34,7 @@ type Request = {
 };
 
 export default function StudentSelfServicePage() {
-  const [requests, setRequests] = useState<Request[]>([
-    {
-      id: 1,
-      type: 'enrollment',
-      title: 'Course Enrollment Request',
-      description: 'Request to enroll in Advanced Algorithms (CS401)',
-      status: 'pending',
-      submittedAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      id: 2,
-      type: 'transcript',
-      title: 'Official Transcript Request',
-      description: 'Request for official academic transcript',
-      status: 'approved',
-      submittedAt: new Date(Date.now() - 172800000).toISOString(),
-      respondedAt: new Date(Date.now() - 86400000).toISOString(),
-      response: 'Document available for pickup at registrar office',
-    },
-  ]);
+  const { data: requests = [] } = useSelfServiceRequests();
 
   return (
     <div className="min-h-screen bg-muted/10">
@@ -126,7 +108,7 @@ function EnrollmentRequestForm() {
       alert('Enrollment request submitted successfully!');
       setFormData({ courseCode: '', reason: '', specialRequests: '' });
     } catch (error) {
-      console.error('Failed to submit request:', error);
+      logger.error('Failed to submit request:', error as Error);
       alert('Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -240,7 +222,7 @@ function ScheduleChangeRequestForm() {
       alert('Schedule change request submitted successfully!');
       setFormData({ courseId: '', currentSection: '', requestedSection: '', reason: '' });
     } catch (error) {
-      console.error('Failed to submit request:', error);
+      logger.error('Failed to submit request:', error as Error);
       alert('Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -349,10 +331,10 @@ function ScheduleChangeRequestForm() {
 
 function DocumentRequestForm() {
   const [formData, setFormData] = useState({
-    documentType: 'transcript' as 'transcript' | 'grade_card' | 'enrollment_letter' | 'attendance_certificate',
+    documentType: 'transcript' as 'transcript' | 'certificate' | 'id_card' | 'other',
     purpose: '',
     copies: 1,
-    deliveryMethod: 'pickup' as 'pickup' | 'email' | 'mail',
+    deliveryMethod: 'pickup' as 'pickup' | 'email' | 'postal',
     address: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -374,7 +356,7 @@ function DocumentRequestForm() {
         address: '',
       });
     } catch (error) {
-      console.error('Failed to submit request:', error);
+      logger.error('Failed to submit request:', error as Error);
       alert('Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -399,7 +381,7 @@ function DocumentRequestForm() {
             <select
               id="documentType"
               value={formData.documentType}
-              onChange={(e) => setFormData({ ...formData, documentType: e.target.value as any })}
+              onChange={(e) => setFormData({ ...formData, documentType: e.target.value as 'transcript' | 'certificate' | 'id_card' | 'other' })}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               required
             >
@@ -439,7 +421,7 @@ function DocumentRequestForm() {
               <select
                 id="deliveryMethod"
                 value={formData.deliveryMethod}
-                onChange={(e) => setFormData({ ...formData, deliveryMethod: e.target.value as any })}
+                onChange={(e) => setFormData({ ...formData, deliveryMethod: e.target.value as 'pickup' | 'email' | 'postal' })}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 required
               >
@@ -450,7 +432,7 @@ function DocumentRequestForm() {
             </div>
           </div>
 
-          {formData.deliveryMethod === 'mail' && (
+          {formData.deliveryMethod === 'postal' && (
             <div className="space-y-2">
               <Label htmlFor="address">Mailing Address</Label>
               <Textarea
@@ -500,7 +482,7 @@ function RequestHistory({ requests }: { requests: Request[] }) {
     processing: 'bg-blue-100 text-blue-800 border-blue-200',
   };
 
-  const statusIcons: Record<RequestStatus, JSX.Element> = {
+  const statusIcons: Record<RequestStatus, React.ReactElement> = {
     pending: <Clock className="w-4 h-4" />,
     approved: <CheckCircle className="w-4 h-4" />,
     rejected: <AlertCircle className="w-4 h-4" />,

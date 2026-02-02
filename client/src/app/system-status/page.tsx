@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, CheckCircle, XCircle, AlertTriangle, Server, Database, Cpu, HardDrive, Clock } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle, XCircle, AlertTriangle, Server, Cpu, HardDrive, Clock } from "lucide-react";
 import { logger } from '@/lib/logger';
 
 type HealthStatus = {
@@ -56,14 +56,14 @@ export default function SystemStatusPage() {
       const result = await response.json();
       setHealthStatus(result.data || result);
       setLastRefresh(new Date());
-    } catch (err: any) {
-      logger.error('Failed to fetch health status:', err as Error);
+    } catch (error) {
+      logger.error('Failed to fetch health status:', error instanceof Error ? error : new Error(String(error)));
       setError('Failed to fetch system health status');
       setHealthStatus({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
         service: 'eduhub-api',
-        error: err.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     } finally {
       setLoading(false);

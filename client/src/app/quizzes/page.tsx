@@ -37,7 +37,7 @@ type ApiQuiz = {
   attempts?: number;
   maxAttempts?: number;
   score?: number;
-  questions?: any[];
+  questions?: Array<{ id: number; text: string; options: string[]; correctOption: number; marks: number }>;
 };
 
 export default function QuizzesPage() {
@@ -60,9 +60,9 @@ export default function QuizzesPage() {
         title: q.title ?? 'Untitled Quiz',
         courseName: q.courseName,
         duration: q.duration,
-        totalMarks: q.questions?.reduce((sum, question) => sum + (question?.points ?? 0), 0) ?? undefined,
+        totalMarks: q.questions?.reduce((sum, question) => sum + (question?.marks ?? 0), 0) ?? undefined,
         questionsCount: q.questions?.length,
-        status: q.status === 'completed' ? 'completed' : 'not_started',
+        status: q.status === 'completed' ? 'completed' : q.status === 'in_progress' ? 'in_progress' : 'not_started',
         attempts: q.attempts ?? 0,
         maxAttempts: q.maxAttempts ?? 1,
         endTime: q.dueDate,
@@ -124,9 +124,9 @@ export default function QuizzesPage() {
       await loadQuizzes();
       setShowCreate(false);
       setNewQuiz({ courseId: '', title: '', description: '', duration: 30, totalMarks: 100 });
-    } catch (e: any) {
-      logger.error('Error occurred', e as Error);
-      setError(e?.message || 'Failed to create quiz');
+    } catch (error) {
+      logger.error('Error occurred', error instanceof Error ? error : new Error(String(error)));
+      setError(error instanceof Error ? error.message : 'Failed to create quiz');
     } finally {
       setCreating(false);
     }
@@ -276,7 +276,7 @@ export default function QuizzesPage() {
                   <Button 
                     className="w-full"
                     onClick={() => quiz.status === 'completed' ? undefined : startQuiz(quiz.id)}
-                    disabled={quiz.status === 'completed' || (quiz.attempts >= quiz.maxAttempts && quiz.status === 'completed')}
+                    disabled={(quiz.status as DisplayQuiz['status']) === 'completed' || (quiz.attempts >= quiz.maxAttempts && (quiz.status as DisplayQuiz['status']) === 'completed')}
                     variant={quiz.status === 'completed' ? 'outline' : 'default'}
                   >
                     {quiz.status === 'completed' ? 'Completed' : (

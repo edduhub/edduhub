@@ -80,8 +80,8 @@ export default function BatchOperationsPage() {
 
       setImportResult(result.data);
       setSuccess(`Successfully imported ${result.data.success} students`);
-    } catch (err: any) {
-      setError(err.message || 'Failed to import students');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to import students');
     } finally {
       setLoading(false);
       if (studentFileRef.current) {
@@ -117,8 +117,8 @@ export default function BatchOperationsPage() {
       window.URL.revokeObjectURL(url);
 
       setSuccess('Students exported successfully');
-    } catch (err: any) {
-      setError(err.message || 'Failed to export students');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to export students');
     } finally {
       setLoading(false);
     }
@@ -156,8 +156,8 @@ export default function BatchOperationsPage() {
 
       setImportResult(result.data);
       setSuccess(`Successfully imported ${result.data.success} grades`);
-    } catch (err: any) {
-      setError(err.message || 'Failed to import grades');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to import grades');
     } finally {
       setLoading(false);
       if (gradeFileRef.current) {
@@ -198,8 +198,8 @@ export default function BatchOperationsPage() {
       window.URL.revokeObjectURL(url);
 
       setSuccess('Grades exported successfully');
-    } catch (err: any) {
-      setError(err.message || 'Failed to export grades');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to export grades');
     } finally {
       setLoading(false);
     }

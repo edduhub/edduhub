@@ -28,24 +28,25 @@ type Quiz = {
   questions?: Question[];
 };
 
+type Answer = {
+  question_id: number;
+  selected_option_id?: number[] | null;
+  answer_text?: string;
+  points_awarded?: number | null;
+  is_correct?: boolean | null;
+};
+
 type AttemptResponse = {
   id: number;
   status: string;
   score?: number;
   quiz?: Quiz;
-  answers?: Array<{
-    question_id: number;
-    selected_option_id?: number[] | null;
-    answer_text?: string;
-    points_awarded?: number | null;
-    is_correct?: boolean | null;
-  }>;
+  answers?: Answer[];
 };
 
 export default function QuizResultsPage() {
   const params = useParams<{ quizId: string; attemptId: string }>();
   const router = useRouter();
-  const quizId = Number(params.quizId);
   const attemptId = Number(params.attemptId);
 
   const [attempt, setAttempt] = useState<AttemptResponse | null>(null);
@@ -54,7 +55,7 @@ export default function QuizResultsPage() {
 
   const questions: Question[] = useMemo(() => attempt?.quiz?.questions || [], [attempt]);
   const answersByQ = useMemo(() => {
-    const map = new Map<number, AttemptResponse["answers"][number]>();
+    const map = new Map<number, Answer>();
     (attempt?.answers || []).forEach((a) => map.set(a.question_id, a));
     return map;
   }, [attempt]);
@@ -66,8 +67,8 @@ export default function QuizResultsPage() {
         setError(null);
         const data = await api.get<AttemptResponse>(`/api/attempts/${attemptId}`);
         setAttempt(data);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load results");
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to load results");
       } finally {
         setLoading(false);
       }

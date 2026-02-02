@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useParentChildren, useParentChildGrades, useParentChildAttendance, useParentChildAssignments } from '@/lib/api-hooks';
+import { useAnnouncements } from '@/lib/api-hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,66 +17,20 @@ import {
   FileText,
   AlertCircle
 } from 'lucide-react';
-import type { Student, Grade, Attendance, Announcement, Assignment } from '@/lib/types';
+import type { Student, Announcement } from '@/lib/types';
 
 export default function ParentDashboard() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: students = [], isLoading: studentsLoading } = useParentChildren();
+  const { data: announcements = [] } = useAnnouncements();
 
   useEffect(() => {
-    // Fetch parent's linked students and announcements
-    const fetchData = async () => {
-      try {
-        // Mock data - replace with actual API calls
-        setStudents([
-          {
-            id: 1,
-            userId: 'student1',
-            rollNo: 'CS2024001',
-            firstName: 'John',
-            lastName: 'Doe',
-            email: 'john.doe@college.edu',
-            semester: 3,
-            departmentId: 1,
-            departmentName: 'Computer Science',
-            collegeId: 'college1',
-            status: 'active',
-            gpa: 3.7,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-        ]);
+    if (students.length > 0 && !selectedStudent) {
+      setSelectedStudent(students[0]);
+    }
+  }, [students, selectedStudent]);
 
-        setAnnouncements([
-          {
-            id: 1,
-            title: 'Midterm Examination Schedule Released',
-            content: 'Midterm exams will start from next Monday...',
-            priority: 'high',
-            targetAudience: ['all'],
-            publishedAt: new Date().toISOString(),
-            authorId: 'admin1',
-            authorName: 'Admin',
-            collegeId: 'college1',
-          }
-        ]);
-
-        if (students.length > 0) {
-          setSelectedStudent(students[0]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  if (isLoading) {
+  if (studentsLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -242,30 +198,7 @@ export default function ParentDashboard() {
 
 // Sub-components for different views
 function ParentGradesView({ studentId }: { studentId: number }) {
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Fetch grades for the selected student
-    // Mock data - replace with API call
-    setTimeout(() => {
-      setGrades([
-        {
-          id: 1,
-          studentId: studentId,
-          courseId: 101,
-          assessmentType: 'Assignment',
-          assessmentName: 'Mid-term Exam',
-          score: 85,
-          maxScore: 100,
-          percentage: 85,
-          gradedDate: new Date().toISOString(),
-          collegeId: 'college1',
-        }
-      ]);
-      setIsLoading(false);
-    }, 500);
-  }, [studentId]);
+  const { data: grades = [], isLoading } = useParentChildGrades(studentId);
 
   if (isLoading) {
     return <div className="text-center py-8 text-muted-foreground">Loading grades...</div>;
@@ -302,7 +235,23 @@ function ParentGradesView({ studentId }: { studentId: number }) {
 }
 
 function ParentAttendanceView({ studentId }: { studentId: number }) {
-  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const { data: attendance = [], isLoading } = useParentChildAttendance(studentId);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            Attendance Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">Loading attendance...</div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -313,15 +262,44 @@ function ParentAttendanceView({ studentId }: { studentId: number }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-center py-8 text-muted-foreground">
-          Attendance data will be loaded here
-        </div>
+        {attendance.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">No attendance records found</div>
+        ) : (
+          <div className="space-y-2">
+            {attendance.slice(0, 10).map((record) => (
+              <div key={record.id} className="flex justify-between items-center p-2 border rounded">
+                <span>{new Date(record.date).toLocaleDateString()}</span>
+                <Badge variant={record.status === 'present' ? 'default' : 'destructive'}>
+                  {record.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 function ParentAssignmentsView({ studentId }: { studentId: number }) {
+  const { data: assignments = [], isLoading } = useParentChildAssignments(studentId);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpen className="w-5 h-5" />
+            Upcoming Assignments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8 text-muted-foreground">Loading assignments...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -331,9 +309,23 @@ function ParentAssignmentsView({ studentId }: { studentId: number }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-center py-8 text-muted-foreground">
-          Assignments will be loaded here
-        </div>
+        {assignments.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">No upcoming assignments</div>
+        ) : (
+          <div className="space-y-4">
+            {assignments.slice(0, 5).map((assignment) => (
+              <div key={assignment.id} className="p-4 border rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-semibold">{assignment.title}</h4>
+                  <Badge variant={new Date(assignment.dueDate) < new Date() ? 'destructive' : 'default'}>
+                    Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{assignment.courseName}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -17,6 +17,7 @@ require (
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/pashagolub/pgxmock/v4 v4.9.0
+	github.com/razorpay/razorpay-go v1.4.0
 	github.com/redis/go-redis/v9 v9.14.0
 	github.com/rs/zerolog v1.15.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -24,6 +25,7 @@ require (
 	github.com/swaggo/echo-swagger v1.4.1
 	github.com/swaggo/swag v1.16.4
 	golang.org/x/sync v0.15.0
+	golang.org/x/time v0.8.0
 )
 
 require (
@@ -62,7 +64,7 @@ require (
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/razorpay/razorpay-go v1.4.0 // indirect
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
@@ -74,7 +76,6 @@ require (
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
-	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

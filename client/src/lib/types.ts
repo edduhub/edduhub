@@ -293,7 +293,7 @@ export type QuizAttempt = {
   totalMarks: number;
   passed?: boolean;
   attemptNumber: number;
-  answers?: Record<number, any>;
+  answers?: Record<number, string | string[]>;
   status: 'in_progress' | 'submitted' | 'graded';
 };
 
@@ -326,6 +326,48 @@ export type DashboardActivity = {
 
 export type DashboardResponse = {
   metrics: DashboardMetrics;
+  upcomingEvents: DashboardEvent[];
+  recentActivity: DashboardActivity[];
+};
+
+export type StudentDashboardMetrics = DashboardMetrics & {
+  courseGrades: Array<{
+    credits?: number;
+    letterGrade?: string;
+    grade?: string;
+    courseName?: string;
+    courseCode?: string;
+    percentage?: number;
+  }>;
+  attendance: Array<{
+    totalSessions?: number;
+    total?: number;
+    presentCount?: number;
+    present?: number;
+  }>;
+  assignments: Array<{
+    status: string;
+  }>;
+  grades: Array<{
+    id?: number;
+    courseName?: string;
+    courseCode?: string;
+    grade?: string;
+    letterGrade?: string;
+    createdAt?: string;
+    assessmentName?: string;
+    assessment_name?: string;
+    obtainedMarks?: number;
+    obtained_marks?: number;
+    totalMarks?: number;
+    total_marks?: number;
+    gradedAt?: string;
+    graded_at?: string;
+  }>;
+};
+
+export type StudentDashboardResponse = {
+  metrics: StudentDashboardMetrics;
   upcomingEvents: DashboardEvent[];
   recentActivity: DashboardActivity[];
 };
@@ -773,6 +815,20 @@ export type ForumSearchFilters = {
   pinnedOnly?: boolean;
 };
 
+// Placement Types
+export type Placement = {
+  id: number;
+  studentId: number;
+  studentName?: string;
+  companyName: string;
+  jobTitle: string;
+  package: number;
+  placementDate: string;
+  status: 'Offered' | 'Accepted' | 'Rejected' | 'On-Hold';
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 // Role & Permission Types
 export type Permission = {
   id: number;
@@ -808,7 +864,7 @@ export type AppError = {
   message: string;
   code?: string;
   statusCode?: number;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 };
 
 export type ValidationError = {

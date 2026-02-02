@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Bell, Lock, Globe, Palette, Shield } from "lucide-react";
+import { Bell, Globe, Shield } from "lucide-react";
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  useAuth();
   const [settings, setSettings] = useState({
     emailNotifications: true,
     pushNotifications: false,

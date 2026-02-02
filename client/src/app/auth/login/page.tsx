@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { getDashboardPathForRole, UserRole } from '@/lib/types';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const { login, user } = useAuth();
+  const { login } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,8 +30,8 @@ export default function LoginPage() {
       // The login function updates the user state, so we need to get it from the response
       // For now, redirect to home and let the home page handle role-based routing
       router.push('/');
-    } catch (err: any) {
-      setError(err.message || 'Failed to login. Please check your credentials.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to login. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }

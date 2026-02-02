@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Loader2, AlertCircle, CheckCircle, Trash2, Edit, Download, Upload, FolderPlus, Folder, File, Tag, Clock, Eye } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle, Trash2, Download, Upload, FolderPlus, Folder, File, Tag, Clock } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { logger } from '@/lib/logger';
 
@@ -150,8 +150,8 @@ export default function FilesPage() {
       setUploadDialogOpen(false);
       resetUploadForm();
       await fetchFiles();
-    } catch (err: any) {
-      setError(err.message || 'Failed to upload file');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to upload file');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -172,8 +172,8 @@ export default function FilesPage() {
       setFolderDialogOpen(false);
       setNewFolderName("");
       await fetchFolders();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create folder');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create folder');
     } finally {
       setCreatingFolder(false);
     }
@@ -186,8 +186,8 @@ export default function FilesPage() {
       await api.delete(`/api/file-management/${id}`);
       setSuccess('File deleted successfully');
       await fetchFiles();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete file');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to delete file');
     }
   };
 
@@ -199,8 +199,8 @@ export default function FilesPage() {
 
       const response = await api.get(`/api/file-management/${file.id}/versions`);
       setVersions(Array.isArray(response) ? response : []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load versions');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to load versions');
     } finally {
       setLoadingVersions(false);
     }
@@ -231,8 +231,8 @@ export default function FilesPage() {
       setVersionComment("");
       await handleViewVersions(selectedFile);
       await fetchFiles();
-    } catch (err: any) {
-      setError(err.message || 'Failed to upload new version');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to upload new version');
     } finally {
       setUploadingNewVersion(false);
       if (newVersionInputRef.current) newVersionInputRef.current.value = '';
@@ -243,23 +243,23 @@ export default function FilesPage() {
     if (!selectedFile) return;
 
     try {
-      await api.patch(`/api/file-management/${selectedFile.id}/versions/${versionId}/current`);
+      await api.patch(`/api/file-management/${selectedFile.id}/versions/${versionId}/current`, {});
       setSuccess('Current version updated successfully');
       await handleViewVersions(selectedFile);
       await fetchFiles();
-    } catch (err: any) {
-      setError(err.message || 'Failed to set current version');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to set current version');
     }
   };
 
-  const handleDownload = async (fileId: number, fileName: string) => {
+  const handleDownload = async (fileId: number, _fileName: string) => {
     try {
-      const response = await api.get(`/api/file-management/${fileId}/download`);
-      if (response.url) {
+      const response = await api.get<{ url?: string }>(`/api/file-management/${fileId}/download`);
+      if (response?.url) {
         window.open(response.url, '_blank');
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to download file');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to download file');
     }
   };
 

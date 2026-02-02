@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/nextjs";
-import { CaptureConsole } from "@sentry/nextjs";
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -10,11 +9,4 @@ Sentry.init({
 
   // Environment
   environment: process.env.NODE_ENV,
-
-  // Capture console logs
-  integrations: [
-    new CaptureConsole({
-      levels: ['error', 'warn'],
-    }),
-  ],
 });

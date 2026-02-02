@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useState } from "react";
 import { api, endpoints } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import RadioGroup from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type QuizType = "MultipleChoice" | "TrueFalse" | "ShortAnswer";
 
@@ -51,13 +50,13 @@ type Attempt = {
 };
 
 type PageProps = {
-  params: { quizId: string; attemptId: string };
+  params: Promise<{ quizId: string; attemptId: string }>;
 };
 
 export default function QuizAttemptPage({ params }: PageProps) {
-  const router = useRouter();
-  const quizId = Number(params.quizId);
-  const attemptId = Number(params.attemptId);
+  const resolvedParams = React.use(params);
+  const quizId = Number(resolvedParams.quizId);
+  const attemptId = Number(resolvedParams.attemptId);
 
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +73,7 @@ export default function QuizAttemptPage({ params }: PageProps) {
       try {
         setLoading(true);
         setError(null);
-        const data = await api.get<Attempt>(endpoints.quizAttempts.get(quizId, attemptId));
+        const data = await api.get<Attempt>(endpoints.quizAttempts.get(attemptId));
         setAttempt(data);
         // Seed existing answers if any
         const prefilled: Record<number, { optionId?: number; text?: string }> = {};
@@ -88,8 +87,8 @@ export default function QuizAttemptPage({ params }: PageProps) {
           }
         });
         setAnswers(prefilled);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load attempt");
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to load attempt");
       } finally {
         setLoading(false);
       }
@@ -114,10 +113,10 @@ export default function QuizAttemptPage({ params }: PageProps) {
       setSubmitting(true);
       setError(null);
       const body = buildPayload();
-      const res = await api.post<Attempt>(endpoints.quizAttempts.submit(quizId, attemptId), body);
+      const res = await api.post<Attempt>(endpoints.quizAttempts.submit(attemptId), body);
       setAttempt(res);
-    } catch (e: any) {
-      setError(e?.message || "Failed to submit attempt");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to submit attempt");
     } finally {
       setSubmitting(false);
     }
@@ -172,13 +171,17 @@ export default function QuizAttemptPage({ params }: PageProps) {
           <CardContent className="space-y-3">
             {q.type === "MultipleChoice" || q.type === "TrueFalse" ? (
               <RadioGroup
-                name={`q-${q.id}`}
-                direction="vertical"
-                value={answers[q.id]?.optionId}
-                onChange={(val) => setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], optionId: Number(val) } }))}
-                options={(q.options || []).map((opt) => ({ label: opt.text, value: opt.id }))}
+                value={answers[q.id]?.optionId?.toString()}
+                onValueChange={(val) => setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], optionId: Number(val) } }))}
                 className="space-y-2"
-              />
+              >
+                {(q.options || []).map((opt) => (
+                  <div key={opt.id} className="flex items-center space-x-2">
+                    <RadioGroupItem value={opt.id.toString()} id={`q-${q.id}-opt-${opt.id}`} />
+                    <label htmlFor={`q-${q.id}-opt-${opt.id}`} className="text-sm">{opt.text}</label>
+                  </div>
+                ))}
+              </RadioGroup>
             ) : (
               <textarea
                 className="min-h-[100px] w-full rounded-md border px-3 py-2"

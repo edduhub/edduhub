@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api, endpoints } from "@/lib/api-client";
+import { useAttendanceByStudent } from "@/lib/api-hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { QrCode, CheckCircle, XCircle, Clock, Calendar, Loader2, Filter, Search, Camera, Download } from "lucide-react";
+import { QrCode, CheckCircle, XCircle, Clock, Calendar, Loader2, Filter, Download, Camera } from "lucide-react";
 import { format } from "date-fns";
 import { logger } from '@/lib/logger';
+
 
 type AttendanceRecord = {
   id: number;
@@ -34,10 +35,6 @@ type CourseAttendance = {
   percentage: number;
 };
 
-type QRCodeData = {
-  data?: string;
-};
-
 const normalizeStatus = (status?: string): AttendanceRecord['status'] => {
   const normalized = (status || '').toLowerCase();
   if (normalized === 'present' || normalized === 'absent' || normalized === 'late' || normalized === 'excused') {
@@ -48,75 +45,84 @@ const normalizeStatus = (status?: string): AttendanceRecord['status'] => {
 
 export default function AttendancePage() {
   const { user } = useAuth();
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [courseStats, setCourseStats] = useState<CourseAttendance[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
-
-  // Faculty QR generation state
   const [showQRForm, setShowQRForm] = useState(false);
   const [courseId, setCourseId] = useState("");
   const [lectureId, setLectureId] = useState("");
   const [qrLoading, setQrLoading] = useState(false);
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
-
-  // Student QR marking state
   const [marking, setMarking] = useState(false);
   const [markingSuccess, setMarkingSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  // React Query hook - fetch attendance for the current user
+  const studentId = user?.id ? Number(user.id) : 0;
+  const { data: attendanceRecords = [], isLoading: loading } = useAttendanceByStudent(studentId, {
+    enabled: !!user && user.role === 'student',
+  });
 
-        // Fetch individual attendance records
-        try {
-          const recordsResponse = await api.get<ApiAttendanceRecord[]>(endpoints.attendance.myAttendance);
-          const normalizedRecords = (Array.isArray(recordsResponse) ? recordsResponse : []).map<AttendanceRecord>((record, index) => ({
-            id: record.id ?? index,
-            courseName: record.courseName ?? (record.courseId ? `Course ${record.courseId}` : 'Unknown Course'),
-            courseId: record.courseId ?? 0,
-            date: record.date ?? new Date().toISOString(),
-            status: normalizeStatus(record.status),
-          }));
-          setRecords(normalizedRecords);
-        } catch (err) {
-          logger.warn('Failed to fetch attendance records:', { error: err });
-        }
+  // Normalize records using useMemo
+  const records = useMemo(() => {
+    return attendanceRecords.map((record, index) => ({
+      id: record.id ?? index,
+      courseName: record.courseId ? `Course ${record.courseId}` : 'Unknown Course',
+      courseId: record.courseId ?? 0,
+      date: record.date ?? new Date().toISOString(),
+      status: normalizeStatus(record.status),
+      markedBy: record.markedBy,
+    }));
+  }, [attendanceRecords]);
 
-        // Try to fetch course attendance stats
-        try {
-          const statsResponse = await api.get<ApiCourseStat[]>(endpoints.attendance.myCourseStats);
-          const normalizedStats = (Array.isArray(statsResponse) ? statsResponse : []).map<CourseAttendance>((stat) => ({
-            courseName: stat.courseName ?? (stat.courseId ? `Course ${stat.courseId}` : 'Unknown Course'),
-            courseId: stat.courseId ?? 0,
-            present: stat.present ?? 0,
-            total: stat.total ?? 0,
-            percentage: stat.percentage ?? 0,
-          }));
-          setCourseStats(normalizedStats);
-        } catch (err) {
-          logger.warn('Failed to fetch attendance stats:', { error: err });
-        }
-      } catch (err) {
-        logger.error('Failed to fetch attendance:', err as Error);
-        setError('Failed to load attendance data');
-      } finally {
-        setLoading(false);
+  // Calculate course statistics using useMemo
+  const courseStats = useMemo(() => {
+    const stats = new Map<number, CourseAttendance>();
+    
+    records.forEach(record => {
+      if (!stats.has(record.courseId)) {
+        stats.set(record.courseId, {
+          courseId: record.courseId,
+          courseName: record.courseName,
+          present: 0,
+          total: 0,
+          percentage: 0,
+        });
       }
-    };
+      
+      const stat = stats.get(record.courseId)!;
+      stat.total++;
+      if (record.status === 'present') {
+        stat.present++;
+      }
+    });
+    
+    // Calculate percentages
+    stats.forEach(stat => {
+      stat.percentage = stat.total > 0 ? Math.round((stat.present / stat.total) * 100) : 0;
+    });
+    
+    return Array.from(stats.values());
+  }, [records]);
 
-    fetchAttendance();
-  }, []);
-
-  const overallAttendance = (() => {
+  // Calculate overall attendance using useMemo
+  const overallAttendance = useMemo(() => {
     const total = courseStats.reduce((acc, c) => acc + c.total, 0);
     if (!total) return 0;
     const present = courseStats.reduce((acc, c) => acc + c.present, 0);
     return Math.round((present / total) * 100);
-  })();
+  }, [courseStats]);
+
+  // Filter records using useMemo
+  const filteredRecords = useMemo(() => {
+    if (filter === 'all') return records;
+    return records.filter(record => record.status === filter);
+  }, [records, filter]);
+
+  // Calculate statistics using useMemo
+  const stats = useMemo(() => {
+    const present = records.filter(r => r.status === 'present').length;
+    const absent = records.filter(r => r.status === 'absent').length;
+    return { present, absent, courses: courseStats.length };
+  }, [records, courseStats]);
 
   const getStatusBadge = (status: string) => {
     const config = {
@@ -151,12 +157,11 @@ export default function AttendancePage() {
         throw new Error('Failed to generate QR code');
       }
 
-      // Get the image as blob
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       setQrImageUrl(url);
     } catch (err) {
-      logger.error('QR generation error:', err as Error);
+      logger.error('QR generation error:', err instanceof Error ? err : new Error(String(err)));
       setError(err instanceof Error ? err.message : 'Failed to generate QR code');
     } finally {
       setQrLoading(false);
@@ -169,28 +174,25 @@ export default function AttendancePage() {
       setError(null);
       setMarkingSuccess(false);
 
-      const response = await api.post(endpoints.attendance.processQR, {
-        qrcode_data: qrData
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/attendance/scan`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qr_data: qrData }),
       });
 
       setMarkingSuccess(true);
       
-      // Refresh attendance data
       setTimeout(() => {
         window.location.reload();
       }, 2000);
     } catch (err) {
-      logger.error('Attendance marking error:', err as Error);
+      logger.error('Attendance marking error:', err instanceof Error ? err : new Error(String(err)));
       setError(err instanceof Error ? err.message : 'Failed to mark attendance');
     } finally {
       setMarking(false);
     }
   };
-
-  const filteredRecords = records.filter(record => {
-    if (filter === 'all') return true;
-    return record.status === filter;
-  });
 
   if (loading) {
     return (
@@ -337,7 +339,7 @@ export default function AttendancePage() {
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{courseStats.length}</div>
+                <div className="text-2xl font-bold">{stats.courses}</div>
                 <p className="text-xs text-muted-foreground">
                   Active courses this semester
                 </p>
@@ -350,9 +352,7 @@ export default function AttendancePage() {
                 <CheckCircle className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {records.filter(r => r.status === 'present').length}
-                </div>
+                <div className="text-2xl font-bold text-green-600">{stats.present}</div>
                 <p className="text-xs text-muted-foreground">
                   Sessions attended
                 </p>
@@ -365,9 +365,7 @@ export default function AttendancePage() {
                 <XCircle className="h-4 w-4 text-red-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  {records.filter(r => r.status === 'absent').length}
-                </div>
+                <div className="text-2xl font-bold text-red-600">{stats.absent}</div>
                 <p className="text-xs text-muted-foreground">
                   Sessions missed
                 </p>
@@ -474,7 +472,6 @@ export default function AttendancePage() {
                     Point your camera at the QR code displayed by your instructor
                   </p>
                   <Button onClick={() => {
-                    // In a real implementation, this would open camera and scan QR
                     const qrData = prompt("Enter QR code data (demo):");
                     if (qrData) {
                       markAttendanceWithQR(qrData);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { logger } from '@/lib/logger';
 import { api, endpoints } from '@/lib/api-client';
 import type { TimetableBlock, Course } from '@/lib/types';
 import {
@@ -11,17 +12,11 @@ import {
     User as UserIcon,
     Plus,
     Edit2,
-    Trash2,
-    ChevronLeft,
-    ChevronRight,
-    MoreVertical,
-    BookOpen,
-    Filter
+    Trash2
 } from 'lucide-react';
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
     CardTitle
 } from '@/components/ui/card';
@@ -35,7 +30,6 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import {
     Select,
@@ -55,10 +49,6 @@ const DAYS = [
     { id: 5, name: 'Friday' },
     { id: 6, name: 'Saturday' },
     { id: 0, name: 'Sunday' },
-];
-
-const TIME_SLOTS = [
-    '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'
 ];
 
 export default function TimetablePage() {
@@ -87,7 +77,7 @@ export default function TimetablePage() {
             const data = await api.get<TimetableBlock[]>(endpoint);
             setBlocks(data || []);
         } catch (error) {
-            console.error('Failed to fetch timetable:', error);
+            logger.error('Failed to fetch timetable:', error as Error);
         } finally {
             setIsLoading(false);
         }
@@ -99,7 +89,7 @@ export default function TimetablePage() {
                 const data = await api.get<Course[]>(endpoints.courses.list);
                 setCourses(data || []);
             } catch (error) {
-                console.error('Failed to fetch courses:', error);
+                logger.error('Failed to fetch courses:', error as Error);
             }
         }
     }, [user]);
@@ -133,7 +123,7 @@ export default function TimetablePage() {
             setEditingBlock(null);
             fetchTimetable();
         } catch (error) {
-            console.error('Failed to save timetable block:', error);
+            logger.error('Failed to save timetable block:', error as Error);
         }
     };
 
@@ -143,7 +133,7 @@ export default function TimetablePage() {
                 await api.delete(endpoints.timetable.delete(id));
                 fetchTimetable();
             } catch (error) {
-                console.error('Failed to delete block:', error);
+                logger.error('Failed to delete block:', error as Error);
             }
         }
     };
@@ -320,7 +310,7 @@ export default function TimetablePage() {
                                 <Label htmlFor="type">Type</Label>
                                 <Select
                                     value={formData.type}
-                                    onValueChange={(v: any) => setFormData(prev => ({ ...prev, type: v }))}
+                                    onValueChange={(v: string) => setFormData(prev => ({ ...prev, type: v as typeof prev.type }))}
                                 >
                                     <SelectTrigger id="type">
                                         <SelectValue placeholder="Select type" />

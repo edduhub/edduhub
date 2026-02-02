@@ -3,20 +3,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api, endpoints } from '@/lib/api-client';
+import { logger } from '@/lib/logger';
 import type { Role, Permission, User } from '@/lib/types';
 import {
     Shield,
     Lock,
     UserPlus,
-    ShieldCheck,
     Key,
     Plus,
     Edit2,
     Trash2,
     Search,
-    Check,
-    X,
-    MoreVertical,
     Settings2,
     Users
 } from 'lucide-react';
@@ -53,7 +50,6 @@ import {
     TabsList,
     TabsTrigger,
 } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
 
 export default function RolesPermissionsPage() {
     const { user } = useAuth();
@@ -84,7 +80,7 @@ export default function RolesPermissionsPage() {
             setPermissions(permissionsData || []);
             setAllUsers(usersData || []);
         } catch (error) {
-            console.error('Failed to fetch roles/permissions data:', error);
+            logger.error('Failed to fetch roles/permissions data:', error as Error);
         } finally {
             setIsLoading(false);
         }
@@ -107,7 +103,7 @@ export default function RolesPermissionsPage() {
             setIsRoleDialogOpen(false);
             fetchData();
         } catch (error) {
-            console.error('Failed to save role:', error);
+            logger.error('Failed to save role:', error as Error);
         }
     };
 
@@ -117,7 +113,7 @@ export default function RolesPermissionsPage() {
                 await api.delete(endpoints.roles.delete(id));
                 fetchData();
             } catch (error) {
-                console.error('Failed to delete role:', error);
+                logger.error('Failed to delete role:', error as Error);
             }
         }
     };

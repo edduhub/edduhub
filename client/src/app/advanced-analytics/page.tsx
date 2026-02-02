@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -103,7 +102,7 @@ export default function AdvancedAnalyticsPage() {
 
   const fetchStudents = async () => {
     try {
-      const response = await api.get('/api/students');
+      const response = await api.get<any[]>('/api/students');
       setStudents(Array.isArray(response) ? response : []);
     } catch (err) {
       logger.error('Failed to fetch students:', err as Error);
@@ -112,7 +111,7 @@ export default function AdvancedAnalyticsPage() {
 
   const fetchCourses = async () => {
     try {
-      const response = await api.get('/api/courses');
+      const response = await api.get<any[]>('/api/courses');
       setCourses(Array.isArray(response) ? response : []);
     } catch (err) {
       logger.error('Failed to fetch courses:', err as Error);
@@ -122,7 +121,7 @@ export default function AdvancedAnalyticsPage() {
   const fetchStudentProgression = async (studentId: string) => {
     try {
       setLoadingProgression(true);
-      const response = await api.get(`/api/analytics/advanced/students/${studentId}/progression`);
+      const response = await api.get<StudentProgression>(`/api/analytics/advanced/students/${studentId}/progression`);
       setStudentProgression(response);
     } catch (err) {
       logger.error('Failed to fetch student progression:', err as Error);
@@ -135,7 +134,7 @@ export default function AdvancedAnalyticsPage() {
   const fetchCourseEngagement = async (courseId: string) => {
     try {
       setLoadingEngagement(true);
-      const response = await api.get(`/api/analytics/advanced/courses/${courseId}/engagement`);
+      const response = await api.get<CourseEngagement>(`/api/analytics/advanced/courses/${courseId}/engagement`);
       setCourseEngagement(response);
     } catch (err) {
       logger.error('Failed to fetch course engagement:', err as Error);
@@ -148,7 +147,7 @@ export default function AdvancedAnalyticsPage() {
   const fetchPredictiveInsights = async () => {
     try {
       setLoadingInsights(true);
-      const response = await api.get('/api/analytics/advanced/predictive-insights');
+      const response = await api.get<PredictiveInsight[]>('/api/analytics/advanced/predictive-insights');
       setInsights(Array.isArray(response) ? response : []);
     } catch (err) {
       logger.error('Failed to fetch insights:', err as Error);
@@ -160,7 +159,7 @@ export default function AdvancedAnalyticsPage() {
 
   const fetchLearningAnalytics = async () => {
     try {
-      const response = await api.get('/api/analytics/advanced/learning-analytics');
+      const response = await api.get<LearningAnalytics>('/api/analytics/advanced/learning-analytics');
       setLearningAnalytics(response);
     } catch (err) {
       logger.error('Failed to fetch learning analytics:', err as Error);

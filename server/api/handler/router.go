@@ -498,4 +498,23 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	forum.GET("/threads/:threadID", a.Forum.GetThread)
 	forum.GET("/threads/:threadID/replies", a.Forum.ListReplies)
 	forum.POST("/threads/:threadID/replies", a.Forum.CreateReply)
+
+	// Parent Portal Routes
+	parent := apiGroup.Group("/parent")
+	parent.GET("/children", a.Parent.GetLinkedChildren)
+	parent.GET("/children/:studentID/dashboard", a.Parent.GetChildDashboard)
+	parent.GET("/children/:studentID/attendance", a.Parent.GetChildAttendance)
+	parent.GET("/children/:studentID/grades", a.Parent.GetChildGrades)
+	parent.GET("/children/:studentID/assignments", a.Parent.GetChildAssignments)
+
+	// Self-Service Routes
+	selfService := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
+	selfService.GET("/requests", a.SelfService.GetMyRequests)
+	selfService.POST("/requests", a.SelfService.CreateRequest)
+	selfService.GET("/requests/:requestID", a.SelfService.GetRequest)
+	selfService.GET("/types", a.SelfService.GetRequestTypes)
+
+	// Self-Service Admin Routes
+	selfServiceAdmin := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleAdmin))
+	selfServiceAdmin.PUT("/requests/:requestID", a.SelfService.UpdateRequest)
 }

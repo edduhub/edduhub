@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { ForumThread, ForumCategory } from '@/lib/types';
 import { api, endpoints } from '@/lib/api-client';
+import { logger } from '@/lib/logger';
 
 export default function ForumPage() {
   const searchParams = useSearchParams();
@@ -47,7 +48,7 @@ export default function ForumPage() {
       const data = await api.get<ForumThread[]>(url);
       setThreads(data || []);
     } catch (error) {
-      console.error('Failed to fetch threads:', error);
+      logger.error('Failed to fetch threads:', error as Error);
       setThreads([]);
     } finally {
       setIsLoading(false);
@@ -328,7 +329,7 @@ function CreateThreadDialog({
       setContent('');
       setTags([]);
     } catch (error) {
-      console.error('Failed to create thread:', error);
+      logger.error('Failed to create thread:', error as Error);
     } finally {
       setIsSubmitting(false);
     }

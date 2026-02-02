@@ -16,10 +16,8 @@ import {
   Calendar, 
   Clock, 
   MapPin, 
-  FileText, 
   Users, 
   CheckCircle,
-  AlertCircle,
   Trophy,
   Download
 } from "lucide-react";
@@ -43,7 +41,7 @@ interface Exam {
 
 export default function ExamsPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("all-exams");
+  const [, setActiveTab] = useState("all-exams");
   const [searchQuery, setSearchQuery] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);

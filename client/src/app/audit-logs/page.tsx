@@ -21,7 +21,7 @@ type AuditLog = {
   entity_id: number;
   ip_address: string;
   user_agent: string;
-  changes?: any;
+  changes?: Record<string, { old?: unknown; new?: unknown }>;
   created_at: string;
 };
 
@@ -105,7 +105,7 @@ export default function AuditLogsPage() {
   const fetchStats = async () => {
     try {
       const response = await api.get('/api/audit/stats');
-      setStats(response);
+      setStats(response as AuditStats);
     } catch (err) {
       logger.error('Failed to fetch audit stats:', err as Error);
     }

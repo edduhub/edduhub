@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { api } from "@/lib/api-client";
+import { useState, useMemo } from "react";
+import { useStudents, useCreateStudent, useUpdateStudent } from "@/lib/api-hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,29 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Search, UserPlus, Download, Loader2 } from "lucide-react";
 import { logger } from '@/lib/logger';
 
-type Student = {
-  id: number;
-  name: string;
-  rollNo: string;
-  email: string;
-  department: string;
-  semester: number;
-  gpa: number;
-  attendance: number;
-  enrolledCourses: number;
-  status: 'active' | 'inactive' | 'suspended';
-  avatar?: string;
-};
-
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Create form state
   const [newStudent, setNewStudent] = useState({
@@ -45,22 +28,50 @@ export default function StudentsPage() {
     semester: 1,
   });
 
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get('/api/students');
-        setStudents(Array.isArray(response) ? response : []);
-      } catch (err) {
-        logger.error('Failed to fetch students:', err as Error);
-        setError('Failed to load students');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // React Query hooks
+  const { data: students = [], isLoading: loading } = useStudents();
+  const createStudent = useCreateStudent();
+  const updateStudent = useUpdateStudent();
 
-    fetchStudents();
-  }, []);
+  // Filter students using useMemo
+  const filteredStudents = useMemo(() => {
+    return students.filter(student => {
+      const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
+      const matchesSearch = 
+        fullName.includes(searchQuery.toLowerCase()) ||
+        student.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesDepartment = 
+        selectedDepartment === "all" || 
+        student.departmentName === selectedDepartment;
+      
+      return matchesSearch && matchesDepartment;
+    });
+  }, [students, searchQuery, selectedDepartment]);
+
+  // Get unique departments using useMemo
+  const departments = useMemo(() => {
+    return ["all", ...Array.from(new Set(students.map(s => s.departmentName).filter(Boolean)))];
+  }, [students]);
+
+  // Calculate statistics using useMemo
+  const stats = useMemo(() => {
+    if (students.length === 0) {
+      return {
+        total: 0,
+        avgGpa: '0.00',
+        avgAttendance: 0,
+        activeCount: 0,
+      };
+    }
+
+    const total = students.length;
+    const avgGpa = (students.reduce((acc, s) => acc + (s.gpa ?? 0), 0) / total).toFixed(2);
+    const activeCount = students.filter(s => s.status === 'active').length;
+
+    return { total, avgGpa, avgAttendance: 0, activeCount };
+  }, [students]);
 
   const getStatusBadge = (status: string) => {
     const styles = {
@@ -77,21 +88,6 @@ export default function StudentsPage() {
     if (gpa >= 2.5) return 'text-yellow-600';
     return 'text-red-600';
   };
-
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = 
-      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.rollNo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesDepartment = 
-      selectedDepartment === "all" || 
-      student.department === selectedDepartment;
-    
-    return matchesSearch && matchesDepartment;
-  });
-
-  const departments = ["all", ...Array.from(new Set(students.map(s => s.department)))];
 
   const handleExport = async () => {
     try {
@@ -111,7 +107,7 @@ export default function StudentsPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e) {
-      logger.error('Error occurred', e as Error);
+      logger.error('Error occurred', e instanceof Error ? e : new Error(String(e)));
       setError('Export failed');
     } finally {
       setIsExporting(false);
@@ -120,37 +116,32 @@ export default function StudentsPage() {
 
   const handleCreate = async () => {
     try {
-      setCreating(true);
       setError(null);
-      const payload = {
+      await createStudent.mutateAsync({
         first_name: newStudent.firstName,
         last_name: newStudent.lastName,
         email: newStudent.email,
         roll_no: newStudent.rollNo,
         department: newStudent.department,
         semester: Number(newStudent.semester),
-      } as any;
-      await api.post('/api/students', payload);
-      // Refresh list
-      const refreshed = await api.get('/api/students');
-      setStudents(Array.isArray(refreshed) ? refreshed : []);
+      });
       setShowCreate(false);
       setNewStudent({ firstName: '', lastName: '', email: '', rollNo: '', department: '', semester: 1 });
     } catch (e) {
-      logger.error('Error occurred', e as Error);
+      logger.error('Error occurred', e instanceof Error ? e : new Error(String(e)));
       setError('Failed to create student');
-    } finally {
-      setCreating(false);
     }
   };
 
-  const toggleStatus = async (s: Student) => {
+  const toggleStatus = async (student: typeof students[0]) => {
     try {
-      const nextStatus = s.status === 'active' ? 'inactive' : 'active';
-      await api.patch(`/api/students/${s.id}`, { status: nextStatus });
-      setStudents(prev => prev.map(st => st.id === s.id ? { ...st, status: nextStatus } : st));
+      const nextStatus = student.status === 'active' ? 'inactive' : 'active';
+      await updateStudent.mutateAsync({
+        id: student.id,
+        data: { status: nextStatus },
+      });
     } catch (e) {
-      logger.error('Error occurred', e as Error);
+      logger.error('Error occurred', e instanceof Error ? e : new Error(String(e)));
       setError('Failed to update status');
     }
   };
@@ -209,8 +200,8 @@ export default function StudentsPage() {
               </div>
             </div>
             <div className="mt-4 flex justify-end">
-              <Button onClick={handleCreate} disabled={creating}>
-                {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              <Button onClick={handleCreate} disabled={createStudent.isPending}>
+                {createStudent.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                 Create
               </Button>
             </div>
@@ -230,7 +221,7 @@ export default function StudentsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Total Students
             </CardTitle>
-            <div className="text-2xl font-bold">{students.length}</div>
+            <div className="text-2xl font-bold">{stats.total}</div>
           </CardHeader>
         </Card>
         <Card>
@@ -238,9 +229,7 @@ export default function StudentsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Average GPA
             </CardTitle>
-            <div className="text-2xl font-bold">
-              {students.length ? (students.reduce((acc, s) => acc + s.gpa, 0) / students.length).toFixed(2) : '0.00'}
-            </div>
+            <div className="text-2xl font-bold">{stats.avgGpa}</div>
           </CardHeader>
         </Card>
         <Card>
@@ -248,9 +237,7 @@ export default function StudentsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Avg Attendance
             </CardTitle>
-            <div className="text-2xl font-bold">
-              {students.length ? Math.round(students.reduce((acc, s) => acc + s.attendance, 0) / students.length) : 0}%
-            </div>
+            <div className="text-2xl font-bold">{stats.avgAttendance}%</div>
           </CardHeader>
         </Card>
         <Card>
@@ -258,9 +245,7 @@ export default function StudentsPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Active Students
             </CardTitle>
-            <div className="text-2xl font-bold text-green-600">
-              {students.filter(s => s.status === 'active').length}
-            </div>
+            <div className="text-2xl font-bold text-green-600">{stats.activeCount}</div>
           </CardHeader>
         </Card>
       </div>
@@ -321,7 +306,7 @@ export default function StudentsPage() {
                         <Avatar className="h-9 w-9">
                           <AvatarImage src={student.avatar} />
                           <AvatarFallback>
-                            {student.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                            {student.name.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -349,7 +334,7 @@ export default function StudentsPage() {
                       <Button variant="outline" size="sm">
                         View
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => toggleStatus(student)}>
+                      <Button variant="outline" size="sm" onClick={() => toggleStatus(student)} disabled={updateStudent.isPending}>
                         {student.status === 'active' ? 'Deactivate' : 'Activate'}
                       </Button>
                     </TableCell>

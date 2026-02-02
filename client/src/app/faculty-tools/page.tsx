@@ -14,11 +14,9 @@ import {
   CheckSquare,
   FileText,
   Calendar,
-  Filter,
-  Search,
   Plus
 } from 'lucide-react';
-import type { Announcement, Course } from '@/lib/types';
+import type { Announcement } from '@/lib/types';
 
 export default function FacultyToolsPage() {
   return (
@@ -237,7 +235,7 @@ function BulkAnnouncementsTool() {
                   <select
                     id="priority"
                     value={newAnnouncement.priority}
-                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value as any })}
+                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, priority: e.target.value as 'low' | 'normal' | 'high' | 'urgent' })}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="low">Low</option>
@@ -303,7 +301,7 @@ function BulkAnnouncementsTool() {
 }
 
 function GradingRubricsTool() {
-  const [rubrics, setRubrics] = useState([
+  const [rubrics] = useState([
     {
       id: 1,
       name: 'Assignment Rubric',
@@ -365,7 +363,7 @@ function GradingRubricsTool() {
 }
 
 function OfficeHoursTool() {
-  const [officeHours, setOfficeHours] = useState([
+  const [officeHours] = useState([
     {
       id: 1,
       day: 'Monday',

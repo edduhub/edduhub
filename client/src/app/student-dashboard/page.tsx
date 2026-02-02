@@ -12,15 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   BookOpen,
-  GraduationCap,
   CheckCircle,
   AlertCircle,
   FileText,
   Calendar,
-  TrendingUp,
-  Clock,
   Award,
-  Target,
 } from "lucide-react";
 import { format } from "date-fns";
 import { logger } from '@/lib/logger';
@@ -567,7 +563,7 @@ export default function StudentDashboardPage() {
                         </TableCell>
                         <TableCell className="text-right">{assignment.maxScore}</TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="destructive">Submit Now</Button>
+                          <Button size="sm" variant="default">Submit Now</Button>
                         </TableCell>
                       </TableRow>
                     ))}

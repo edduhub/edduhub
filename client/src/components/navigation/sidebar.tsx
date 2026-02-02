@@ -30,7 +30,7 @@ import {
 type NavItem = {
   href: string;
   label: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
 };
 

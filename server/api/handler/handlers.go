@@ -40,6 +40,8 @@ type Handlers struct {
 	Exam              *ExamHandler
 	Placement         *PlacementHandler
 	Forum             *ForumHandler
+	Parent            *ParentHandler
+	SelfService       *SelfServiceHandler
 }
 
 func NewHandlers(services *services.Services) *Handlers {
@@ -90,5 +92,12 @@ func NewHandlers(services *services.Services) *Handlers {
 		Exam:              NewExamHandler(services.ExamService),
 		Placement:         NewPlacementHandler(services.PlacementService),
 		Forum:             NewForumHandler(services.ForumService),
+		Parent: NewParentHandler(
+			services.StudentService,
+			services.Attendance,
+			services.GradeService,
+			services.AssignmentService,
+		),
+		SelfService: NewSelfServiceHandler(),
 	}
 }

@@ -60,8 +60,8 @@ export default function GradesPage() {
   const { user } = useAuth();
   const [grades, setGrades] = useState<Grade[]>([]);
   const [courseGrades, setCourseGrades] = useState<CourseGrade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setLoading] = useState(true);
+  const [, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
@@ -167,9 +167,9 @@ export default function GradesPage() {
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      logger.error('Error occurred', e as Error);
-      setError(e?.message || 'Failed to download report');
+    } catch (error) {
+      logger.error('Error occurred', error instanceof Error ? error : new Error(String(error)));
+      setError(error instanceof Error ? error.message : 'Failed to download report');
     } finally {
       setDownloading(false);
     }

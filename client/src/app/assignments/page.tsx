@@ -45,7 +45,7 @@ const normalizeStatus = (status?: string): Assignment['status'] => {
 export default function AssignmentsPage() {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Create form
@@ -126,9 +126,9 @@ export default function AssignmentsPage() {
       setAssignments(normalized);
       setShowCreate(false);
       setNewAssignment({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100 });
-    } catch (e: any) {
-      logger.error('Error occurred', e as Error);
-      setError(e?.message || 'Failed to create assignment');
+    } catch (error) {
+      logger.error('Error occurred', error instanceof Error ? error : new Error(String(error)));
+      setError(error instanceof Error ? error.message : 'Failed to create assignment');
     } finally {
       setCreating(false);
     }

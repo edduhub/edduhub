@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { logger } from '@/lib/logger';
 import { api, endpoints } from '@/lib/api-client';
 import type { Student } from '@/lib/types';
 import {
@@ -11,12 +12,8 @@ import {
     Building2,
     Plus,
     Search,
-    Filter,
-    MoreVertical,
     ExternalLink,
     DollarSign,
-    Calendar,
-    CheckCircle2,
     Clock,
     ArrowUpRight,
     Edit2,
@@ -47,7 +44,6 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
@@ -114,7 +110,7 @@ export default function PlacementsPage() {
                 setStudents(studentData || []);
             }
         } catch (error) {
-            console.error('Failed to fetch placement data:', error);
+            logger.error('Failed to fetch placement data:', error as Error);
         } finally {
             setIsLoading(false);
         }
@@ -146,7 +142,7 @@ export default function PlacementsPage() {
             setEditingPlacement(null);
             fetchData();
         } catch (error) {
-            console.error('Failed to save placement:', error);
+            logger.error('Failed to save placement:', error as Error);
         }
     };
 
@@ -156,7 +152,7 @@ export default function PlacementsPage() {
                 await api.delete(endpoints.placements.delete(id));
                 fetchData();
             } catch (error) {
-                console.error('Failed to delete placement:', error);
+                logger.error('Failed to delete placement:', error as Error);
             }
         }
     };
@@ -448,7 +444,7 @@ export default function PlacementsPage() {
                                 <Label htmlFor="status">Status</Label>
                                 <Select
                                     value={formData.status}
-                                    onValueChange={(v: any) => setFormData(prev => ({ ...prev, status: v }))}
+                                    onValueChange={(v: string) => setFormData(prev => ({ ...prev, status: v as typeof prev.status }))}
                                 >
                                     <SelectTrigger id="status">
                                         <SelectValue placeholder="Select status" />

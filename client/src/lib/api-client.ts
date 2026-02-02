@@ -1,7 +1,7 @@
 // Enhanced API client with authentication support, retry logic, and better error handling
 
-import { AuthSession, ApiError, ValidationError, Quiz, Profile, User } from './types';
-import { logger } from './logger';
+import { AuthSession, ValidationError, Quiz, Profile, User } from './types';
+import { APIError as CustomAPIError } from './errors';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const AUTH_STORAGE_KEY = 'edduhub_auth';
@@ -20,12 +20,8 @@ function getAuthToken(): string | null {
   }
 }
 
-export class APIError extends Error {
-  constructor(public status: number, message: string, public code?: string, public details?: unknown) {
-    super(message);
-    this.name = 'APIError';
-  }
-}
+// Re-export APIError from errors module for backward compatibility
+export { CustomAPIError as APIError };
 
 export class NetworkError extends Error {
   constructor(message: string) {
@@ -66,10 +62,10 @@ async function retryWithBackoff<T>(
     try {
       return await fn();
     } catch (error) {
-      lastError = error as Error;
+      lastError = error instanceof Error ? error : new Error(String(error));
 
       // Don't retry on certain status codes
-      if (error instanceof APIError && [400, 401, 403, 404].includes(error.status)) {
+      if (error instanceof CustomAPIError && [400, 401, 403, 404].includes(error.status)) {
         throw error;
       }
 
@@ -134,10 +130,12 @@ export async function apiClient<T>(
 
       try {
         const errorData = await response.json();
-        message = (errorData as ApiError).message || (errorData as ApiError).error || message;
-        code = (errorData as ApiError).code;
-        details = (errorData as ApiError).details;
-        validationErrors = (errorData as ApiError).validationErrors;
+        if (errorData && typeof errorData === 'object') {
+          message = errorData.message || errorData.error || message;
+          code = errorData.code;
+          details = errorData.details;
+          validationErrors = errorData.validationErrors;
+        }
       } catch {
         message = response.statusText || message;
       }
@@ -154,8 +152,7 @@ export async function apiClient<T>(
         }
       }
 
-      const error = new APIError(response.status, message, code, details);
-      (error as any).validationErrors = validationErrors;
+      const error = new CustomAPIError(response.status, message, code, details as Record<string, unknown> | undefined, validationErrors);
       throw error;
     }
 

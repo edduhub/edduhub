@@ -24,9 +24,7 @@ type CalendarEvent = {
 export default function CalendarPage() {
   const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
@@ -43,14 +41,11 @@ export default function CalendarPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        setLoading(true);
         const response = await api.get('/api/calendar');
         setEvents(Array.isArray(response) ? response : []);
       } catch (err) {
         logger.error('Failed to fetch calendar events:', err as Error);
         setError('Failed to load calendar events');
-      } finally {
-        setLoading(false);
       }
     };
 
@@ -138,7 +133,7 @@ export default function CalendarPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Type</label>
-                <input className="w-full rounded-md border px-3 py-2" value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as any })} />
+                <input className="w-full rounded-md border px-3 py-2" value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as 'academic' | 'exam' | 'event' | 'holiday' | 'meeting' | 'deadline' | 'other' })} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Start</label>
@@ -249,7 +244,6 @@ export default function CalendarPage() {
                 return (
                   <button
                     key={idx}
-                    onClick={() => setSelectedDate(day)}
                     className={`
                       min-h-[80px] p-2 rounded-lg border text-left transition-colors
                       ${!isSameMonth(day, currentDate) ? 'opacity-40' : ''}

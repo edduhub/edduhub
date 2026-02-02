@@ -3,14 +3,13 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     CreditCard,
-    History,
     AlertTriangle,
     CheckCircle2,
     Download,
@@ -47,7 +46,7 @@ interface Payment {
 
 declare global {
     interface Window {
-        Razorpay: any;
+        Razorpay: new (options: object) => { open: () => void; on: (event: string, handler: () => void) => void };
     }
 }
 

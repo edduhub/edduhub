@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Loader2, AlertCircle, CheckCircle, Trash2, Edit, Send, Power } from "lucide-react";
+import { Plus, Loader2, AlertCircle, CheckCircle, Trash2, Edit, Send } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { logger } from '@/lib/logger';
 
@@ -78,8 +78,8 @@ export default function WebhooksPage() {
       setDialogOpen(false);
       resetForm();
       await fetchWebhooks();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create webhook');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create webhook');
     } finally {
       setSubmitting(false);
     }
@@ -96,8 +96,8 @@ export default function WebhooksPage() {
       setDialogOpen(false);
       resetForm();
       await fetchWebhooks();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update webhook');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update webhook');
     } finally {
       setSubmitting(false);
     }
@@ -110,18 +110,18 @@ export default function WebhooksPage() {
       await api.delete(`/api/webhooks/${id}`);
       setSuccess('Webhook deleted successfully');
       await fetchWebhooks();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete webhook');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to delete webhook');
     }
   };
 
   const handleTest = async (id: number) => {
     try {
       setError(null);
-      await api.post(`/api/webhooks/${id}/test`);
+      await api.post(`/api/webhooks/${id}/test`, {});
       setSuccess('Test event sent successfully');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send test event');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to send test event');
     }
   };
 
@@ -132,8 +132,8 @@ export default function WebhooksPage() {
         is_active: !webhook.is_active,
       });
       await fetchWebhooks();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update webhook');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update webhook');
     }
   };
 

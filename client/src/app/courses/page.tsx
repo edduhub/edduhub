@@ -1,60 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api } from "@/lib/api-client";
+import { useCourses } from "@/lib/api-hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Search, Users, BookOpen, Clock, Calendar, Loader2 } from "lucide-react";
-import { logger } from '@/lib/logger';
-
-type Course = {
-  id: number;
-  code: string;
-  name: string;
-  instructor: string;
-  semester: string;
-  credits: number;
-  enrolledStudents: number;
-  maxStudents: number;
-  progress?: number;
-  nextLecture?: string;
-  description: string;
-  department: string;
-};
 
 export default function CoursesPage() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get('/api/courses');
-        setCourses(Array.isArray(response) ? response : []);
-      } catch (err) {
-        logger.error('Failed to fetch courses:', err as Error);
-        setError('Failed to load courses');
-      } finally {
-        setLoading(false);
-      }
+  // React Query hook
+  const { data: courses = [], isLoading: loading } = useCourses();
+
+  // Filter courses using useMemo
+  const filteredCourses = useMemo(() => {
+    return courses.filter(course =>
+      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (course.instructorName?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+    );
+  }, [courses, searchQuery]);
+
+  // Calculate statistics using useMemo
+  const stats = useMemo(() => {
+    if (courses.length === 0) {
+      return {
+        total: 0,
+        totalStudents: 0,
+        avgProgress: 0,
+        totalCredits: 0,
+      };
+    }
+
+    return {
+      total: courses.length,
+      totalStudents: courses.reduce((acc, c) => acc + (c.enrollmentCount || 0), 0),
+      totalCredits: courses.reduce((acc, c) => acc + c.credits, 0),
     };
-
-    fetchCourses();
-  }, []);
-
-  const filteredCourses = courses.filter(course =>
-    course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.instructor.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  }, [courses]);
 
   const enrollmentPercentage = (enrolled: number, max: number) => {
     return Math.round((enrolled / max) * 100);
@@ -85,31 +73,25 @@ export default function CoursesPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Courses</CardDescription>
-            <CardTitle className="text-2xl">{courses.length}</CardTitle>
+            <CardTitle className="text-2xl">{stats.total}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Students</CardDescription>
-            <CardTitle className="text-2xl">
-              {courses.reduce((acc, c) => acc + c.enrolledStudents, 0)}
-            </CardTitle>
+            <CardTitle className="text-2xl">{stats.totalStudents}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Avg Progress</CardDescription>
-            <CardTitle className="text-2xl">
-              {Math.round(courses.reduce((acc, c) => acc + (c.progress || 0), 0) / courses.length)}%
-            </CardTitle>
+            <CardTitle className="text-2xl">{stats.avgProgress}%</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Total Credits</CardDescription>
-            <CardTitle className="text-2xl">
-              {courses.reduce((acc, c) => acc + c.credits, 0)}
-            </CardTitle>
+            <CardTitle className="text-2xl">{stats.totalCredits}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -126,65 +108,71 @@ export default function CoursesPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {filteredCourses.map((course) => (
-          <Card key={course.id} className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{course.code}</Badge>
-                    <Badge>{course.credits} Credits</Badge>
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {filteredCourses.map((course) => (
+            <Card key={course.id} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{course.code}</Badge>
+                      <Badge>{course.credits} Credits</Badge>
+                    </div>
+                    <CardTitle className="text-xl">{course.name}</CardTitle>
+                    <CardDescription>{course.instructorName || 'No instructor'}</CardDescription>
                   </div>
-                  <CardTitle className="text-xl">{course.name}</CardTitle>
-                  <CardDescription>{course.instructor}</CardDescription>
+                  <BookOpen className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <BookOpen className="h-5 w-5 text-muted-foreground" />
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">{course.description}</p>
-              
-              {user?.role === 'student' && course.progress !== undefined && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Course Progress</span>
-                    <span className="font-medium">{course.progress}%</span>
-                  </div>
-                  <Progress value={course.progress} />
-                </div>
-              )}
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span>{course.enrolledStudents}/{course.maxStudents} students</span>
-                  <Badge 
-                    variant="secondary"
-                    className="ml-auto text-xs"
-                  >
-                    {enrollmentPercentage(course.enrolledStudents, course.maxStudents)}% full
-                  </Badge>
-                </div>
-                {course.nextLecture && (
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span>Next: {course.nextLecture}</span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">{course.description}</p>
+                
+                {user?.role === 'student' && (course as { progress?: number }).progress !== undefined && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Course Progress</span>
+                      <span className="font-medium">{(course as { progress?: number }).progress}%</span>
+                    </div>
+                    <Progress value={(course as { progress?: number }).progress} />
                   </div>
                 )}
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>{course.semester}</span>
-                </div>
-              </div>
 
-              <Button className="w-full" variant="outline">
-                View Details
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span>{course.enrollmentCount || 0}/{course.maxEnrollment || 0} students</span>
+                    <Badge 
+                      variant="secondary"
+                      className="ml-auto text-xs"
+                    >
+                      {enrollmentPercentage(course.enrollmentCount || 0, course.maxEnrollment || 1)}% full
+                    </Badge>
+                  </div>
+                  {(course as { nextLecture?: string }).nextLecture && (
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Next: {(course as { nextLecture?: string }).nextLecture}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span>{course.semester}</span>
+                  </div>
+                </div>
+
+                <Button className="w-full" variant="outline">
+                  View Details
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

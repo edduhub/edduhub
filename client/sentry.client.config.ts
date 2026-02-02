@@ -19,7 +19,7 @@ Sentry.init({
   environment: process.env.NODE_ENV,
 
   // beforeSend filter to filter out sensitive data
-  beforeSend(event, hint) {
+  beforeSend(event) {
     // Don't send events in development
     if (process.env.NODE_ENV === 'development') {
       return null;
@@ -27,7 +27,7 @@ Sentry.init({
 
     // Filter out sensitive data from request bodies
     if (event.request?.data) {
-      const data = { ...event.request.data };
+      const data = { ...event.request.data } as Record<string, unknown>;
       delete data.password;
       delete data.passwordConfirm;
       delete data.currentPassword;

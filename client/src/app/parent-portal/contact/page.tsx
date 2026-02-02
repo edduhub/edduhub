@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Mail, Phone, User } from 'lucide-react';
-import { sendToMonitoringService } from '@/lib/logger';
+import { logger } from '@/lib/logger';
 
 interface ParentContactForm {
   parentName: string;
@@ -46,7 +46,7 @@ export default function ContactParentPage() {
       });
     } catch (error) {
       setSubmitStatus('error');
-      console.error('Failed to send message:', error);
+      logger.error('Failed to send message:', error as Error);
     } finally {
       setIsSubmitting(false);
     }
