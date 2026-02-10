@@ -68,7 +68,9 @@ export function sanitizeUrl(url: string): string {
 export function configureDOMPurify() {
   DOMPurify.addHook('uponSanitizeElement', (node, data) => {
     if (data.tagName && data.tagName.startsWith('on')) {
-      node.remove();
+      if (node.parentNode) {
+        node.parentNode.removeChild(node);
+      }
     }
   });
 

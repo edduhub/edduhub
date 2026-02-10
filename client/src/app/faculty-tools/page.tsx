@@ -16,7 +16,7 @@ import {
   Calendar,
   Plus
 } from 'lucide-react';
-import type { Announcement } from '@/lib/types';
+import { useAnnouncements, useCreateAnnouncement } from '@/lib/api-hooks';
 
 export default function FacultyToolsPage() {
   return (
@@ -68,8 +68,9 @@ export default function FacultyToolsPage() {
 }
 
 function BulkAnnouncementsTool() {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const { data: announcements = [] } = useAnnouncements();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: '',
     content: '',
@@ -77,29 +78,33 @@ function BulkAnnouncementsTool() {
     targetAudience: [] as string[],
     courseId: undefined as number | undefined,
   });
+  const createAnnouncement = useCreateAnnouncement();
 
-  const handleCreateAnnouncement = () => {
-    // API call to create announcement
-    setAnnouncements([...announcements, {
-      id: Date.now(),
-      title: newAnnouncement.title,
-      content: newAnnouncement.content,
-      priority: newAnnouncement.priority,
-      targetAudience: newAnnouncement.targetAudience,
-      courseId: newAnnouncement.courseId,
-      publishedAt: new Date().toISOString(),
-      authorId: 'faculty1',
-      authorName: 'Faculty Member',
-      collegeId: 'college1',
-    }]);
-    setIsDialogOpen(false);
-    setNewAnnouncement({
-      title: '',
-      content: '',
-      priority: 'normal',
-      targetAudience: [],
-      courseId: undefined,
-    });
+  const handleCreateAnnouncement = async () => {
+    setIsSubmitting(true);
+    try {
+      await createAnnouncement.mutateAsync({
+        title: newAnnouncement.title,
+        content: newAnnouncement.content,
+        priority: newAnnouncement.priority,
+        course_id: newAnnouncement.courseId,
+        is_published: true,
+        published_at: new Date().toISOString(),
+      });
+      
+      setIsDialogOpen(false);
+      setNewAnnouncement({
+        title: '',
+        content: '',
+        priority: 'normal',
+        targetAudience: [],
+        courseId: undefined,
+      });
+    } catch (error) {
+      console.error('Failed to create announcement:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -181,7 +186,7 @@ function BulkAnnouncementsTool() {
                         <span>{new Date(announcement.publishedAt).toLocaleString()}</span>
                         <span className="flex items-center gap-1">
                           <Users className="w-3 h-3" />
-                          {announcement.targetAudience.length} recipients
+                          {(announcement.targetAudience?.length ?? 0)} recipients
                         </span>
                       </div>
                     </div>
@@ -284,12 +289,16 @@ function BulkAnnouncementsTool() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreateAnnouncement}>
-                  <Send className="w-4 h-4 mr-2" />
-                  Send Announcement
+                <Button onClick={handleCreateAnnouncement} disabled={isSubmitting || !newAnnouncement.title || !newAnnouncement.content}>
+                  {isSubmitting ? 'Sending...' : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Send Announcement
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>

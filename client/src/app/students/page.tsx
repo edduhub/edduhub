@@ -82,7 +82,8 @@ export default function StudentsPage() {
     return <Badge className={styles[status as keyof typeof styles]}>{status}</Badge>;
   };
 
-  const getGPAColor = (gpa: number) => {
+  const getGPAColor = (gpa: number | undefined) => {
+    if (!gpa) return 'text-gray-600';
     if (gpa >= 3.7) return 'text-green-600';
     if (gpa >= 3.0) return 'text-blue-600';
     if (gpa >= 2.5) return 'text-yellow-600';
@@ -118,11 +119,11 @@ export default function StudentsPage() {
     try {
       setError(null);
       await createStudent.mutateAsync({
-        first_name: newStudent.firstName,
-        last_name: newStudent.lastName,
+        firstName: newStudent.firstName,
+        lastName: newStudent.lastName,
         email: newStudent.email,
-        roll_no: newStudent.rollNo,
-        department: newStudent.department,
+        rollNo: newStudent.rollNo,
+        departmentId: Number(newStudent.department) || 1,
         semester: Number(newStudent.semester),
       });
       setShowCreate(false);
@@ -266,7 +267,7 @@ export default function StudentsPage() {
               key={dept}
               variant={selectedDepartment === dept ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedDepartment(dept)}
+              onClick={() => setSelectedDepartment(dept || "all")}
             >
               {dept === "all" ? "All" : dept}
             </Button>
@@ -304,29 +305,27 @@ export default function StudentsPage() {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
-                          <AvatarImage src={student.avatar} />
+                          <AvatarImage />
                           <AvatarFallback>
-                            {student.name.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
+                            {`${student.firstName[0]}${student.lastName[0]}`.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{student.name}</div>
+                          <div className="font-medium">{`${student.firstName} ${student.lastName}`}</div>
                           <div className="text-sm text-muted-foreground">{student.email}</div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm">{student.rollNo}</TableCell>
-                    <TableCell>{student.department}</TableCell>
+                    <TableCell>{student.departmentName}</TableCell>
                     <TableCell>{student.semester}</TableCell>
                     <TableCell>
                       <span className={`font-medium ${getGPAColor(student.gpa)}`}>
-                        {student.gpa.toFixed(2)}
+                        {student.gpa?.toFixed(2) ?? 'N/A'}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className={student.attendance < 75 ? 'text-red-600 font-medium' : ''}>
-                        {student.attendance}%
-                      </span>
+                      <span>N/A</span>
                     </TableCell>
                     <TableCell>{student.enrolledCourses}</TableCell>
                     <TableCell>{getStatusBadge(student.status)}</TableCell>

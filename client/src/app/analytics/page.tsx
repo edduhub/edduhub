@@ -1,14 +1,14 @@
 "use client";
 
-import { useAnalyticsDashboard, useAttendanceTrends } from '@/lib/api-hooks';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  BarChart3, 
+import { useAnalyticsDashboard, useAttendanceTrends } from "@/lib/api-hooks";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
   LineChart,
   BookOpen,
   Clock,
@@ -16,15 +16,15 @@ import {
   AlertTriangle,
   CheckCircle,
   Download,
-  Calendar
-} from 'lucide-react';
-import type { 
-  PerformanceMetrics, 
-  AttendanceTrend, 
+  Calendar,
+} from "lucide-react";
+import type {
+  PerformanceMetrics,
+  AttendanceTrend,
   LearningAnalytics,
   PredictiveInsight,
-  PerformanceTrend
-} from '@/lib/types';
+  PerformanceTrend,
+} from "@/lib/types";
 
 export default function StudentAnalyticsPage() {
   const { data: dashboardData, isLoading: dashboardLoading } = useAnalyticsDashboard();
@@ -32,48 +32,76 @@ export default function StudentAnalyticsPage() {
 
   const isLoading = dashboardLoading || attendanceLoading;
 
-  const performanceData: PerformanceMetrics | null = dashboardData ? {
-    studentId: 1,
-    courseId: 101,
-    averageScore: dashboardData.metrics?.averageGrade ? (dashboardData.metrics.averageGrade / 4) * 100 : 82.5,
-    highestScore: 95,
-    lowestScore: 70,
-    totalAssessments: 12,
-    trend: 'improving',
-    percentile: 75,
-    gradeDistribution: [
-      { grade: 'A', count: 5 },
-      { grade: 'B', count: 4 },
-      { grade: 'C', count: 2 },
-      { grade: 'D', count: 1 },
-    ],
-  } : null;
+  const performanceData: PerformanceMetrics | null = dashboardData
+    ? {
+        studentId: 1,
+        courseId: 101,
+        averageScore: dashboardData.metrics?.averageGrade
+          ? (dashboardData.metrics.averageGrade / 4) * 100
+          : 82.5,
+        highestScore: 95,
+        lowestScore: 70,
+        totalAssessments: 12,
+        trend: "improving",
+        percentile: 75,
+        gradeDistribution: [
+          { grade: "A", count: 5 },
+          { grade: "B", count: 4 },
+          { grade: "C", count: 2 },
+          { grade: "D", count: 1 },
+        ],
+      }
+    : null;
 
-  const attendanceTrends: AttendanceTrend[] = Array.isArray(attendanceData) ? attendanceData.map((item: unknown) => ({
-    period: (item as { month?: string; period?: string }).month || (item as { period?: string }).period || 'Unknown',
-    presentCount: (item as { present?: number }).present || 20,
-    absentCount: (item as { absent?: number }).absent || 2,
-    lateCount: (item as { late?: number }).late || 1,
-    excusedCount: (item as { excused?: number }).excused || 0,
-    attendanceRate: (item as { rate?: number }).rate || 87,
-  })) : [
-    { period: 'January', presentCount: 20, absentCount: 2, lateCount: 1, excusedCount: 0, attendanceRate: 87 },
-    { period: 'February', presentCount: 18, absentCount: 3, lateCount: 1, excusedCount: 1, attendanceRate: 78 },
-    { period: 'March', presentCount: 22, absentCount: 1, lateCount: 0, excusedCount: 0, attendanceRate: 96 },
-  ];
+  const attendanceTrends: AttendanceTrend[] = Array.isArray(attendanceData)
+    ? attendanceData.map((item: unknown) => ({
+        period:
+          (item as { month?: string; period?: string }).month ||
+          (item as { period?: string }).period ||
+          "Unknown",
+        presentCount: (item as { present?: number }).present || 20,
+        absentCount: (item as { absent?: number }).absent || 2,
+        lateCount: (item as { late?: number }).late || 1,
+        excusedCount: (item as { excused?: number }).excused || 0,
+        attendanceRate: (item as { rate?: number }).rate || 87,
+      }))
+    : [
+        {
+          period: "January",
+          presentCount: 20,
+          absentCount: 2,
+          lateCount: 1,
+          excusedCount: 0,
+          attendanceRate: 87,
+        },
+        {
+          period: "February",
+          presentCount: 18,
+          absentCount: 3,
+          lateCount: 1,
+          excusedCount: 1,
+          attendanceRate: 78,
+        },
+        {
+          period: "March",
+          presentCount: 22,
+          absentCount: 1,
+          lateCount: 0,
+          excusedCount: 0,
+          attendanceRate: 96,
+        },
+      ];
 
   const learningAnalytics: LearningAnalytics | null = {
-    period: 'Current Semester',
+    period: "Current Semester",
     engagementRate: 85,
     completionRate: 78,
     averageTimeSpent: 45,
     mostAccessedMaterials: [
-      { materialId: 1, title: 'Introduction to Algorithms', accessCount: 156 },
-      { materialId: 2, title: 'Data Structures', accessCount: 132 },
+      { materialId: 1, title: "Introduction to Algorithms", accessCount: 156 },
+      { materialId: 2, title: "Data Structures", accessCount: 132 },
     ],
-    leastAccessedMaterials: [
-      { materialId: 3, title: 'Advanced Topics', accessCount: 23 },
-    ],
+    leastAccessedMaterials: [{ materialId: 3, title: "Advanced Topics", accessCount: 23 }],
     peakActivityHours: [
       { hour: 10, activityCount: 45 },
       { hour: 14, activityCount: 67 },
@@ -84,25 +112,22 @@ export default function StudentAnalyticsPage() {
   const predictiveInsights: PredictiveInsight[] = [
     {
       studentId: 1,
-      studentName: 'John Doe',
-      riskLevel: 'medium',
-      factors: [
-        'Declining attendance in last 2 weeks',
-        'Late assignment submissions',
-      ],
+      studentName: "John Doe",
+      riskLevel: "medium",
+      factors: ["Declining attendance in last 2 weeks", "Late assignment submissions"],
       recommendations: [
-        'Focus on attending classes regularly',
-        'Start assignments early',
-        'Attend office hours for help',
+        "Focus on attending classes regularly",
+        "Start assignments early",
+        "Attend office hours for help",
       ],
       confidenceScore: 0.85,
     },
   ];
 
   const performanceTrends: PerformanceTrend[] = [
-    { date: '2024-01-15', score: 78, percentile: 68 },
-    { date: '2024-02-15', score: 82, percentile: 72 },
-    { date: '2024-03-15', score: 85, percentile: 75 },
+    { date: "2024-01-15", score: 78, percentile: 68 },
+    { date: "2024-02-15", score: 82, percentile: 72 },
+    { date: "2024-03-15", score: 85, percentile: 75 },
   ];
 
   if (isLoading) {
@@ -182,7 +207,10 @@ export default function StudentAnalyticsPage() {
           </TabsList>
 
           <TabsContent value="performance" className="space-y-4">
-            <PerformanceSection performanceData={performanceData} performanceTrends={performanceTrends} />
+            <PerformanceSection
+              performanceData={performanceData}
+              performanceTrends={performanceTrends}
+            />
           </TabsContent>
 
           <TabsContent value="attendance" className="space-y-4">
@@ -204,9 +232,9 @@ export default function StudentAnalyticsPage() {
 
 function PredictiveInsightCard({ insight }: { insight: PredictiveInsight }) {
   const riskColors = {
-    low: 'bg-green-100 text-green-800 border-green-200',
-    medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    high: 'bg-red-100 text-red-800 border-red-200',
+    low: "bg-green-100 text-green-800 border-green-200",
+    medium: "bg-yellow-100 text-yellow-800 border-yellow-200",
+    high: "bg-red-100 text-red-800 border-red-200",
   };
 
   const riskIcons = {
@@ -223,9 +251,7 @@ function PredictiveInsightCard({ insight }: { insight: PredictiveInsight }) {
             {riskIcons[insight.riskLevel]}
             {insight.riskLevel.charAt(0).toUpperCase() + insight.riskLevel.slice(1)} Risk
           </CardTitle>
-          <Badge variant="outline">
-            {Math.round(insight.confidenceScore * 100)}% confidence
-          </Badge>
+          <Badge variant="outline">{Math.round(insight.confidenceScore * 100)}% confidence</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -256,21 +282,21 @@ function PredictiveInsightCard({ insight }: { insight: PredictiveInsight }) {
   );
 }
 
-function PerformanceMetricCard({ 
-  title, 
-  value, 
-  suffix, 
-  trend 
-}: { 
-  title: string
-  value: number
-  suffix?: string
-  trend: 'improving' | 'declining' | 'stable' | null
+function PerformanceMetricCard({
+  title,
+  value,
+  suffix,
+  trend,
+}: {
+  title: string;
+  value: number;
+  suffix?: string;
+  trend: "improving" | "declining" | "stable" | null;
 }) {
   const trendColors = {
-    improving: 'text-green-600',
-    declining: 'text-red-600',
-    stable: 'text-gray-600',
+    improving: "text-green-600",
+    declining: "text-red-600",
+    stable: "text-gray-600",
   };
 
   const trendIcons = {
@@ -282,15 +308,14 @@ function PerformanceMetricCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">
-          {title}
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <BarChart3 className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">
           <div className="text-2xl font-bold">
-            {value}{suffix}
+            {value}
+            {suffix}
           </div>
           {trend && (
             <div className={`flex items-center gap-1 ${trendColors[trend]}`}>
@@ -304,15 +329,17 @@ function PerformanceMetricCard({
   );
 }
 
-function PerformanceSection({ 
-  performanceData, 
-  performanceTrends 
-}: { 
-  performanceData: PerformanceMetrics | null
-  performanceTrends: PerformanceTrend[]
+function PerformanceSection({
+  performanceData,
+  performanceTrends,
+}: {
+  performanceData: PerformanceMetrics | null;
+  performanceTrends: PerformanceTrend[];
 }) {
   if (!performanceData) {
-    return <div className="text-center py-8 text-muted-foreground">No performance data available</div>;
+    return (
+      <div className="text-center py-8 text-muted-foreground">No performance data available</div>
+    );
   }
 
   return (
@@ -344,11 +371,11 @@ function PerformanceSection({
             <h4 className="font-semibold mb-3">Grade Distribution</h4>
             <div className="flex gap-2 items-end h-32">
               {performanceData.gradeDistribution?.map((item) => (
-                <div 
-                  key={item.grade} 
+                <div
+                  key={item.grade}
                   className="flex-1 bg-primary rounded-t-md relative group"
-                  style={{ 
-                    height: `${(item.count / Math.max(...(performanceData.gradeDistribution || []).map(g => g.count))) * 100}%` 
+                  style={{
+                    height: `${(item.count / Math.max(...(performanceData.gradeDistribution || []).map((g) => g.count))) * 100}%`,
                   }}
                 >
                   <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -379,7 +406,10 @@ function PerformanceSection({
         <CardContent>
           <div className="space-y-4">
             {performanceTrends.map((trend) => (
-              <div key={trend.date} className="flex items-center justify-between p-3 border rounded-lg">
+              <div
+                key={trend.date}
+                className="flex items-center justify-between p-3 border rounded-lg"
+              >
                 <div>
                   <div className="font-medium">{new Date(trend.date).toLocaleDateString()}</div>
                   <div className="text-sm text-muted-foreground">
@@ -411,9 +441,7 @@ function AttendanceSection({ attendanceTrends }: { attendanceTrends: AttendanceT
             <div key={trend.period} className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{trend.period}</span>
-                <Badge 
-                  variant={trend.attendanceRate >= 80 ? 'default' : 'destructive'}
-                >
+                <Badge variant={trend.attendanceRate >= 80 ? "default" : "destructive"}>
                   {trend.attendanceRate}% attendance
                 </Badge>
               </div>
@@ -431,9 +459,7 @@ function AttendanceSection({ attendanceTrends }: { attendanceTrends: AttendanceT
                   Late: {trend.lateCount}
                 </div>
                 {trend.excusedCount > 0 && (
-                  <div className="flex items-center gap-1">
-                    Excused: {trend.excusedCount}
-                  </div>
+                  <div className="flex items-center gap-1">Excused: {trend.excusedCount}</div>
                 )}
               </div>
             </div>
@@ -446,7 +472,9 @@ function AttendanceSection({ attendanceTrends }: { attendanceTrends: AttendanceT
 
 function LearningSection({ learningAnalytics }: { learningAnalytics: LearningAnalytics | null }) {
   if (!learningAnalytics) {
-    return <div className="text-center py-8 text-muted-foreground">No learning analytics available</div>;
+    return (
+      <div className="text-center py-8 text-muted-foreground">No learning analytics available</div>
+    );
   }
 
   return (
@@ -484,7 +512,10 @@ function LearningSection({ learningAnalytics }: { learningAnalytics: LearningAna
           <CardContent>
             <div className="space-y-2">
               {learningAnalytics.mostAccessedMaterials?.map((material) => (
-                <div key={material.materialId} className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                <div
+                  key={material.materialId}
+                  className="flex justify-between items-center p-2 bg-muted/50 rounded"
+                >
                   <span className="text-sm">{material.title}</span>
                   <Badge>{material.accessCount} views</Badge>
                 </div>
@@ -500,7 +531,10 @@ function LearningSection({ learningAnalytics }: { learningAnalytics: LearningAna
           <CardContent>
             <div className="space-y-2">
               {learningAnalytics.peakActivityHours?.map((hour) => (
-                <div key={hour.hour} className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                <div
+                  key={hour.hour}
+                  className="flex justify-between items-center p-2 bg-muted/50 rounded"
+                >
                   <span className="text-sm">{hour.hour}:00</span>
                   <Badge>{hour.activityCount} activities</Badge>
                 </div>
@@ -526,9 +560,9 @@ function ProgressSection() {
       <CardContent>
         <div className="space-y-6">
           {[
-            { name: 'Computer Science 101', progress: 75, grade: 'A-' },
-            { name: 'Mathematics 201', progress: 60, grade: 'B+' },
-            { name: 'Physics 102', progress: 85, grade: 'A' },
+            { name: "Computer Science 101", progress: 75, grade: "A-" },
+            { name: "Mathematics 201", progress: 60, grade: "B+" },
+            { name: "Physics 102", progress: 85, grade: "A" },
           ].map((course) => (
             <div key={course.name} className="space-y-2">
               <div className="flex justify-between items-center">
@@ -536,7 +570,7 @@ function ProgressSection() {
                 <Badge variant="outline">{course.grade}</Badge>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
+                <div
                   className="bg-primary h-2 rounded-full transition-all"
                   style={{ width: `${course.progress}%` }}
                 />

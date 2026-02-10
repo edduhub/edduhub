@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -334,7 +335,7 @@ export default function FeesPage() {
                                     <div className="inline-flex items-center justify-center p-4 bg-green-100 dark:bg-green-900/30 rounded-full mb-2">
                                         <CheckCircle2 className="h-10 w-10 text-green-600" />
                                     </div>
-                                    <h3 className="text-2xl font-bold">You're all caught up!</h3>
+                                    <h3 className="text-2xl font-bold">You&apos;re all caught up!</h3>
                                     <p className="text-muted-foreground max-w-sm mx-auto">All your fees for the current term have been settled. Great job!</p>
                                 </div>
                             )}
@@ -406,7 +407,14 @@ export default function FeesPage() {
                         Your payments are secured with industry-standard 256-bit encryption.
                     </div>
                     <div className="flex items-center gap-4">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Razorpay_logo.svg" alt="Razorpay" className="h-4 grayscale opacity-50 dark:invert" />
+                        <Image
+                            src="https://upload.wikimedia.org/wikipedia/commons/8/89/Razorpay_logo.svg"
+                            alt="Razorpay"
+                            width={84}
+                            height={16}
+                            className="h-4 w-auto grayscale opacity-50 dark:invert"
+                            unoptimized
+                        />
                         <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-2" />
                         <p className="text-xs text-muted-foreground">© 2024 EduHub. All rights reserved.</p>
                     </div>

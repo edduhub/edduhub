@@ -15,6 +15,7 @@ const (
 	RoleAdmin   = "admin"
 	RoleFaculty = "faculty"
 	RoleStudent = "student"
+	RoleParent  = "parent"
 
 	identityContextKey  = "identity"
 	collegeIDContextKey = "college_id"
@@ -48,35 +49,35 @@ func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentS
 // to validate the session.
 func (m *AuthMiddleware) ValidateSession(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-        sessionToken := c.Request().Header.Get("X-Session-Token")
-        if sessionToken != "" {
-            identity, err := m.AuthService.ValidateSession(c.Request().Context(), sessionToken)
-            if err != nil {
-                return c.JSON(http.StatusUnauthorized, map[string]string{
-                    "error": "Invalid session",
-                })
-            }
-            c.Set(identityContextKey, identity)
-            return next(c)
-        }
+		sessionToken := c.Request().Header.Get("X-Session-Token")
+		if sessionToken != "" {
+			identity, err := m.AuthService.ValidateSession(c.Request().Context(), sessionToken)
+			if err != nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{
+					"error": "Invalid session",
+				})
+			}
+			c.Set(identityContextKey, identity)
+			return next(c)
+		}
 
-        // Fallback: accept Bearer JWT for backward compatibility during migration
-        authHeader := c.Request().Header.Get("Authorization")
-        const bearerPrefix = "Bearer "
-        if len(authHeader) > len(bearerPrefix) && authHeader[:len(bearerPrefix)] == bearerPrefix {
-            jwtToken := authHeader[len(bearerPrefix):]
-            if jwtToken != "" {
-                identity, err := m.AuthService.ValidateJWT(c.Request().Context(), jwtToken)
-                if err == nil && identity != nil {
-                    c.Set(identityContextKey, identity)
-                    return next(c)
-                }
-            }
-        }
+		// Fallback: accept Bearer JWT for backward compatibility during migration
+		authHeader := c.Request().Header.Get("Authorization")
+		const bearerPrefix = "Bearer "
+		if len(authHeader) > len(bearerPrefix) && authHeader[:len(bearerPrefix)] == bearerPrefix {
+			jwtToken := authHeader[len(bearerPrefix):]
+			if jwtToken != "" {
+				identity, err := m.AuthService.ValidateJWT(c.Request().Context(), jwtToken)
+				if err == nil && identity != nil {
+					c.Set(identityContextKey, identity)
+					return next(c)
+				}
+			}
+		}
 
-        return c.JSON(http.StatusUnauthorized, map[string]string{
-            "error": "No valid session or token provided",
-        })
+		return c.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "No valid session or token provided",
+		})
 	}
 }
 

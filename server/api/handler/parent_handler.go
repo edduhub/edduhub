@@ -1,15 +1,22 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"eduhub/server/internal/helpers"
+	"eduhub/server/internal/repository"
 	"eduhub/server/internal/services/assignment"
 	"eduhub/server/internal/services/attendance"
+	"eduhub/server/internal/services/auth"
+	"eduhub/server/internal/services/email"
 	"eduhub/server/internal/services/grades"
 	"eduhub/server/internal/services/student"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/labstack/echo/v4"
 )
 
@@ -19,6 +26,8 @@ type ParentHandler struct {
 	attendanceService attendance.AttendanceService
 	gradesService     grades.GradeServices
 	assignmentService assignment.AssignmentService
+	emailService      email.EmailService
+	db                *repository.DB
 }
 
 // NewParentHandler creates a new ParentHandler
@@ -27,12 +36,16 @@ func NewParentHandler(
 	attendanceService attendance.AttendanceService,
 	gradesService grades.GradeServices,
 	assignmentService assignment.AssignmentService,
+	emailService email.EmailService,
+	db *repository.DB,
 ) *ParentHandler {
 	return &ParentHandler{
 		studentService:    studentService,
 		attendanceService: attendanceService,
 		gradesService:     gradesService,
 		assignmentService: assignmentService,
+		emailService:      emailService,
+		db:                db,
 	}
 }
 
@@ -47,24 +60,59 @@ func NewParentHandler(
 // @Failure 500 {object} helpers.ErrorResponse
 // @Router /api/parent/children [get]
 func (h *ParentHandler) GetLinkedChildren(c echo.Context) error {
-	// Get parent user ID from context (set by auth middleware)
-	_, err := helpers.ExtractUserID(c)
-	if err != nil {
-		return helpers.Error(c, "Unauthorized", http.StatusUnauthorized)
-	}
-
-	// Get college ID
+	role := h.currentRole(c)
 	collegeID, err := helpers.ExtractCollegeID(c)
 	if err != nil {
 		return err
 	}
 
-	// TODO: Get linked students from parent-student relationship service
-	// For now, return empty list - this will be implemented when parent-student
-	// relationship feature is fully developed
-	_ = collegeID
+	students, err := h.studentService.ListStudents(c.Request().Context(), collegeID, 1000, 0)
+	if err != nil {
+		return helpers.Error(c, "Failed to fetch students", http.StatusInternalServerError)
+	}
 
-	linkedStudents := []map[string]interface{}{}
+	linkedStudents := make([]map[string]interface{}, 0, len(students))
+	if role == "admin" || role == "faculty" {
+		for _, student := range students {
+			linkedStudents = append(linkedStudents, map[string]interface{}{
+				"id":             student.StudentID,
+				"rollNo":         student.RollNo,
+				"enrollmentYear": student.EnrollmentYear,
+				"isActive":       student.IsActive,
+			})
+		}
+		return helpers.Success(c, map[string]interface{}{
+			"students": linkedStudents,
+		}, http.StatusOK)
+	}
+
+	kratosID, err := helpers.GetKratosID(c)
+	if err != nil {
+		return helpers.Error(c, "Unauthorized", http.StatusUnauthorized)
+	}
+	parentUserID, err := h.resolveParentUserID(c.Request().Context(), kratosID)
+	if err != nil {
+		return helpers.Success(c, map[string]interface{}{
+			"students": linkedStudents,
+		}, http.StatusOK)
+	}
+
+	linkedStudentIDs, err := h.getLinkedStudentIDSet(c.Request().Context(), collegeID, parentUserID)
+	if err != nil {
+		return helpers.Error(c, "Failed to fetch linked students", http.StatusInternalServerError)
+	}
+
+	for _, student := range students {
+		if _, ok := linkedStudentIDs[student.StudentID]; !ok {
+			continue
+		}
+		linkedStudents = append(linkedStudents, map[string]interface{}{
+			"id":             student.StudentID,
+			"rollNo":         student.RollNo,
+			"enrollmentYear": student.EnrollmentYear,
+			"isActive":       student.IsActive,
+		})
+	}
 
 	return helpers.Success(c, map[string]interface{}{
 		"students": linkedStudents,
@@ -233,10 +281,14 @@ func (h *ParentHandler) GetChildAssignments(c echo.Context) error {
 		return err
 	}
 
-	// Use collegeID for future implementation
-	_ = collegeID
-
-	assignments := []interface{}{}
+	// Fetch real assignments for the student
+	assignments, err := h.assignmentService.GetAssignmentsByStudent(c.Request().Context(), collegeID, studentID)
+	if err != nil {
+		return helpers.Success(c, map[string]interface{}{
+			"assignments": []interface{}{},
+			"total":       0,
+		}, http.StatusOK)
+	}
 
 	return helpers.Success(c, map[string]interface{}{
 		"assignments": assignments,
@@ -246,18 +298,132 @@ func (h *ParentHandler) GetChildAssignments(c echo.Context) error {
 
 // verifyParentAccess checks if the authenticated user has access to the student's data
 func (h *ParentHandler) verifyParentAccess(c echo.Context, studentID int) error {
-	// TODO: Implement proper parent-student relationship verification
-	// This should check if the authenticated user is linked as a parent to the student
-	// For now, we allow access (will be restricted when parent feature is fully implemented)
-
-	// Get current user role from context
-	role := c.Get("role")
+	role := h.currentRole(c)
 	if role == "admin" || role == "faculty" {
-		return nil // Admin and faculty can access all student data
+		return nil
 	}
 
-	// For parents, we would check the parent-student relationship table
-	// This is a placeholder for future implementation
-	_ = studentID
-	return nil
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	kratosID, err := helpers.GetKratosID(c)
+	if err != nil {
+		return helpers.Error(c, "Unauthorized", http.StatusUnauthorized)
+	}
+
+	parentUserID, err := h.resolveParentUserID(c.Request().Context(), kratosID)
+	if err != nil {
+		return helpers.Error(c, "Forbidden: Parent account is not linked", http.StatusForbidden)
+	}
+
+	ctx := c.Request().Context()
+	var exists bool
+	err = h.db.Pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM parent_student_relationships
+			WHERE college_id = $1
+			  AND parent_user_id = $2
+			  AND student_id = $3
+			  AND is_verified = TRUE
+		)`,
+		collegeID, parentUserID, studentID,
+	).Scan(&exists)
+	if err != nil {
+		return helpers.Error(c, "Failed to verify parent access", http.StatusInternalServerError)
+	}
+
+	if exists {
+		return nil
+	}
+
+	return helpers.Error(c, "Forbidden: You don't have access to this student's data", http.StatusForbidden)
+}
+
+// ContactParent sends a direct email to a parent from faculty/admin users.
+func (h *ParentHandler) ContactParent(c echo.Context) error {
+	role := h.currentRole(c)
+	if role != "admin" && role != "faculty" {
+		return helpers.Error(c, "Forbidden", http.StatusForbidden)
+	}
+
+	var req struct {
+		ParentName string `json:"parentName"`
+		Email      string `json:"email"`
+		Phone      string `json:"phone"`
+		Subject    string `json:"subject"`
+		Message    string `json:"message"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return helpers.Error(c, "Invalid request body", http.StatusBadRequest)
+	}
+
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Subject) == "" || strings.TrimSpace(req.Message) == "" {
+		return helpers.Error(c, "Email, subject, and message are required", http.StatusBadRequest)
+	}
+
+	body := fmt.Sprintf(
+		"<html><body><p><strong>Parent:</strong> %s</p><p><strong>Phone:</strong> %s</p><p>%s</p></body></html>",
+		strings.TrimSpace(req.ParentName),
+		strings.TrimSpace(req.Phone),
+		strings.ReplaceAll(strings.TrimSpace(req.Message), "\n", "<br/>"),
+	)
+	if err := h.emailService.SendEmail(c.Request().Context(), strings.TrimSpace(req.Email), strings.TrimSpace(req.Subject), body); err != nil {
+		return helpers.Error(c, "Failed to send parent contact email", http.StatusInternalServerError)
+	}
+
+	return helpers.Success(c, map[string]string{"status": "sent"}, http.StatusOK)
+}
+
+func (h *ParentHandler) currentRole(c echo.Context) string {
+	identity, ok := c.Get("identity").(*auth.Identity)
+	if !ok || identity == nil {
+		return ""
+	}
+	return identity.Traits.Role
+}
+
+func (h *ParentHandler) resolveParentUserID(ctx context.Context, kratosID string) (int, error) {
+	var userID int
+	err := h.db.Pool.QueryRow(ctx,
+		`SELECT id FROM users WHERE kratos_identity_id = $1 AND is_active = TRUE`,
+		kratosID,
+	).Scan(&userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return 0, fmt.Errorf("parent user not found")
+		}
+		return 0, err
+	}
+	return userID, nil
+}
+
+func (h *ParentHandler) getLinkedStudentIDSet(ctx context.Context, collegeID, parentUserID int) (map[int]struct{}, error) {
+	rows, err := h.db.Pool.Query(ctx, `
+		SELECT student_id
+		FROM parent_student_relationships
+		WHERE college_id = $1
+		  AND parent_user_id = $2
+		  AND is_verified = TRUE`,
+		collegeID, parentUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make(map[int]struct{})
+	for rows.Next() {
+		var studentID int
+		if err := rows.Scan(&studentID); err != nil {
+			return nil, err
+		}
+		ids[studentID] = struct{}{}
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return ids, nil
 }

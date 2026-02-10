@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useSelfServiceRequests } from '@/lib/api-hooks';
+import { useSelfServiceRequests, useCreateSelfServiceRequest } from '@/lib/api-hooks';
 import { logger } from '@/lib/logger';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,7 +17,8 @@ import {
   Send,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 
 type RequestStatus = 'pending' | 'approved' | 'rejected' | 'processing';
@@ -96,16 +97,19 @@ function EnrollmentRequestForm() {
     specialRequests: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const createRequest = useCreateSelfServiceRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // API call to submit enrollment request
-      // await api.post('/api/student/enrollment-request', formData);
+      await createRequest.mutateAsync({
+        type: 'enrollment',
+        title: `Enrollment Request: ${formData.courseCode}`,
+        description: `Reason: ${formData.reason}\n\nSpecial Requests: ${formData.specialRequests || 'None'}`,
+      });
       
-      alert('Enrollment request submitted successfully!');
       setFormData({ courseCode: '', reason: '', specialRequests: '' });
     } catch (error) {
       logger.error('Failed to submit request:', error as Error);
@@ -189,7 +193,12 @@ function EnrollmentRequestForm() {
           </div>
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : (
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
               <>
                 <Send className="w-4 h-4 mr-2" />
                 Submit Request
@@ -210,16 +219,19 @@ function ScheduleChangeRequestForm() {
     reason: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const createRequest = useCreateSelfServiceRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // API call to submit schedule change request
-      // await api.post('/api/student/schedule-change-request', formData);
+      await createRequest.mutateAsync({
+        type: 'schedule',
+        title: `Schedule Change: ${formData.courseId}`,
+        description: `Change from Section ${formData.currentSection} to Section ${formData.requestedSection}\n\nReason: ${formData.reason}`,
+      });
       
-      alert('Schedule change request submitted successfully!');
       setFormData({ courseId: '', currentSection: '', requestedSection: '', reason: '' });
     } catch (error) {
       logger.error('Failed to submit request:', error as Error);
@@ -316,7 +328,12 @@ function ScheduleChangeRequestForm() {
           </div>
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : (
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
               <>
                 <Send className="w-4 h-4 mr-2" />
                 Submit Request
@@ -338,16 +355,19 @@ function DocumentRequestForm() {
     address: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const createRequest = useCreateSelfServiceRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // API call to submit document request
-      // await api.post('/api/student/document-request', formData);
+      await createRequest.mutateAsync({
+        type: 'document',
+        title: `Document Request: ${formData.documentType}`,
+        description: `Purpose: ${formData.purpose}\nCopies: ${formData.copies}\nDelivery: ${formData.deliveryMethod}\nAddress: ${formData.address || 'N/A'}`,
+      });
       
-      alert('Document request submitted successfully!');
       setFormData({
         documentType: 'transcript',
         purpose: '',
@@ -386,9 +406,9 @@ function DocumentRequestForm() {
               required
             >
               <option value="transcript">Official Transcript</option>
-              <option value="grade_card">Grade Card</option>
-              <option value="enrollment_letter">Enrollment Letter</option>
-              <option value="attendance_certificate">Attendance Certificate</option>
+              <option value="certificate">Enrollment Certificate</option>
+              <option value="id_card">ID Card Replacement</option>
+              <option value="other">Other Document</option>
             </select>
           </div>
 
@@ -427,7 +447,7 @@ function DocumentRequestForm() {
               >
                 <option value="pickup">Pick up at Registrar Office</option>
                 <option value="email">Email (Digital Copy)</option>
-                <option value="mail">Mail to Address</option>
+                <option value="postal">Mail to Address</option>
               </select>
             </div>
           </div>
@@ -461,7 +481,12 @@ function DocumentRequestForm() {
           </div>
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Submitting...' : (
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
               <>
                 <Send className="w-4 h-4 mr-2" />
                 Submit Request

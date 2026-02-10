@@ -15,6 +15,7 @@ type ForumRepository interface {
 	IncrementViewCount(ctx context.Context, threadID int) error
 
 	CreateReply(ctx context.Context, reply *models.ForumReply) error
+	GetReply(ctx context.Context, collegeID, replyID int) (*models.ForumReply, error)
 	ListReplies(ctx context.Context, collegeID, threadID int) ([]models.ForumReply, error)
 	DeleteReply(ctx context.Context, collegeID, replyID int) error
 	MarkAnswer(ctx context.Context, collegeID, threadID, replyID int) error
@@ -169,6 +170,29 @@ func (r *forumRepository) CreateReply(ctx context.Context, reply *models.ForumRe
 		WHERE id = $3`
 	_, err = r.db.Exec(ctx, updateThread, reply.CreatedAt, reply.AuthorID, reply.ThreadID)
 	return err
+}
+
+func (r *forumRepository) GetReply(ctx context.Context, collegeID, replyID int) (*models.ForumReply, error) {
+	query := `
+		SELECT r.id, r.thread_id, r.parent_id, r.content,
+		       r.author_id, r.is_accepted_answer, r.like_count,
+		       r.created_at, r.updated_at, r.college_id,
+		       u.name as author_name
+		FROM forum_replies r
+		LEFT JOIN users u ON r.author_id = u.id
+		WHERE r.id = $1 AND r.college_id = $2`
+
+	var reply models.ForumReply
+	err := r.db.QueryRow(ctx, query, replyID, collegeID).Scan(
+		&reply.ID, &reply.ThreadID, &reply.ParentID, &reply.Content,
+		&reply.AuthorID, &reply.IsAcceptedAnswer, &reply.LikeCount,
+		&reply.CreatedAt, &reply.UpdatedAt, &reply.CollegeID,
+		&reply.AuthorName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &reply, nil
 }
 
 func (r *forumRepository) ListReplies(ctx context.Context, collegeID, threadID int) ([]models.ForumReply, error) {

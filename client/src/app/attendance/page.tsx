@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { useAttendanceByStudent } from "@/lib/api-hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -270,7 +271,14 @@ export default function AttendancePage() {
                 {qrImageUrl && (
                   <div className="text-center">
                     <h3 className="text-lg font-semibold mb-2">Generated QR Code</h3>
-                    <img src={qrImageUrl} alt="Attendance QR Code" className="mx-auto border rounded-lg" />
+                    <Image
+                      src={qrImageUrl}
+                      alt="Attendance QR Code"
+                      width={256}
+                      height={256}
+                      className="mx-auto border rounded-lg"
+                      unoptimized
+                    />
                     <Button 
                       onClick={() => {
                         const link = document.createElement('a');

@@ -72,9 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
       } catch (error) {
-        // Ignore abort errors, they're expected on unmount
         if (error instanceof Error && error.name === 'AbortError') return;
-        // ignore other errors and fallback to local storage
+        logger.error('Bootstrap auth check failed', error as Error);
       }
 
       // Check if component was unmounted during fetch
@@ -133,7 +132,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const error = await response.json();
           msg = error.message || error.error || msg;
-        } catch { }
+        } catch (parseError) {
+          logger.error('Failed to parse login error response', parseError as Error);
+        }
         throw new Error(msg);
       }
 
@@ -174,7 +175,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             avatar: p.user?.avatar ?? p.avatar,
           } as User;
         }
-      } catch { }
+      } catch (error) {
+        logger.error('Failed to fetch profile after login', error as Error);
+      }
 
       saveSession(authSession);
     } catch (error) {
@@ -197,7 +200,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const error = await response.json();
           msg = error.message || error.error || msg;
-        } catch { }
+        } catch (parseError) {
+          logger.error('Failed to parse registration error response', parseError as Error);
+        }
         throw new Error(msg);
       }
 

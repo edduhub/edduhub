@@ -48,7 +48,7 @@ export default function ParentDashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Parent Portal</h1>
-            <p className="text-muted-foreground mt-1">Monitor your child's academic progress</p>
+            <p className="text-muted-foreground mt-1">Monitor your child&apos;s academic progress</p>
           </div>
           <Button variant="outline">
             <Bell className="w-4 h-4 mr-2" />
@@ -183,7 +183,7 @@ export default function ParentDashboard() {
             <CardHeader>
               <CardTitle>No Students Linked</CardTitle>
               <CardDescription>
-                You haven't been linked to any student accounts yet. Please contact the college administration.
+                You haven&apos;t been linked to any student accounts yet. Please contact the college administration.
               </CardDescription>
             </CardHeader>
             <CardContent>

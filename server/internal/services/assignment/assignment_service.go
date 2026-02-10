@@ -15,6 +15,7 @@ type AssignmentService interface {
 	CreateAssignment(ctx context.Context, assignment *models.Assignment) error
 	GetAssignment(ctx context.Context, collegeID, assignmentID int) (*models.Assignment, error)
 	GetAssignmentsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.Assignment, error)
+	GetAssignmentsByStudent(ctx context.Context, collegeID, studentID int) ([]*models.Assignment, error)
 	UpdateAssignment(ctx context.Context, collegeID, assignmentID int, req *models.UpdateAssignmentRequest) error
 	DeleteAssignment(ctx context.Context, collegeID, assignmentID int) error
 	SubmitAssignment(ctx context.Context, submission *models.AssignmentSubmission) error
@@ -75,6 +76,12 @@ func (a *assignmentService) GetAssignment(ctx context.Context, collegeID, assign
 
 func (a *assignmentService) GetAssignmentsByCourse(ctx context.Context, collegeID, courseID int) ([]*models.Assignment, error) {
 	return a.repo.FindAssignmentsByCourse(ctx, collegeID, courseID, 100, 0)
+}
+
+func (a *assignmentService) GetAssignmentsByStudent(ctx context.Context, collegeID, studentID int) ([]*models.Assignment, error) {
+	// Get all assignments for courses the student is enrolled in
+	// First, get enrollments to find course IDs
+	return a.repo.FindAssignmentsByStudent(ctx, collegeID, studentID)
 }
 
 func (a *assignmentService) UpdateAssignment(ctx context.Context, collegeID, assignmentID int, req *models.UpdateAssignmentRequest) error {

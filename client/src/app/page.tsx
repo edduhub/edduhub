@@ -149,7 +149,7 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Welcome back, {user.firstName}!</h1>
-          <p className="text-muted-foreground">Here's what's happening with your courses today</p>
+          <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your courses today</p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -219,7 +219,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>Upcoming Deadlines</CardTitle>
-              <CardDescription>Don't miss these!</CardDescription>
+              <CardDescription>Don&apos;t miss these!</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboardData?.upcomingEvents?.slice(0, 5).map((item) => (

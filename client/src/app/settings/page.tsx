@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Bell, Globe, Shield } from "lucide-react";
+import { Bell, Globe, Shield, Loader2 } from "lucide-react";
+import { api } from "@/lib/api-client";
+import { logger } from "@/lib/logger";
+
+interface UserSettings {
+  email_notifications: boolean;
+  push_notifications: boolean;
+  theme: string;
+  language: string;
+}
 
 export default function SettingsPage() {
   useAuth();
@@ -23,6 +32,34 @@ export default function SettingsPage() {
     language: "en",
     timezone: "Asia/Kolkata"
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await api.get<UserSettings>("/api/settings");
+      if (data) {
+        setSettings(prev => ({
+          ...prev,
+          emailNotifications: data.email_notifications,
+          pushNotifications: data.push_notifications,
+          language: data.language || "en",
+        }));
+      }
+    } catch (err) {
+      logger.error("Failed to fetch settings", err as Error);
+      setError("Failed to load settings");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleToggle = (key: string) => {
     setSettings(prev => ({
@@ -31,10 +68,31 @@ export default function SettingsPage() {
     }));
   };
 
-  const handleSave = () => {
-    // Save settings logic
-    alert("Settings saved successfully!");
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await api.put("/api/settings", {
+        email_notifications: settings.emailNotifications,
+        push_notifications: settings.pushNotifications,
+        theme: "system",
+        language: settings.language,
+      });
+    } catch (err) {
+      logger.error("Failed to save settings", err as Error);
+      setError("Failed to save settings");
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -44,6 +102,12 @@ export default function SettingsPage() {
           Manage your account settings and preferences
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-6">
         <Card>
@@ -212,8 +276,13 @@ export default function SettingsPage() {
         </Card>
 
         <div className="flex justify-end gap-4">
-          <Button variant="outline">Cancel</Button>
-          <Button onClick={handleSave}>Save Changes</Button>
+          <Button variant="outline" onClick={fetchSettings} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save Changes
+          </Button>
         </div>
       </div>
     </div>

@@ -21,6 +21,7 @@ type AssignmentRepository interface {
 	UpdateAssignmentPartial(ctx context.Context, collegeID int, req *models.UpdateAssignmentRequest) error
 	DeleteAssignment(ctx context.Context, collegeID int, assignmentID int) error
 	FindAssignmentsByCourse(ctx context.Context, collegeID int, courseID int, limit, offset uint64) ([]*models.Assignment, error)
+	FindAssignmentsByStudent(ctx context.Context, collegeID int, studentID int) ([]*models.Assignment, error)
 	CountAssignmentsByCourse(ctx context.Context, collegeID int, courseID int) (int, error)
 
 	// Submission methods
@@ -186,6 +187,25 @@ func (r *assignmentRepository) FindAssignmentsByCourse(ctx context.Context, coll
 	return assignments, nil
 }
 
+func (r *assignmentRepository) FindAssignmentsByStudent(ctx context.Context, collegeID int, studentID int) ([]*models.Assignment, error) {
+	assignments := []*models.Assignment{}
+	// Join with enrollments to get assignments for courses the student is enrolled in
+	sql := `SELECT DISTINCT a.id, a.course_id, a.college_id, a.title, a.description, a.due_date, a.max_points, a.created_at, a.updated_at
+			 FROM assignments a
+			 JOIN enrollments e ON a.course_id = e.course_id
+			 WHERE a.college_id = $1
+			   AND e.college_id = $1
+			   AND e.student_id = $2
+			   AND e.status = 'active'
+			 ORDER BY a.due_date ASC, a.created_at ASC`
+
+	err := pgxscan.Select(ctx, r.DB.Pool, &assignments, sql, collegeID, studentID)
+	if err != nil {
+		return nil, fmt.Errorf("FindAssignmentsByStudent: failed to execute query or scan: %w", err)
+	}
+	return assignments, nil
+}
+
 func (r *assignmentRepository) CountAssignmentsByCourse(ctx context.Context, collegeID int, courseID int) (int, error) {
 	sql := `SELECT COUNT(*) FROM assignments WHERE college_id = $1 AND course_id = $2`
 	var count int
@@ -319,7 +339,7 @@ func (r *assignmentRepository) CountPendingSubmissionsByCollege(ctx context.Cont
 			FROM assignment_submissions s
 			JOIN assignments a ON a.id = s.assignment_id
 			WHERE a.college_id = $1 AND s.grade IS NULL`
-	
+
 	var count int
 	err := r.DB.Pool.QueryRow(ctx, sql, collegeID).Scan(&count)
 	if err != nil {

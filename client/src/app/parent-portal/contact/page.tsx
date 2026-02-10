@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, Mail, Phone, User } from 'lucide-react';
+import { AlertCircle, Mail, Phone, User, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 
 interface ParentContactForm {
@@ -33,8 +34,13 @@ export default function ContactParentPage() {
     setSubmitStatus('idle');
 
     try {
-      // API call to send message to parent
-      // await api.post('/api/parent/contact', formData);
+      await api.post('/api/parent/contact', {
+        parentName: formData.parentName,
+        email: formData.email,
+        phone: formData.phone,
+        subject: formData.subject,
+        message: formData.message,
+      });
       
       setSubmitStatus('success');
       setFormData({
@@ -58,7 +64,7 @@ export default function ContactParentPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Contact Parent</h1>
           <p className="text-muted-foreground mt-2">
-            Send a message to a student's parent or guardian
+            Send a message to a student&apos;s parent or guardian
           </p>
         </div>
 
@@ -144,7 +150,12 @@ export default function ContactParentPage() {
                 className="w-full"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Sending...' : 'Send Message'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : 'Send Message'}
               </Button>
 
               {submitStatus === 'success' && (

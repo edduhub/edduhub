@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Search, Bell, LogOut, User, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "next-themes";
+import { useNotifications, useUnreadCount, useMarkNotificationAsRead } from "@/lib/api-hooks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,10 @@ export function Topbar() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  
+  const { data: unreadCount } = useUnreadCount();
+  const { data: notifications } = useNotifications();
+  const markAsRead = useMarkNotificationAsRead();
 
   useEffect(() => {
     setMounted(true);
@@ -69,30 +74,36 @@ export function Topbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative h-9 w-9">
               <Bell className="h-4 w-4" />
-              <Badge className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full p-0 text-xs">
-                3
-              </Badge>
+              {unreadCount && unreadCount.unread_count > 0 && (
+                <Badge className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full p-0 text-xs">
+                  {unreadCount.unread_count > 9 ? '9+' : unreadCount.unread_count}
+                </Badge>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel>Notifications</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <div className="space-y-1">
-              <div className="p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors">
-                <p className="font-medium">New assignment posted</p>
-                <p className="text-xs text-muted-foreground">Data Structures - Due in 3 days</p>
-              </div>
-              <div className="p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors">
-                <p className="font-medium">Grades updated</p>
-                <p className="text-xs text-muted-foreground">Your quiz results are available</p>
-              </div>
-              <div className="p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors">
-                <p className="font-medium">Attendance marked</p>
-                <p className="text-xs text-muted-foreground">Present in today's lecture</p>
-              </div>
+              {notifications && notifications.length > 0 ? (
+                notifications.slice(0, 5).map((notification) => (
+                  <div 
+                    key={notification.id} 
+                    className={`p-3 text-sm hover:bg-accent rounded-md cursor-pointer transition-colors ${!notification.isRead ? 'bg-accent/50' : ''}`}
+                    onClick={() => !notification.isRead && markAsRead.mutate(notification.id)}
+                  >
+                    <p className="font-medium">{notification.title}</p>
+                    <p className="text-xs text-muted-foreground">{notification.message}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-3 text-sm text-muted-foreground text-center">
+                  No notifications
+                </div>
+              )}
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuItem className="cursor-pointer" onClick={() => router.push('/notifications')}>
               View all notifications
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -52,9 +52,9 @@ func DefaultRedisConfig() *RedisConfig {
 		Password:     "",
 		DB:           0,
 		Prefix:       "eduhub:",
-		PoolSize:     10,           // Reduced for low-resource environments
-		MinIdleConns: 2,            // Minimum idle connections
-		MaxRetries:   3,            // Retry failed commands
+		PoolSize:     10, // Reduced for low-resource environments
+		MinIdleConns: 2,  // Minimum idle connections
+		MaxRetries:   3,  // Retry failed commands
 		DialTimeout:  5 * time.Second,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
@@ -139,12 +139,12 @@ func (c *RedisCache) Delete(ctx context.Context, key string) error {
 func (c *RedisCache) Clear(ctx context.Context) error {
 	pattern := c.buildKey("*")
 	iter := c.client.Scan(ctx, 0, pattern, 0).Iterator()
-	
+
 	keys := []string{}
 	for iter.Next(ctx) {
 		keys = append(keys, iter.Val())
 	}
-	
+
 	if err := iter.Err(); err != nil {
 		return fmt.Errorf("failed to scan keys: %w", err)
 	}
@@ -205,22 +205,22 @@ func CacheKey(components ...interface{}) string {
 // Common cache key patterns for EduHub
 const (
 	// TTL configurations optimized for low-resource environments
-	TTLShort  = 5 * time.Minute   // For frequently changing data
-	TTLMedium = 30 * time.Minute  // For moderately stable data
-	TTLLong   = 2 * time.Hour     // For stable data
-	TTLDay    = 24 * time.Hour    // For very stable data
+	TTLShort  = 5 * time.Minute  // For frequently changing data
+	TTLMedium = 30 * time.Minute // For moderately stable data
+	TTLLong   = 2 * time.Hour    // For stable data
+	TTLDay    = 24 * time.Hour   // For very stable data
 
 	// Cache key prefixes
-	PrefixStudent     = "student:"
-	PrefixCourse      = "course:"
-	PrefixLecture     = "lecture:"
-	PrefixAttendance  = "attendance:"
-	PrefixGrade       = "grade:"
-	PrefixCalendar    = "calendar:"
-	PrefixDepartment  = "department:"
-	PrefixCollege     = "college:"
-	PrefixUser        = "user:"
-	PrefixSession     = "session:"
+	PrefixStudent    = "student:"
+	PrefixCourse     = "course:"
+	PrefixLecture    = "lecture:"
+	PrefixAttendance = "attendance:"
+	PrefixGrade      = "grade:"
+	PrefixCalendar   = "calendar:"
+	PrefixDepartment = "department:"
+	PrefixCollege    = "college:"
+	PrefixUser       = "user:"
+	PrefixSession    = "session:"
 )
 
 // Helper functions for common cache operations

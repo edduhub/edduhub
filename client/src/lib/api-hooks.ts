@@ -61,6 +61,338 @@ export const queryKeys = {
   forumThreadsByCourse: (courseId: number) => ['forumThreads', 'course', courseId] as const,
 };
 
+type NotificationAPI = {
+  id: number;
+  userId?: number | string;
+  user_id?: number | string;
+  title?: string;
+  message?: string;
+  type?: Notification['type'];
+  category?: string;
+  isRead?: boolean;
+  is_read?: boolean;
+  actionUrl?: string;
+  action_url?: string;
+  metadata?: Notification['metadata'];
+  createdAt?: string;
+  created_at?: string;
+};
+
+type AnnouncementAPI = {
+  id?: number;
+  title?: string;
+  content?: string;
+  priority?: string;
+  targetAudience?: string[];
+  target_audience?: string[];
+  courseId?: number;
+  course_id?: number;
+  courseName?: string;
+  course_name?: string;
+  departmentId?: number;
+  department_id?: number;
+  departmentName?: string;
+  department_name?: string;
+  publishedAt?: string;
+  published_at?: string;
+  expiresAt?: string;
+  expires_at?: string;
+  attachments?: string[];
+  authorId?: string;
+  author_id?: string;
+  authorName?: string;
+  author_name?: string;
+  author?: string;
+  collegeId?: string | number;
+  college_id?: string | number;
+  isPinned?: boolean;
+  is_pinned?: boolean;
+};
+
+type GradeAPI = {
+  id: number;
+  studentId?: number;
+  student_id?: number;
+  courseId?: number;
+  course_id?: number;
+  assessmentType?: string;
+  assessment_type?: string;
+  assessmentName?: string;
+  assessment_name?: string;
+  score?: number;
+  obtainedMarks?: number;
+  obtained_marks?: number;
+  maxScore?: number;
+  totalMarks?: number;
+  total_marks?: number;
+  percentage?: number;
+  weightage?: number;
+  gradedDate?: string;
+  graded_at?: string;
+  remarks?: string;
+  collegeId?: string | number;
+  college_id?: string | number;
+  createdAt?: string;
+  created_at?: string;
+};
+
+type AttendanceAPI = {
+  id?: number;
+  ID?: number;
+  studentId?: number;
+  studentID?: number;
+  student_id?: number;
+  courseId?: number;
+  courseID?: number;
+  course_id?: number;
+  lectureId?: number;
+  lectureID?: number;
+  lecture_id?: number;
+  date?: string;
+  status?: string;
+  markedBy?: string;
+  marked_by?: string;
+  remarks?: string;
+  collegeId?: string | number;
+  collegeID?: string | number;
+  college_id?: string | number;
+  createdAt?: string;
+  created_at?: string;
+  scannedAt?: string;
+  scanned_at?: string;
+};
+
+type AssignmentAPI = {
+  id: number;
+  courseId?: number;
+  course_id?: number;
+  courseName?: string;
+  course_name?: string;
+  title?: string;
+  description?: string;
+  dueDate?: string;
+  due_date?: string;
+  maxScore?: number;
+  max_points?: number;
+  attachments?: string[];
+  collegeId?: string | number;
+  college_id?: string | number;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+type ParentStudentAPI = {
+  id?: number;
+  student_id?: number;
+  studentId?: number;
+  userId?: string;
+  user_id?: string | number;
+  rollNo?: string;
+  roll_no?: string;
+  firstName?: string;
+  first_name?: string;
+  lastName?: string;
+  last_name?: string;
+  email?: string;
+  departmentId?: number;
+  department_id?: number;
+  departmentName?: string;
+  department_name?: string;
+  semester?: number;
+  collegeId?: string | number;
+  college_id?: string | number;
+  status?: Student['status'];
+  isActive?: boolean;
+  is_active?: boolean;
+  enrolledCourses?: number;
+  enrolled_courses?: number;
+  gpa?: number;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+type SelfServiceRequestAPI = {
+  id: number;
+  type?: string;
+  title?: string;
+  description?: string;
+  status?: string;
+  submittedAt?: string;
+  submitted_at?: string;
+  respondedAt?: string;
+  responded_at?: string;
+  response?: string;
+};
+
+type ParentStudentsResponse = {
+  students?: ParentStudentAPI[];
+};
+
+type ParentAttendanceResponse = {
+  attendance?: AttendanceAPI[];
+};
+
+type ParentGradesResponse = {
+  grades?: GradeAPI[];
+};
+
+type ParentAssignmentsResponse = {
+  assignments?: AssignmentAPI[];
+};
+
+type SelfServiceRequestsResponse = {
+  requests?: SelfServiceRequestAPI[];
+};
+
+type CreateAnnouncementInput = {
+  title: string;
+  content: string;
+  priority?: Announcement['priority'];
+  course_id?: number;
+  is_published?: boolean;
+  published_at?: string;
+  expires_at?: string;
+};
+
+const toISODateString = (value?: string): string =>
+  value || new Date().toISOString();
+
+const mapNotification = (item: NotificationAPI): Notification => ({
+  id: item.id,
+  userId: String(item.userId ?? item.user_id ?? ''),
+  title: item.title ?? '',
+  message: item.message ?? '',
+  type: item.type ?? 'info',
+  category: item.category ?? item.type ?? 'general',
+  isRead: item.isRead ?? item.is_read ?? false,
+  actionUrl: item.actionUrl ?? item.action_url,
+  metadata: item.metadata,
+  createdAt: toISODateString(item.createdAt ?? item.created_at),
+});
+
+const mapAnnouncement = (item: AnnouncementAPI): Announcement => {
+  const priority = item.priority;
+  const normalizedPriority: Announcement['priority'] =
+    priority === 'low' || priority === 'normal' || priority === 'high' || priority === 'urgent'
+      ? priority
+      : 'normal';
+
+  const courseId = item.courseId ?? item.course_id;
+  const departmentId = item.departmentId ?? item.department_id;
+  const collegeIdRaw = item.collegeId ?? item.college_id;
+
+  return {
+    id: item.id ?? 0,
+    title: item.title ?? '',
+    content: item.content ?? '',
+    priority: normalizedPriority,
+    targetAudience: item.targetAudience ?? item.target_audience ?? [],
+    courseId,
+    courseName: item.courseName ?? item.course_name,
+    departmentId,
+    departmentName: item.departmentName ?? item.department_name,
+    publishedAt: toISODateString(item.publishedAt ?? item.published_at),
+    expiresAt: item.expiresAt ?? item.expires_at,
+    attachments: item.attachments,
+    authorId: item.authorId ?? item.author_id ?? '',
+    authorName: item.authorName ?? item.author_name ?? item.author ?? 'System',
+    collegeId: collegeIdRaw !== undefined ? String(collegeIdRaw) : '',
+    isPinned: item.isPinned ?? item.is_pinned ?? false,
+  };
+};
+
+const mapGrade = (item: GradeAPI): Grade => ({
+  id: item.id,
+  studentId: item.studentId ?? item.student_id ?? 0,
+  courseId: item.courseId ?? item.course_id ?? 0,
+  assessmentType: item.assessmentType ?? item.assessment_type ?? '',
+  assessmentName: item.assessmentName ?? item.assessment_name ?? '',
+  score: item.score ?? item.obtainedMarks ?? item.obtained_marks ?? 0,
+  maxScore: item.maxScore ?? item.totalMarks ?? item.total_marks ?? 0,
+  percentage: item.percentage ?? 0,
+  weightage: item.weightage,
+  gradedDate: toISODateString(item.gradedDate ?? item.graded_at ?? item.createdAt ?? item.created_at),
+  remarks: item.remarks,
+  collegeId: String(item.collegeId ?? item.college_id ?? ''),
+});
+
+const mapAttendance = (item: AttendanceAPI): Attendance => ({
+  id: item.id ?? item.ID ?? 0,
+  studentId: item.studentId ?? item.studentID ?? item.student_id ?? 0,
+  courseId: item.courseId ?? item.courseID ?? item.course_id ?? 0,
+  lectureId: item.lectureId ?? item.lectureID ?? item.lecture_id,
+  date: toISODateString(item.date),
+  status: (item.status ?? 'absent').toLowerCase() as Attendance['status'],
+  markedBy: item.markedBy ?? item.marked_by ?? '',
+  remarks: item.remarks,
+  collegeId: String(item.collegeId ?? item.collegeID ?? item.college_id ?? ''),
+  createdAt: toISODateString(item.createdAt ?? item.created_at ?? item.scannedAt ?? item.scanned_at ?? item.date),
+});
+
+const mapAssignment = (item: AssignmentAPI): Assignment => ({
+  id: item.id,
+  courseId: item.courseId ?? item.course_id ?? 0,
+  courseName: item.courseName ?? item.course_name,
+  title: item.title ?? '',
+  description: item.description ?? '',
+  dueDate: toISODateString(item.dueDate ?? item.due_date),
+  maxScore: item.maxScore ?? item.max_points ?? 0,
+  attachments: item.attachments,
+  collegeId: String(item.collegeId ?? item.college_id ?? ''),
+  createdAt: toISODateString(item.createdAt ?? item.created_at),
+  updatedAt: toISODateString(item.updatedAt ?? item.updated_at),
+});
+
+const mapParentStudent = (item: ParentStudentAPI): Student => {
+  const id = item.id ?? item.studentId ?? item.student_id ?? 0;
+  const isActive = item.isActive ?? item.is_active ?? true;
+  return {
+    id,
+    userId: String(item.userId ?? item.user_id ?? ''),
+    rollNo: item.rollNo ?? item.roll_no ?? '',
+    firstName: item.firstName ?? item.first_name ?? 'Student',
+    lastName: item.lastName ?? item.last_name ?? String(id),
+    email: item.email ?? '',
+    departmentId: item.departmentId ?? item.department_id ?? 0,
+    departmentName: item.departmentName ?? item.department_name ?? 'N/A',
+    semester: item.semester ?? 0,
+    collegeId: String(item.collegeId ?? item.college_id ?? ''),
+    status: item.status ?? (isActive ? 'active' : 'inactive'),
+    enrolledCourses: item.enrolledCourses ?? item.enrolled_courses ?? 0,
+    gpa: item.gpa,
+    createdAt: toISODateString(item.createdAt ?? item.created_at),
+    updatedAt: toISODateString(item.updatedAt ?? item.updated_at),
+  };
+};
+
+const mapSelfServiceRequest = (item: SelfServiceRequestAPI): SelfServiceRequest => {
+  const type = item.type;
+  const status = item.status;
+  const normalizedType: SelfServiceRequest['type'] =
+    type === 'enrollment' || type === 'schedule' || type === 'transcript' || type === 'document'
+      ? type
+      : 'document';
+  const normalizedStatus: SelfServiceRequest['status'] =
+    status === 'pending' || status === 'approved' || status === 'rejected' || status === 'processing'
+      ? status
+      : 'pending';
+
+  return {
+    id: item.id,
+    type: normalizedType,
+    title: item.title ?? '',
+    description: item.description ?? '',
+    status: normalizedStatus,
+    submittedAt: toISODateString(item.submittedAt ?? item.submitted_at),
+    respondedAt: item.respondedAt ?? item.responded_at,
+    response: item.response,
+  };
+};
+
 // Dashboard hooks
 export function useDashboard(options?: Omit<UseQueryOptions<DashboardResponse, Error>, 'queryKey' | 'queryFn'>) {
   return useQuery({
@@ -298,7 +630,7 @@ export function useAssignmentsByCourse(courseId: number, options?: UseQueryOptio
   return useQuery({
     queryKey: queryKeys.assignmentsByCourse(courseId),
     queryFn: async () => {
-      const data = await api.get<Assignment[]>(endpoints.assignments.byCourse(courseId));
+      const data = await api.get<Assignment[]>(endpoints.assignments.listByCourse(courseId));
       return data || [];
     },
     enabled: !!courseId,
@@ -311,7 +643,7 @@ export function useQuizzesByCourse(courseId: number, options?: UseQueryOptions<Q
   return useQuery({
     queryKey: queryKeys.quizzesByCourse(courseId),
     queryFn: async () => {
-      const data = await api.get<Quiz[]>(endpoints.quizzes.byCourse(courseId));
+      const data = await api.get<Quiz[]>(endpoints.quizzes.listByCourse(courseId));
       return data || [];
     },
     enabled: !!courseId,
@@ -324,8 +656,8 @@ export function useNotifications(options?: UseQueryOptions<Notification[], Error
   return useQuery({
     queryKey: queryKeys.notifications,
     queryFn: async () => {
-      const data = await api.get<Notification[]>(endpoints.notifications.list);
-      return data || [];
+      const data = await api.get<NotificationAPI[]>(endpoints.notifications.list);
+      return (data || []).map(mapNotification);
     },
     ...options,
   });
@@ -401,10 +733,24 @@ export function useAnnouncements(options?: UseQueryOptions<Announcement[], Error
   return useQuery({
     queryKey: queryKeys.announcements,
     queryFn: async () => {
-      const data = await api.get<Announcement[]>(endpoints.announcements.list);
-      return data || [];
+      const data = await api.get<AnnouncementAPI[]>(endpoints.announcements.list);
+      return (data || []).map(mapAnnouncement);
     },
     ...options,
+  });
+}
+
+export function useCreateAnnouncement() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (announcementData: CreateAnnouncementInput) => {
+      const data = await api.post<AnnouncementAPI>(endpoints.announcements.create, announcementData);
+      return mapAnnouncement(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.announcements });
+    },
   });
 }
 
@@ -472,7 +818,7 @@ export function useFolders(options?: UseQueryOptions<Folder[], Error>) {
   return useQuery({
     queryKey: queryKeys.folders,
     queryFn: async () => {
-      const data = await api.get<Folder[]>(endpoints.folders.list);
+      const data = await api.get<Folder[]>('/api/folders');
       return data || [];
     },
     ...options,
@@ -484,7 +830,7 @@ export function useWebhooks(options?: UseQueryOptions<Webhook[], Error>) {
   return useQuery({
     queryKey: queryKeys.webhooks,
     queryFn: async () => {
-      const data = await api.get<Webhook[]>(endpoints.webhooks.list);
+      const data = await api.get<Webhook[]>('/api/webhooks');
       return data || [];
     },
     ...options,
@@ -496,7 +842,7 @@ export function useAuditLogs(options?: UseQueryOptions<AuditLog[], Error>) {
   return useQuery({
     queryKey: queryKeys.auditLogs,
     queryFn: async () => {
-      const data = await api.get<AuditLog[]>(endpoints.audit.logs);
+      const data = await api.get<AuditLog[]>('/api/audit/logs');
       return data || [];
     },
     ...options,
@@ -568,8 +914,8 @@ export function useParentChildren(options?: UseQueryOptions<Student[], Error>) {
   return useQuery({
     queryKey: ['parent', 'children'],
     queryFn: async () => {
-      const data = await api.get<Student[]>('/api/parent/children');
-      return data || [];
+      const data = await api.get<ParentStudentsResponse>('/api/parent/children');
+      return (data?.students || []).map(mapParentStudent);
     },
     ...options,
   });
@@ -591,8 +937,8 @@ export function useParentChildAttendance(studentId: number, options?: UseQueryOp
   return useQuery({
     queryKey: ['parent', 'child', studentId, 'attendance'],
     queryFn: async () => {
-      const data = await api.get<Attendance[]>(`/api/parent/children/${studentId}/attendance`);
-      return data || [];
+      const data = await api.get<ParentAttendanceResponse>(`/api/parent/children/${studentId}/attendance`);
+      return (data?.attendance || []).map(mapAttendance);
     },
     enabled: !!studentId,
     ...options,
@@ -603,8 +949,8 @@ export function useParentChildGrades(studentId: number, options?: UseQueryOption
   return useQuery({
     queryKey: ['parent', 'child', studentId, 'grades'],
     queryFn: async () => {
-      const data = await api.get<Grade[]>(`/api/parent/children/${studentId}/grades`);
-      return data || [];
+      const data = await api.get<ParentGradesResponse>(`/api/parent/children/${studentId}/grades`);
+      return (data?.grades || []).map(mapGrade);
     },
     enabled: !!studentId,
     ...options,
@@ -615,8 +961,8 @@ export function useParentChildAssignments(studentId: number, options?: UseQueryO
   return useQuery({
     queryKey: ['parent', 'child', studentId, 'assignments'],
     queryFn: async () => {
-      const data = await api.get<Assignment[]>(`/api/parent/children/${studentId}/assignments`);
-      return data || [];
+      const data = await api.get<ParentAssignmentsResponse>(`/api/parent/children/${studentId}/assignments`);
+      return (data?.assignments || []).map(mapAssignment);
     },
     enabled: !!studentId,
     ...options,
@@ -645,8 +991,8 @@ export function useSelfServiceRequests(options?: UseQueryOptions<SelfServiceRequ
   return useQuery({
     queryKey: ['self-service', 'requests'],
     queryFn: async () => {
-      const data = await api.get<SelfServiceRequest[]>('/api/self-service/requests');
-      return data || [];
+      const data = await api.get<SelfServiceRequestsResponse>('/api/self-service/requests');
+      return (data?.requests || []).map(mapSelfServiceRequest);
     },
     ...options,
   });
@@ -657,8 +1003,8 @@ export function useCreateSelfServiceRequest() {
   
   return useMutation({
     mutationFn: async (input: CreateSelfServiceRequestInput) => {
-      const data = await api.post<SelfServiceRequest>('/api/self-service/requests', input);
-      return data;
+      const data = await api.post<SelfServiceRequestAPI>('/api/self-service/requests', input);
+      return mapSelfServiceRequest(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['self-service', 'requests'] });

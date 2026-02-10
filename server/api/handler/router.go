@@ -64,6 +64,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	profile.GET("/history", a.Profile.GetProfileHistory)
 	profile.GET("/:profileID", a.Profile.GetProfile, m.RequireRole(middleware.RoleAdmin))
 
+	// User settings
+	apiGroup.GET("/settings", a.Settings.GetSettings)
+	apiGroup.PUT("/settings", a.Settings.UpdateSettings)
+
 	// College management
 	college := apiGroup.Group("/college", m.RequireRole(middleware.RoleAdmin))
 	college.GET("", a.College.GetCollegeDetails)
@@ -500,12 +504,13 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	forum.POST("/threads/:threadID/replies", a.Forum.CreateReply)
 
 	// Parent Portal Routes
-	parent := apiGroup.Group("/parent")
+	parent := apiGroup.Group("/parent", m.RequireRole(middleware.RoleParent, middleware.RoleAdmin, middleware.RoleFaculty))
 	parent.GET("/children", a.Parent.GetLinkedChildren)
 	parent.GET("/children/:studentID/dashboard", a.Parent.GetChildDashboard)
 	parent.GET("/children/:studentID/attendance", a.Parent.GetChildAttendance)
 	parent.GET("/children/:studentID/grades", a.Parent.GetChildGrades)
 	parent.GET("/children/:studentID/assignments", a.Parent.GetChildAssignments)
+	parent.POST("/contact", a.Parent.ContactParent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	// Self-Service Routes
 	selfService := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)

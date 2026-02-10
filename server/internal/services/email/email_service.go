@@ -85,8 +85,8 @@ func (s *emailService) loadTemplates() {
 
 func (s *emailService) SendEmail(ctx context.Context, to, subject, body string) error {
 	if s.smtpHost == "" {
-		// Email not configured, skip silently
-		return nil
+		// Email not configured, return error instead of failing silently
+		return fmt.Errorf("SMTP not configured: cannot send email to %s", to)
 	}
 
 	// Compose email

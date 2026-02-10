@@ -98,7 +98,20 @@ func (s *forumService) ListReplies(ctx context.Context, collegeID, threadID int)
 }
 
 func (s *forumService) DeleteReply(ctx context.Context, collegeID, replyID int, userID int, role string) error {
-	// Simple check, in real app would verify ownership
+	// Fetch the reply first to verify ownership
+	reply, err := s.forumRepo.GetReply(ctx, collegeID, replyID)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return errors.New("reply not found")
+	}
+
+	// Author or Admin can delete
+	if reply.AuthorID != userID && role != "admin" && role != "super_admin" {
+		return errors.New("unauthorized to delete this reply")
+	}
+
 	return s.forumRepo.DeleteReply(ctx, collegeID, replyID)
 }
 

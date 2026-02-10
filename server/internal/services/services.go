@@ -32,6 +32,7 @@ import (
 	"eduhub/server/internal/services/quiz"
 	"eduhub/server/internal/services/report"
 	"eduhub/server/internal/services/role"
+	"eduhub/server/internal/services/settings"
 	storageservice "eduhub/server/internal/services/storage"
 	"eduhub/server/internal/services/student"
 	"eduhub/server/internal/services/timetable"
@@ -79,6 +80,7 @@ type Services struct {
 	ExamService              exam.ExamService
 	PlacementService         placement.PlacementService
 	ForumService             forum.ForumService
+	SettingsService          settings.SettingsService
 	DB                       *repository.DB
 }
 
@@ -238,6 +240,9 @@ func NewServices(cfg *config.Config) *Services {
 	placementService := placement.NewPlacementService(placementRepo, studentRepo)
 	forumService := forum.NewForumService(forumRepo)
 
+	settingsRepo := repository.NewSettingsRepository(cfg.DB)
+	settingsService := settings.NewSettingsService(settingsRepo)
+
 	return &Services{
 		Auth:                     authService,
 		Attendance:               attendanceService,
@@ -274,6 +279,7 @@ func NewServices(cfg *config.Config) *Services {
 		ExamService:              examService,
 		PlacementService:         placementService,
 		ForumService:             forumService,
+		SettingsService:          settingsService,
 		DB:                       cfg.DB,
 	}
 }

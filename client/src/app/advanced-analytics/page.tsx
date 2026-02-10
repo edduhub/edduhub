@@ -81,42 +81,27 @@ export default function AdvancedAnalyticsPage() {
   const [learningAnalytics, setLearningAnalytics] = useState<LearningAnalytics | null>(null);
 
   useEffect(() => {
-    fetchInitialData();
+    const fetchInitialData = async () => {
+      try {
+        setLoading(true);
+        const [studentsResponse, coursesResponse, learningAnalyticsResponse] = await Promise.all([
+          api.get<any[]>('/api/students'),
+          api.get<any[]>('/api/courses'),
+          api.get<LearningAnalytics>('/api/analytics/advanced/learning-analytics'),
+        ]);
+        setStudents(Array.isArray(studentsResponse) ? studentsResponse : []);
+        setCourses(Array.isArray(coursesResponse) ? coursesResponse : []);
+        setLearningAnalytics(learningAnalyticsResponse);
+      } catch (err) {
+        logger.error('Failed to fetch initial data:', err as Error);
+        setError('Failed to load analytics data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchInitialData();
   }, []);
-
-  const fetchInitialData = async () => {
-    try {
-      setLoading(true);
-      await Promise.all([
-        fetchStudents(),
-        fetchCourses(),
-        fetchLearningAnalytics(),
-      ]);
-    } catch (err) {
-      logger.error('Failed to fetch initial data:', err as Error);
-      setError('Failed to load analytics data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStudents = async () => {
-    try {
-      const response = await api.get<any[]>('/api/students');
-      setStudents(Array.isArray(response) ? response : []);
-    } catch (err) {
-      logger.error('Failed to fetch students:', err as Error);
-    }
-  };
-
-  const fetchCourses = async () => {
-    try {
-      const response = await api.get<any[]>('/api/courses');
-      setCourses(Array.isArray(response) ? response : []);
-    } catch (err) {
-      logger.error('Failed to fetch courses:', err as Error);
-    }
-  };
 
   const fetchStudentProgression = async (studentId: string) => {
     try {
@@ -154,15 +139,6 @@ export default function AdvancedAnalyticsPage() {
       setError('Failed to load predictive insights');
     } finally {
       setLoadingInsights(false);
-    }
-  };
-
-  const fetchLearningAnalytics = async () => {
-    try {
-      const response = await api.get<LearningAnalytics>('/api/analytics/advanced/learning-analytics');
-      setLearningAnalytics(response);
-    } catch (err) {
-      logger.error('Failed to fetch learning analytics:', err as Error);
     }
   };
 

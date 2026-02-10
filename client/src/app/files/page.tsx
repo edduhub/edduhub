@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,12 +90,7 @@ export default function FilesPage() {
   const [versionComment, setVersionComment] = useState("");
   const newVersionInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchFiles();
-    fetchFolders();
-  }, [currentFolderId]);
-
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -109,9 +104,9 @@ export default function FilesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentFolderId]);
 
-  const fetchFolders = async () => {
+  const fetchFolders = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (currentFolderId) params.append('parent_id', currentFolderId.toString());
@@ -121,7 +116,12 @@ export default function FilesPage() {
     } catch (err) {
       logger.error('Failed to fetch folders:', err as Error);
     }
-  };
+  }, [currentFolderId]);
+
+  useEffect(() => {
+    void fetchFiles();
+    void fetchFolders();
+  }, [fetchFiles, fetchFolders]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,12 +72,7 @@ export default function AuditLogsPage() {
   const [limit] = useState(50);
   const [hasMore, setHasMore] = useState(true);
 
-  useEffect(() => {
-    fetchLogs();
-    fetchStats();
-  }, [page, filters]);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -100,16 +95,21 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.action, filters.entity, filters.user_id, limit, page]);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await api.get('/api/audit/stats');
       setStats(response as AuditStats);
     } catch (err) {
       logger.error('Failed to fetch audit stats:', err as Error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchLogs();
+    void fetchStats();
+  }, [fetchLogs, fetchStats]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters({ ...filters, [key]: value });
