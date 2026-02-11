@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 
 type NavItem = {
-  href: string;
+  href: Route;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: string[];

@@ -109,7 +109,7 @@ test.describe('Frontend Comprehensive Testing', () => {
           console.log('Registration successful');
         }
         
-      } catch (error) {
+      } catch {
         console.log('Registration submission test completed (may have failed as expected)');
       }
       
@@ -184,7 +184,7 @@ test.describe('Frontend Comprehensive Testing', () => {
         const currentURL = page.url();
         console.log('Login attempt URL:', currentURL);
         
-      } catch (error) {
+      } catch {
         console.log('Login submission test completed (may have failed as expected)');
       }
       

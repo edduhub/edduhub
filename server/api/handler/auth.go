@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/services/auth"
@@ -18,6 +19,15 @@ func NewAuthHandler(authService auth.AuthService) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
 	}
+}
+
+func extractBearerToken(c echo.Context) string {
+	const bearerPrefix = "Bearer "
+	authHeader := c.Request().Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, bearerPrefix) {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
 }
 
 // InitiateRegistration starts the registration flow
@@ -152,13 +162,24 @@ func (h *AuthHandler) HandleCallback(c echo.Context) error {
 // HandleLogout logs out the current user
 func (h *AuthHandler) HandleLogout(c echo.Context) error {
 	sessionToken := c.Request().Header.Get("X-Session-Token")
-	if sessionToken == "" {
-		return helpers.Error(c, "no session token provided", http.StatusBadRequest)
+	if sessionToken != "" {
+		err := h.authService.Logout(c.Request().Context(), sessionToken)
+		if err != nil {
+			return helpers.Error(c, "failed to logout: "+err.Error(), http.StatusInternalServerError)
+		}
+
+		return helpers.Success(c, map[string]string{"message": "logout successful"}, http.StatusOK)
 	}
 
-	err := h.authService.Logout(c.Request().Context(), sessionToken)
+	// JWT mode: no server-side session invalidation is required.
+	jwtToken := extractBearerToken(c)
+	if jwtToken == "" {
+		return helpers.Error(c, "no session token or bearer token provided", http.StatusBadRequest)
+	}
+
+	_, err := h.authService.ValidateJWT(c.Request().Context(), jwtToken)
 	if err != nil {
-		return helpers.Error(c, "failed to logout: "+err.Error(), http.StatusInternalServerError)
+		return helpers.Error(c, "failed to validate token: "+err.Error(), http.StatusUnauthorized)
 	}
 
 	return helpers.Success(c, map[string]string{"message": "logout successful"}, http.StatusOK)
@@ -167,18 +188,31 @@ func (h *AuthHandler) HandleLogout(c echo.Context) error {
 // RefreshToken refreshes the session token
 func (h *AuthHandler) RefreshToken(c echo.Context) error {
 	sessionToken := c.Request().Header.Get("X-Session-Token")
-	if sessionToken == "" {
-		return helpers.Error(c, "no session token provided", http.StatusBadRequest)
+	if sessionToken != "" {
+		newToken, err := h.authService.RefreshSession(c.Request().Context(), sessionToken)
+		if err != nil {
+			return helpers.Error(c, "failed to refresh token: "+err.Error(), http.StatusUnauthorized)
+		}
+
+		return helpers.Success(c, map[string]string{
+			"session_token": newToken,
+			"message":       "token refreshed successfully",
+		}, http.StatusOK)
 	}
 
-	newToken, err := h.authService.RefreshSession(c.Request().Context(), sessionToken)
+	jwtToken := extractBearerToken(c)
+	if jwtToken == "" {
+		return helpers.Error(c, "no session token or bearer token provided", http.StatusBadRequest)
+	}
+
+	newToken, err := h.authService.RefreshToken(c.Request().Context(), jwtToken)
 	if err != nil {
 		return helpers.Error(c, "failed to refresh token: "+err.Error(), http.StatusUnauthorized)
 	}
 
 	return helpers.Success(c, map[string]string{
-		"session_token": newToken,
-		"message":       "token refreshed successfully",
+		"token":   newToken,
+		"message": "token refreshed successfully",
 	}, http.StatusOK)
 }
 

@@ -91,7 +91,7 @@ export default function WebhooksPage() {
     try {
       setSubmitting(true);
       setError(null);
-      await api.put(`/api/webhooks/${editingWebhook.id}`, formData);
+      await api.patch(`/api/webhooks/${editingWebhook.id}`, formData);
       setSuccess('Webhook updated successfully');
       setDialogOpen(false);
       resetForm();
@@ -127,7 +127,7 @@ export default function WebhooksPage() {
 
   const handleToggleActive = async (webhook: Webhook) => {
     try {
-      await api.put(`/api/webhooks/${webhook.id}`, {
+      await api.patch(`/api/webhooks/${webhook.id}`, {
         ...webhook,
         is_active: !webhook.is_active,
       });

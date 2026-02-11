@@ -112,8 +112,22 @@ func (a *authService) ValidateSession(ctx context.Context, sessionToken string) 
 	return a.Auth.ValidateSession(ctx, sessionToken)
 }
 
-func (a *authService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
-	return a.Auth.ValidateJWT(ctx, jwtToken)
+func (a *authService) ValidateJWT(_ context.Context, jwtToken string) (*Identity, error) {
+	claims, err := a.JWTManager.Verify(jwtToken)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JWT token: %w", err)
+	}
+
+	identity := &Identity{
+		ID: claims.KratosID,
+	}
+	identity.Traits.Email = claims.Email
+	identity.Traits.Role = claims.Role
+	identity.Traits.College.ID = claims.CollegeID
+	identity.Traits.Name.First = claims.FirstName
+	identity.Traits.Name.Last = claims.LastName
+
+	return identity, nil
 }
 
 func (a *authService) CheckCollegeAccess(identity *Identity, collegeID string) bool {

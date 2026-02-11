@@ -32,7 +32,6 @@ export default function DashboardPage() {
   const {
     data: dashboardData,
     isLoading: dashboardLoading,
-    error: _dashboardError,
   } = useDashboard({
     enabled: !!user && user.role !== 'student',
   });

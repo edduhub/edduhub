@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Multi-Tenant Security', () => {
-  test('should prevent access to other college data', async ({ page, context }) => {
+  test('should prevent access to other college data', async ({ page }) => {
     // Login as college 1 user
     await page.goto('/auth/login');
     await page.fill('[name="email"]', 'college1@test.com');

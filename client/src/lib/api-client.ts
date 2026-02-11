@@ -69,8 +69,8 @@ async function retryWithBackoff<T>(
         throw error;
       }
 
-      // Don't retry network errors on the last attempt
-      if (attempt === retries || error instanceof NetworkError) {
+      // Stop retrying when attempts are exhausted
+      if (attempt === retries) {
         throw error;
       }
 
@@ -115,12 +115,17 @@ export async function apiClient<T>(
     credentials: 'include',
   };
 
-  if (body) {
+  if (body !== undefined) {
     config.body = JSON.stringify(body);
   }
 
   const attemptRequest = async (): Promise<T> => {
-    const response = await fetch(`${API_BASE}${endpoint}`, config);
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}${endpoint}`, config);
+    } catch (error) {
+      throw new NetworkError(error instanceof Error ? error.message : 'Network request failed');
+    }
 
     if (!response.ok) {
       let message = 'Request failed';

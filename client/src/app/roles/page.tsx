@@ -96,7 +96,7 @@ export default function RolesPermissionsPage() {
         e.preventDefault();
         try {
             if (editingRole) {
-                await api.put(endpoints.roles.update(editingRole.id), roleFormData);
+                await api.patch(endpoints.roles.update(editingRole.id), roleFormData);
             } else {
                 await api.post(endpoints.roles.create, roleFormData);
             }

@@ -252,7 +252,7 @@ export default function FilesPage() {
     }
   };
 
-  const handleDownload = async (fileId: number, _fileName: string) => {
+  const handleDownload = async (fileId: number) => {
     try {
       const response = await api.get<{ url?: string }>(`/api/file-management/${fileId}/download`);
       if (response?.url) {
@@ -487,7 +487,7 @@ export default function FilesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDownload(file.id, file.name)}
+                              onClick={() => handleDownload(file.id)}
                             >
                               <Download className="h-4 w-4" />
                             </Button>

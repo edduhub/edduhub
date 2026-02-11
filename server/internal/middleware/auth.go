@@ -52,13 +52,10 @@ func (m *AuthMiddleware) ValidateSession(next echo.HandlerFunc) echo.HandlerFunc
 		sessionToken := c.Request().Header.Get("X-Session-Token")
 		if sessionToken != "" {
 			identity, err := m.AuthService.ValidateSession(c.Request().Context(), sessionToken)
-			if err != nil {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "Invalid session",
-				})
+			if err == nil && identity != nil {
+				c.Set(identityContextKey, identity)
+				return next(c)
 			}
-			c.Set(identityContextKey, identity)
-			return next(c)
 		}
 
 		// Fallback: accept Bearer JWT for backward compatibility during migration

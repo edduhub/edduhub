@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 )
 
@@ -258,8 +259,8 @@ func (k *kratosService) GetPublicURL() string {
 
 // Logout invalidates the session token
 func (k *kratosService) Logout(ctx context.Context, sessionToken string) error {
-	url := fmt.Sprintf("%s/self-service/logout/api", k.PublicURL)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	endpoint := fmt.Sprintf("%s/self-service/logout/api?session_token=%s", k.PublicURL, url.QueryEscape(sessionToken))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create logout request: %w", err)
 	}
@@ -271,29 +272,8 @@ func (k *kratosService) Logout(ctx context.Context, sessionToken string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("logout failed with status: %s", http.StatusText(resp.StatusCode))
-	}
-
-	var result struct {
-		LogoutToken string `json:"logout_token"`
-		LogoutURL   string `json:"logout_url"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return fmt.Errorf("failed to decode logout response: %w", err)
-	}
-
-	if result.LogoutURL != "" {
-		logoutReq, err := http.NewRequestWithContext(ctx, "GET", result.LogoutURL, nil)
-		if err != nil {
-			return fmt.Errorf("failed to create logout confirmation request: %w", err)
-		}
-
-		logoutResp, err := k.HTTPClient.Do(logoutReq)
-		if err != nil {
-			return fmt.Errorf("failed to confirm logout: %w", err)
-		}
-		defer logoutResp.Body.Close()
 	}
 
 	return nil
