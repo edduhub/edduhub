@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, Upload, Loader2, AlertCircle, CheckCircle, FileText, Users, GraduationCap } from "lucide-react";
+import { Download, Upload, Loader2, AlertCircle, CheckCircle, FileText, Users, GraduationCap, BookOpen } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { logger } from '@/lib/logger';
 
@@ -33,11 +33,56 @@ export default function BatchOperationsPage() {
   // File upload refs
   const studentFileRef = useRef<HTMLInputElement>(null);
   const gradeFileRef = useRef<HTMLInputElement>(null);
+  const enrollmentFileRef = useRef<HTMLInputElement>(null);
 
   // Grade import state
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [courses, setCourses] = useState<Course[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
+
+  // Enrollment import state
+  const [enrollmentCourse, setEnrollmentCourse] = useState<string>("");
+
+  const downloadCsvTemplate = (filename: string, header: string, sampleRow: string) => {
+    const csv = `${header}\n${sampleRow}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleStudentTemplateDownload = () => {
+    downloadCsvTemplate(
+      'students_import_template.csv',
+      'roll_no,first_name,last_name,email',
+      'CS001,John,Doe,john.doe@example.edu'
+    );
+    setSuccess('Student CSV template downloaded');
+  };
+
+  const handleGradeTemplateDownload = () => {
+    const courseHint = selectedCourse ? `for course ${selectedCourse}` : '';
+    downloadCsvTemplate(
+      'grades_import_template.csv',
+      'roll_no,grade,marks',
+      'CS001,A,92'
+    );
+    setSuccess(`Grade CSV template downloaded ${courseHint}`.trim());
+  };
+
+  const handleEnrollmentTemplateDownload = () => {
+    downloadCsvTemplate(
+      'enrollment_import_template.csv',
+      'roll_no',
+      'CS001'
+    );
+    setSuccess('Enrollment CSV template downloaded');
+  };
 
   // Load courses for grade import
   const loadCourses = async () => {
@@ -205,6 +250,48 @@ export default function BatchOperationsPage() {
     }
   };
 
+  // Import enrollments from CSV
+  const handleEnrollmentImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !enrollmentCourse) {
+      setError('Please select a course first');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      setImportResult(null);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('course_id', enrollmentCourse);
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/enroll`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Enrollment import failed');
+      }
+
+      setImportResult(result.data);
+      setSuccess(`Successfully enrolled ${result.data.success} students`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to enroll students');
+    } finally {
+      setLoading(false);
+      if (enrollmentFileRef.current) {
+        enrollmentFileRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -268,6 +355,10 @@ export default function BatchOperationsPage() {
             <GraduationCap className="h-4 w-4" />
             Grades
           </TabsTrigger>
+          <TabsTrigger value="enrollment" className="flex items-center gap-2" onClick={() => loadCourses()}>
+            <BookOpen className="h-4 w-4" />
+            Enrollment
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="students" className="space-y-4">
@@ -301,7 +392,12 @@ export default function BatchOperationsPage() {
                     The first row should contain column headers
                   </p>
                 </div>
-                <Button variant="outline" size="sm" className="w-full">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleStudentTemplateDownload}
+                >
                   <FileText className="mr-2 h-4 w-4" />
                   Download Template
                 </Button>
@@ -406,7 +502,13 @@ export default function BatchOperationsPage() {
                     The first row should contain column headers
                   </p>
                 </div>
-                <Button variant="outline" size="sm" className="w-full" disabled={!selectedCourse}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={!selectedCourse}
+                  onClick={handleGradeTemplateDownload}
+                >
                   <FileText className="mr-2 h-4 w-4" />
                   Download Template
                 </Button>
@@ -442,6 +544,86 @@ export default function BatchOperationsPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="enrollment" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Select Course</CardTitle>
+              <CardDescription>
+                Choose a course to enroll students in
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label htmlFor="enrollment-course-select">Course</Label>
+                <Select value={enrollmentCourse} onValueChange={setEnrollmentCourse}>
+                  <SelectTrigger id="enrollment-course-select">
+                    <SelectValue placeholder="Select a course" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingCourses ? (
+                      <div className="p-2 text-center text-sm text-muted-foreground">
+                        Loading courses...
+                      </div>
+                    ) : courses.length === 0 ? (
+                      <div className="p-2 text-center text-sm text-muted-foreground">
+                        No courses available
+                      </div>
+                    ) : (
+                      courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id.toString()}>
+                          {course.code} - {course.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Enroll Students
+              </CardTitle>
+              <CardDescription>
+                Upload a CSV file with student roll numbers to enroll them in the selected course
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="enrollment-file">CSV File</Label>
+                <Input
+                  id="enrollment-file"
+                  ref={enrollmentFileRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleEnrollmentImport}
+                  disabled={loading || !enrollmentCourse}
+                />
+              </div>
+              <div className="rounded-lg bg-muted p-3 text-sm">
+                <p className="font-medium mb-2">CSV Format:</p>
+                <code className="block text-xs">roll_no</code>
+                <p className="text-muted-foreground mt-2">
+                  The first row should contain column headers. Only roll_no column is required.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={!enrollmentCourse}
+                onClick={handleEnrollmentTemplateDownload}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Download Template
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -13,12 +13,28 @@ import { logger } from '@/lib/logger';
 type CalendarEvent = {
   id: number;
   title: string;
-  type: 'lecture' | 'exam' | 'event' | 'holiday' | 'deadline';
+  type: 'exam' | 'event' | 'holiday' | 'deadline' | 'other';
   start: string;
   end: string;
   courseName?: string;
   location?: string;
   description?: string;
+};
+
+type CalendarEventApi = {
+  id?: number;
+  title?: string;
+  description?: string;
+  event_type?: CalendarEvent['type'];
+  type?: CalendarEvent['type'];
+  date?: string;
+  start?: string;
+  start_time?: string;
+  end?: string;
+  end_time?: string;
+  course_name?: string;
+  courseName?: string;
+  location?: string;
 };
 
 export default function CalendarPage() {
@@ -41,8 +57,27 @@ export default function CalendarPage() {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const response = await api.get('/api/calendar');
-        setEvents(Array.isArray(response) ? response : []);
+        const response = await api.get<CalendarEventApi[]>('/api/calendar');
+        const normalized = Array.isArray(response)
+          ? response.map((event) => {
+              const start = event.start ?? event.start_time ?? event.date ?? new Date().toISOString();
+              const end = event.end ?? event.end_time ?? start;
+              const type = event.event_type ?? event.type ?? 'event';
+              return {
+                id: event.id ?? 0,
+                title: event.title ?? 'Untitled Event',
+                description: event.description,
+                type: type === 'exam' || type === 'event' || type === 'holiday' || type === 'deadline' || type === 'other'
+                  ? type
+                  : 'event',
+                start,
+                end,
+                courseName: event.courseName ?? event.course_name,
+                location: event.location,
+              };
+            })
+          : [];
+        setEvents(normalized);
       } catch (err) {
         logger.error('Failed to fetch calendar events:', err as Error);
         setError('Failed to load calendar events');
@@ -58,13 +93,14 @@ export default function CalendarPage() {
 
   const getEventBadge = (type: string) => {
     const config = {
-      lecture: { className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', label: 'Lecture', icon: BookOpen },
       exam: { className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', label: 'Exam', icon: CalendarIcon },
-      event: { className: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400', label: 'Event', icon: CalendarIcon },
+      event: { className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400', label: 'Event', icon: CalendarIcon },
       holiday: { className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', label: 'Holiday', icon: CalendarIcon },
-      deadline: { className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', label: 'Deadline', icon: Clock }
+      deadline: { className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', label: 'Deadline', icon: Clock },
+      other: { className: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400', label: 'Other', icon: CalendarIcon },
     };
-    const { className, label, icon: Icon } = config[type as keyof typeof config];
+    const selected = config[type as keyof typeof config] || config.other;
+    const { className, label, icon: Icon } = selected;
     return (
       <Badge className={className}>
         <Icon className="mr-1 h-3 w-3" />
@@ -89,9 +125,36 @@ export default function CalendarPage() {
     try {
       setCreating(true);
       setError(null);
-      await api.post('/api/calendar', newEvent);
-      const data = await api.get('/api/calendar');
-      setEvents(Array.isArray(data) ? data : []);
+
+      const startValue = newEvent.start || new Date().toISOString();
+      await api.post('/api/calendar', {
+        title: newEvent.title,
+        description: newEvent.description,
+        event_type: newEvent.type,
+        date: new Date(startValue).toISOString(),
+      });
+
+      const data = await api.get<CalendarEventApi[]>('/api/calendar');
+      const normalized = Array.isArray(data)
+        ? data.map((event) => {
+            const start = event.start ?? event.start_time ?? event.date ?? new Date().toISOString();
+            const end = event.end ?? event.end_time ?? start;
+            const type = event.event_type ?? event.type ?? 'event';
+            return {
+              id: event.id ?? 0,
+              title: event.title ?? 'Untitled Event',
+              description: event.description,
+              type: type === 'exam' || type === 'event' || type === 'holiday' || type === 'deadline' || type === 'other'
+                ? type
+                : 'event',
+              start,
+              end,
+              courseName: event.courseName ?? event.course_name,
+              location: event.location,
+            };
+          })
+        : [];
+      setEvents(normalized);
       setShowCreate(false);
       setNewEvent({ title: '', type: 'event', start: '', end: '', location: '', description: '' });
     } catch (e) {
@@ -133,7 +196,17 @@ export default function CalendarPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Type</label>
-                <input className="w-full rounded-md border px-3 py-2" value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as 'academic' | 'exam' | 'event' | 'holiday' | 'meeting' | 'deadline' | 'other' })} />
+                <select
+                  className="w-full rounded-md border px-3 py-2 bg-background"
+                  value={newEvent.type}
+                  onChange={e => setNewEvent({ ...newEvent, type: e.target.value as 'exam' | 'event' | 'holiday' | 'deadline' | 'other' })}
+                >
+                  <option value="event">Event</option>
+                  <option value="exam">Exam</option>
+                  <option value="holiday">Holiday</option>
+                  <option value="deadline">Deadline</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Start</label>
@@ -175,9 +248,9 @@ export default function CalendarPage() {
         </Card>
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Lectures</CardDescription>
-            <CardTitle className="text-2xl text-blue-600">
-              {events.filter(e => e.type === 'lecture').length}
+            <CardDescription>Events</CardDescription>
+              <CardTitle className="text-2xl text-blue-600">
+              {events.filter(e => e.type === 'event').length}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -208,7 +281,11 @@ export default function CalendarPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
+                  onClick={() => setCurrentDate((prev) => {
+                    const next = new Date(prev);
+                    next.setMonth(prev.getMonth() - 1);
+                    return next;
+                  })}
                 >
                   Previous
                 </Button>
@@ -222,7 +299,11 @@ export default function CalendarPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
+                  onClick={() => setCurrentDate((prev) => {
+                    const next = new Date(prev);
+                    next.setMonth(prev.getMonth() + 1);
+                    return next;
+                  })}
                 >
                   Next
                 </Button>

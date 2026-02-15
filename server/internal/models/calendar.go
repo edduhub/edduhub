@@ -18,12 +18,10 @@ type CalendarBlock struct {
 	Title       string            `db:"title" json:"title"`
 	Description string            `db:"description" json:"description"`
 	EventType   CalendarEventType `db:"event_type" json:"event_type"`
-	Date        time.Time         `db:"date" json:"date"`
-	// Optional: For multi-day events or events with specific times
-	// StartTime   *time.Time        `db:"start_time" json:"start_time,omitempty"`
-	// EndTime     *time.Time        `db:"end_time" json:"end_time,omitempty"`
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+	StartTime   time.Time         `db:"start_time" json:"start_time"`
+	EndTime     time.Time         `db:"end_time" json:"end_time"`
+	CreatedAt   time.Time         `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time         `db:"updated_at" json:"updated_at"`
 }
 
 // CalendarBlockFilter can be used for querying lists of calendar blocks
@@ -40,8 +38,9 @@ type CalendarBlockFilter struct {
 
 // UpdateCalendarRequest provides fields for partial updates to Calendar via PATCH
 type UpdateCalendarRequest struct {
-	Title *string `json:"title" validate:"omitempty,min=1,max=200"`
-	Description *string `json:"description" validate:"omitempty,max=1000"`
-	EventType *CalendarEventType `json:"event_type" validate:"omitempty,oneof=exam holiday event deadline other"`
-	Date *time.Time `json:"date" validate:"omitempty"`
+	Title       *string            `json:"title" validate:"omitempty,min=1,max=200"`
+	Description *string            `json:"description" validate:"omitempty,max=1000"`
+	EventType   *CalendarEventType `json:"event_type" validate:"omitempty,oneof=exam holiday event deadline other"`
+	StartTime   *time.Time         `json:"start_time" validate:"omitempty"`
+	EndTime     *time.Time         `json:"end_time" validate:"omitempty"`
 }

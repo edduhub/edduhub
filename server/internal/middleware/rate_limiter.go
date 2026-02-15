@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -27,10 +28,7 @@ type RateLimiter struct {
 }
 
 func NewRateLimiter(r rate.Limit, b int) *RateLimiter {
-	logger := zerolog.New(zerolog.ConsoleWriter{
-		Out:        zerolog.ConsoleWriter{Out: nil}.Out,
-		TimeFormat: time.RFC3339,
-	}).With().Timestamp().Logger()
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 
 	return &RateLimiter{
 		visitors: make(map[string]*visitor),

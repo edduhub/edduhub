@@ -43,11 +43,11 @@ func (r *placementRepository) CreatePlacement(ctx context.Context, placement *mo
 	placement.CreatedAt = now
 	placement.UpdatedAt = now
 
-	sql := `INSERT INTO placements (college_id, student_id, company_name, job_title, package, placement_date, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
+	sql := `INSERT INTO placements (college_id, company_name, job_title, package, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
 	temp := struct {
 		ID int `db:"id"`
 	}{}
-	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, placement.CollegeID, placement.StudentID, placement.CompanyName, placement.JobTitle, placement.Package, placement.PlacementDate, placement.Status, placement.CreatedAt, placement.UpdatedAt)
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, placement.CollegeID, placement.CompanyName, placement.JobTitle, placement.Package, placement.Status, placement.CreatedAt, placement.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreatePlacement: failed to execute query or scan ID: %w", err)
 	}
@@ -56,7 +56,7 @@ func (r *placementRepository) CreatePlacement(ctx context.Context, placement *mo
 }
 
 func (r *placementRepository) GetPlacementByID(ctx context.Context, collegeID int, placementID int) (*models.Placement, error) {
-	sql := `SELECT id, college_id, student_id, company_name, job_title, package, placement_date, status, created_at, updated_at FROM placements WHERE id = $1 AND college_id = $2`
+	sql := `SELECT id, college_id, company_name, job_title, package, status, created_at, updated_at FROM placements WHERE id = $1 AND college_id = $2`
 	placement := &models.Placement{}
 	err := pgxscan.Get(ctx, r.DB.Pool, placement, sql, placementID, collegeID)
 	if err != nil {
@@ -95,7 +95,7 @@ func (r *placementRepository) DeletePlacement(ctx context.Context, collegeID int
 }
 
 func (r *placementRepository) findPlacements(ctx context.Context, sql string, args []interface{}, limit, offset uint64) ([]*models.Placement, error) {
-	fullSQL := fmt.Sprintf("%s ORDER BY placement_date DESC, student_id ASC LIMIT $%d OFFSET $%d", sql, len(args)+1, len(args)+2)
+	fullSQL := fmt.Sprintf("%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", sql, len(args)+1, len(args)+2)
 	args = append(args, limit, offset)
 
 	placements := []*models.Placement{}
@@ -107,20 +107,24 @@ func (r *placementRepository) findPlacements(ctx context.Context, sql string, ar
 }
 
 func (r *placementRepository) FindPlacementsByStudent(ctx context.Context, collegeID int, studentID int, limit, offset uint64) ([]*models.Placement, error) {
-	sql := `SELECT id, college_id, student_id, company_name, job_title, package, placement_date, status, created_at, updated_at FROM placements WHERE college_id = $1 AND student_id = $2`
+	// Get placements that the student has applied to via placement_applications
+	sql := `SELECT p.id, p.college_id, p.company_name, p.job_title, p.package, p.status, p.created_at, p.updated_at 
+			FROM placements p 
+			JOIN placement_applications pa ON p.id = pa.placement_id 
+			WHERE p.college_id = $1 AND pa.student_id = $2`
 	args := []interface{}{collegeID, studentID}
 	return r.findPlacements(ctx, sql, args, limit, offset)
 }
 
 func (r *placementRepository) FindPlacementsByCollege(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Placement, error) {
-	sql := `SELECT id, college_id, student_id, company_name, job_title, package, placement_date, status, created_at, updated_at FROM placements WHERE college_id = $1`
+	sql := `SELECT id, college_id, company_name, job_title, package, status, created_at, updated_at FROM placements WHERE college_id = $1`
 	args := []interface{}{collegeID}
 	return r.findPlacements(ctx, sql, args, limit, offset)
 }
 
 func (r *placementRepository) FindPlacementsByCompany(ctx context.Context, collegeID int, companyName string, limit, offset uint64) ([]*models.Placement, error) {
 	// Use ILIKE for case-insensitive search, adjust if case-sensitive is needed
-	sql := `SELECT id, college_id, student_id, company_name, job_title, package, placement_date, status, created_at, updated_at FROM placements WHERE college_id = $1 AND company_name ILIKE '%' || $2 || '%'`
+	sql := `SELECT id, college_id, company_name, job_title, package, status, created_at, updated_at FROM placements WHERE college_id = $1 AND company_name ILIKE '%' || $2 || '%'`
 	args := []interface{}{collegeID, companyName}
 	return r.findPlacements(ctx, sql, args, limit, offset)
 }
@@ -137,7 +141,7 @@ func (r *placementRepository) countPlacements(ctx context.Context, sql string, a
 }
 
 func (r *placementRepository) CountPlacementsByStudent(ctx context.Context, collegeID int, studentID int) (int, error) {
-	sql := `SELECT COUNT(*) FROM placements WHERE college_id = $1 AND student_id = $2`
+	sql := `SELECT COUNT(*) FROM placements p JOIN placement_applications pa ON p.id = pa.placement_id WHERE p.college_id = $1 AND pa.student_id = $2`
 	args := []interface{}{collegeID, studentID}
 	return r.countPlacements(ctx, sql, args)
 }

@@ -19,6 +19,7 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      "coverage/**",
       "next-env.d.ts",
       "playwright-report/**",
       "tailwind.config.js",

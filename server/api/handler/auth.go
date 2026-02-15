@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/services/auth"
@@ -51,6 +52,7 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 		Role        string `json:"role" validate:"required"`
 		CollegeId   string `json:"collegeId" validate:"required"`
 		CollegeName string `json:"collegeName" validate:"required"`
+		RollNo      string `json:"rollNo" validate:"required"`
 	}
 
 	if err := c.Bind(&req); err != nil {
@@ -67,6 +69,7 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 	kratosReq.Traits.Role = req.Role
 	kratosReq.Traits.College.ID = req.CollegeId
 	kratosReq.Traits.College.Name = req.CollegeName
+	kratosReq.Traits.RollNo = req.RollNo
 
 	// Initiate flow first
 	flow, err := h.authService.InitiateRegistrationFlow(c.Request().Context())
@@ -127,6 +130,9 @@ func (h *AuthHandler) HandleLogin(c echo.Context) error {
 		return helpers.Error(c, "authentication failed: "+err.Error(), http.StatusUnauthorized)
 	}
 
+	// Calculate expiration time (24 hours from now as per JWT manager)
+	expiresAt := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+
 	// Return token and user info
 	return helpers.Success(c, map[string]interface{}{
 		"token": token,
@@ -139,7 +145,7 @@ func (h *AuthHandler) HandleLogin(c echo.Context) error {
 			"collegeId":   identity.Traits.College.ID,
 			"collegeName": identity.Traits.College.Name,
 		},
-		"expiresAt": fmt.Sprintf("%v", c.Request().Context().Value("token_expiry")),
+		"expiresAt": expiresAt,
 	}, http.StatusOK)
 }
 

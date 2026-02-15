@@ -80,17 +80,7 @@
         "college",
         "role",
         "rollNo"
-      ],
-      "ory.sh/kratos": {
-        "access_token": {
-          "fields": [
-            "traits.email",
-            "traits.name.first",
-            "traits.name.last",
-            "traits.role"
-          ]
-        }
-      }
+      ]
     }
   },
   "required": [

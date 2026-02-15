@@ -6,6 +6,7 @@ import (
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/services/auth"
+	"eduhub/server/internal/services/college"
 	"eduhub/server/internal/services/student"
 
 	"github.com/labstack/echo/v4"
@@ -29,18 +30,19 @@ const (
 // AuthMiddleware uses AuthService to perform authentication (via Kratos)
 // and authorization (via Ory Keto) checks.
 type AuthMiddleware struct {
-	AuthService auth.AuthService
-	// StudentRepo repository.StudentRepository
+	AuthService    auth.AuthService
 	StudentService student.StudentService
+	CollegeService college.CollegeService
 }
 
 // NewAuthMiddleware now accepts an auth.AuthService instance,
 // ensuring that the middleware has access to both authentication
 // (session validation) and authorization (permission checking) logic.
-func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService) *AuthMiddleware {
+func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService, collegeService college.CollegeService) *AuthMiddleware {
 	return &AuthMiddleware{
 		AuthService:    authSvc,
 		StudentService: studentService,
+		CollegeService: collegeService,
 	}
 }
 
@@ -118,7 +120,7 @@ func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // RequireCollege ensures that the authenticated user belongs to the specified college.
-// It extracts the collegeID from URL parameters and then calls AuthService.CheckCollegeAccess.
+// It extracts the collegeID from the identity and looks up the integer ID from the database.
 // Under a multitenant setup, this helps isolate college-specific resources.
 func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -128,8 +130,24 @@ func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc 
 				"error": "Unauthorized",
 			})
 		}
-		userCollegeID := identity.Traits.College.ID
-		c.Set("college_id", userCollegeID)
+
+		// Get the external college ID from identity (e.g., "COL456")
+		externalCollegeID := identity.Traits.College.ID
+
+		// Look up the college by external ID to get the integer ID
+		college, err := m.CollegeService.GetCollegeByExternalID(c.Request().Context(), externalCollegeID)
+		if err != nil {
+			// If not found by external ID, try to parse as integer directly
+			collegeIDInt, parseErr := strconv.Atoi(externalCollegeID)
+			if parseErr != nil {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"error": "Invalid college ID",
+				})
+			}
+			c.Set("college_id", collegeIDInt)
+		} else {
+			c.Set("college_id", college.ID)
+		}
 
 		return next(c)
 	}

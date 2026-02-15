@@ -53,7 +53,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)
 
 	// Student Dashboard (student-specific comprehensive view)
-	student := apiGroup.Group("/student", m.RequireRole(middleware.RoleStudent))
+	student := apiGroup.Group("/student", m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	student.GET("/dashboard", a.Dashboard.GetStudentDashboard)
 
 	// User profile management
@@ -309,12 +309,12 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 
 	// Notification management
 	notifications := apiGroup.Group("/notifications")
-	notifications.GET("", a.Notification.GetNotifications)
+	notifications.GET("", a.Notification.GetNotifications, m.LoadStudentProfile)
 	notifications.POST("", a.Notification.SendNotification, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	notifications.GET("/unread/count", a.Notification.GetUnreadCount)
-	notifications.PATCH("/:notificationID/read", a.Notification.MarkAsRead)
-	notifications.POST("/mark-all-read", a.Notification.MarkAllAsRead)
-	notifications.DELETE("/:notificationID", a.Notification.DeleteNotification)
+	notifications.GET("/unread/count", a.Notification.GetUnreadCount, m.LoadStudentProfile)
+	notifications.PATCH("/:notificationID/read", a.Notification.MarkAsRead, m.LoadStudentProfile)
+	notifications.POST("/mark-all-read", a.Notification.MarkAllAsRead, m.LoadStudentProfile)
+	notifications.DELETE("/:notificationID", a.Notification.DeleteNotification, m.LoadStudentProfile)
 
 	// WebSocket connection for real-time notifications
 	notifications.GET("/ws", a.WebSocket.HandleWebSocket)
@@ -522,4 +522,27 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Self-Service Admin Routes
 	selfServiceAdmin := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleAdmin))
 	selfServiceAdmin.PUT("/requests/:requestID", a.SelfService.UpdateRequest)
+
+	// Faculty tools: rubrics, office hours, and booking workflow
+	facultyTools := apiGroup.Group("/faculty-tools", m.LoadStudentProfile)
+
+	rubrics := facultyTools.Group("/rubrics", m.RequireRole(middleware.RoleFaculty, middleware.RoleAdmin))
+	rubrics.GET("", a.FacultyTools.ListRubrics)
+	rubrics.POST("", a.FacultyTools.CreateRubric)
+	rubrics.GET("/:rubricID", a.FacultyTools.GetRubric)
+	rubrics.PUT("/:rubricID", a.FacultyTools.UpdateRubric)
+	rubrics.DELETE("/:rubricID", a.FacultyTools.DeleteRubric)
+
+	officeHours := facultyTools.Group("/office-hours")
+	officeHours.GET("", a.FacultyTools.ListOfficeHours, m.RequireRole(middleware.RoleStudent, middleware.RoleFaculty, middleware.RoleAdmin))
+	officeHours.POST("", a.FacultyTools.CreateOfficeHour, m.RequireRole(middleware.RoleFaculty, middleware.RoleAdmin))
+	officeHours.GET("/:officeHourID", a.FacultyTools.GetOfficeHour, m.RequireRole(middleware.RoleStudent, middleware.RoleFaculty, middleware.RoleAdmin))
+	officeHours.PUT("/:officeHourID", a.FacultyTools.UpdateOfficeHour, m.RequireRole(middleware.RoleFaculty, middleware.RoleAdmin))
+	officeHours.DELETE("/:officeHourID", a.FacultyTools.DeleteOfficeHour, m.RequireRole(middleware.RoleFaculty, middleware.RoleAdmin))
+	officeHours.GET("/:officeHourID/bookings", a.FacultyTools.ListBookingsByOfficeHour, m.RequireRole(middleware.RoleStudent, middleware.RoleFaculty, middleware.RoleAdmin))
+
+	bookings := facultyTools.Group("/bookings")
+	bookings.GET("", a.FacultyTools.ListBookings, m.RequireRole(middleware.RoleStudent, middleware.RoleFaculty, middleware.RoleAdmin))
+	bookings.POST("", a.FacultyTools.CreateBooking, m.RequireRole(middleware.RoleStudent))
+	bookings.PATCH("/:bookingID/status", a.FacultyTools.UpdateBookingStatus, m.RequireRole(middleware.RoleStudent, middleware.RoleFaculty, middleware.RoleAdmin))
 }

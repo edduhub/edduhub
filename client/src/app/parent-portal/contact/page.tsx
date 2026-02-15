@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +19,8 @@ interface ParentContactForm {
 }
 
 export default function ContactParentPage() {
+  const { user } = useAuth();
+  const canUseApi = user?.role === 'admin' || user?.role === 'faculty';
   const [formData, setFormData] = useState<ParentContactForm>({
     parentName: '',
     email: '',
@@ -30,6 +33,11 @@ export default function ContactParentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canUseApi) {
+      window.location.href = `mailto:admin@edduhub.edu?subject=${encodeURIComponent(formData.subject || "Parent Portal Request")}&body=${encodeURIComponent(formData.message || "Please assist with my parent portal account.")}`;
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitStatus('idle');
 
@@ -72,7 +80,9 @@ export default function ContactParentPage() {
           <CardHeader>
             <CardTitle>Send Message</CardTitle>
             <CardDescription>
-              Your message will be delivered to the parent via email and notification
+              {canUseApi
+                ? "Your message will be delivered to the parent via email and notification"
+                : "Use this form to prepare a message to administration via your email client"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -155,7 +165,7 @@ export default function ContactParentPage() {
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Sending...
                   </>
-                ) : 'Send Message'}
+                ) : canUseApi ? 'Send Message' : 'Open Email Draft'}
               </Button>
 
               {submitStatus === 'success' && (

@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+
+	"eduhub/server/internal/services/integrations"
 )
 
 // PushNotificationService defines the interface for push notification operations
@@ -91,10 +94,6 @@ type fcmPushService struct {
 
 // NewPushNotificationService creates a new push notification service instance
 func NewPushNotificationService(config Config) PushNotificationService {
-	if !config.Enabled || config.ServerKey == "" {
-		return &mockPushService{}
-	}
-
 	if config.BaseURL == "" {
 		config.BaseURL = "https://fcm.googleapis.com/v1"
 	}
@@ -105,6 +104,25 @@ func NewPushNotificationService(config Config) PushNotificationService {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+func (s *fcmPushService) validateConfig() error {
+	if !s.config.Enabled {
+		return integrations.NewDisabledError("push")
+	}
+
+	missing := make([]string, 0)
+	if strings.TrimSpace(s.config.ServerKey) == "" {
+		missing = append(missing, "FCM_SERVER_KEY")
+	}
+	if strings.TrimSpace(s.config.ProjectID) == "" {
+		missing = append(missing, "FCM_PROJECT_ID")
+	}
+	if len(missing) > 0 {
+		return integrations.NewMisconfiguredError("push", missing...)
+	}
+
+	return nil
 }
 
 // NewPushNotificationServiceFromEnv creates push service from environment variables
@@ -121,6 +139,10 @@ func NewPushNotificationServiceFromEnv() PushNotificationService {
 
 // SendPushNotification sends a push notification to a single device
 func (s *fcmPushService) SendPushNotification(ctx context.Context, deviceToken, title, body string, data map[string]string) error {
+	if err := s.validateConfig(); err != nil {
+		return err
+	}
+
 	if data == nil {
 		data = make(map[string]string)
 	}
@@ -167,6 +189,10 @@ func (s *fcmPushService) SendPushNotification(ctx context.Context, deviceToken, 
 
 // SendMulticast sends push notifications to multiple devices
 func (s *fcmPushService) SendMulticast(ctx context.Context, deviceTokens []string, title, body string, data map[string]string) (*MulticastResponse, error) {
+	if err := s.validateConfig(); err != nil {
+		return nil, err
+	}
+
 	response := &MulticastResponse{}
 
 	for _, token := range deviceTokens {
@@ -183,6 +209,10 @@ func (s *fcmPushService) SendMulticast(ctx context.Context, deviceTokens []strin
 
 // SendTopicNotification sends a notification to all devices subscribed to a topic
 func (s *fcmPushService) SendTopicNotification(ctx context.Context, topic, title, body string, data map[string]string) error {
+	if err := s.validateConfig(); err != nil {
+		return err
+	}
+
 	if data == nil {
 		data = make(map[string]string)
 	}
@@ -227,6 +257,10 @@ func (s *fcmPushService) SendTopicNotification(ctx context.Context, topic, title
 
 // SubscribeToTopic subscribes devices to a topic
 func (s *fcmPushService) SubscribeToTopic(ctx context.Context, deviceTokens []string, topic string) error {
+	if err := s.validateConfig(); err != nil {
+		return err
+	}
+
 	apiURL := fmt.Sprintf("%s/projects/%s/topics:batchAdd", s.config.BaseURL, s.config.ProjectID)
 
 	payload := map[string]interface{}{
@@ -263,6 +297,10 @@ func (s *fcmPushService) SubscribeToTopic(ctx context.Context, deviceTokens []st
 
 // UnsubscribeFromTopic unsubscribes devices from a topic
 func (s *fcmPushService) UnsubscribeFromTopic(ctx context.Context, deviceTokens []string, topic string) error {
+	if err := s.validateConfig(); err != nil {
+		return err
+	}
+
 	apiURL := fmt.Sprintf("%s/projects/%s/topics:batchRemove", s.config.BaseURL, s.config.ProjectID)
 
 	payload := map[string]interface{}{
@@ -371,52 +409,8 @@ func (s *fcmPushService) SendAnnouncement(ctx context.Context, deviceTokens []st
 
 // ValidateDeviceToken checks if a device token is valid
 func (s *fcmPushService) ValidateDeviceToken(ctx context.Context, deviceToken string) (bool, error) {
+	if err := s.validateConfig(); err != nil {
+		return false, err
+	}
 	return len(deviceToken) > 50, nil
-}
-
-// mockPushService is a mock implementation for development/testing
-type mockPushService struct{}
-
-func (m *mockPushService) SendPushNotification(ctx context.Context, deviceToken, title, body string, data map[string]string) error {
-	return nil
-}
-
-func (m *mockPushService) SendMulticast(ctx context.Context, deviceTokens []string, title, body string, data map[string]string) (*MulticastResponse, error) {
-	return &MulticastResponse{SuccessCount: len(deviceTokens)}, nil
-}
-
-func (m *mockPushService) SendTopicNotification(ctx context.Context, topic, title, body string, data map[string]string) error {
-	return nil
-}
-
-func (m *mockPushService) SubscribeToTopic(ctx context.Context, deviceTokens []string, topic string) error {
-	return nil
-}
-
-func (m *mockPushService) UnsubscribeFromTopic(ctx context.Context, deviceTokens []string, topic string) error {
-	return nil
-}
-
-func (m *mockPushService) SendGradeNotification(ctx context.Context, deviceToken, studentName, courseName, grade string) error {
-	return nil
-}
-
-func (m *mockPushService) SendFeeReminder(ctx context.Context, deviceToken, studentName string, amount float64, dueDate string) error {
-	return nil
-}
-
-func (m *mockPushService) SendAttendanceAlert(ctx context.Context, deviceToken, studentName, date, status string) error {
-	return nil
-}
-
-func (m *mockPushService) SendExamReminder(ctx context.Context, deviceToken, examName, examDate, venue string) error {
-	return nil
-}
-
-func (m *mockPushService) SendAnnouncement(ctx context.Context, deviceTokens []string, title, message string, priority string) error {
-	return nil
-}
-
-func (m *mockPushService) ValidateDeviceToken(ctx context.Context, deviceToken string) (bool, error) {
-	return true, nil
 }

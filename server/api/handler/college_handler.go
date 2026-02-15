@@ -57,10 +57,10 @@ func (h *CollegeHandler) GetCollegeStats(c echo.Context) error {
 		return err
 	}
 
-	// For now, return a basic response
-	// This would need to be implemented based on the actual requirements
-	return helpers.Success(c, map[string]interface{}{
-		"college_id": collegeID,
-		"stats": "Implementation needed",
-	}, 200)
+	stats, err := h.collegeService.GetCollegeStats(c.Request().Context(), collegeID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
+
+	return helpers.Success(c, stats, 200)
 }

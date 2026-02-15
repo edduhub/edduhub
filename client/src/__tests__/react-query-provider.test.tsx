@@ -1,5 +1,6 @@
+import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, jest } from '@jest/globals';
+import { describe, it, jest } from '@jest/globals';
 import { ReactQueryProvider } from '@/lib/react-query-provider';
 
 // Mock the auth context

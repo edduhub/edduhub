@@ -12,6 +12,19 @@ const (
 	CategoryAnnouncement ForumCategory = "announcement"
 )
 
+var validForumCategories = map[ForumCategory]struct{}{
+	CategoryGeneral:      {},
+	CategoryAcademic:     {},
+	CategoryAssignment:   {},
+	CategoryQuestion:     {},
+	CategoryAnnouncement: {},
+}
+
+func (c ForumCategory) IsValid() bool {
+	_, ok := validForumCategories[c]
+	return ok
+}
+
 type ForumThread struct {
 	ID          int           `json:"id" db:"id"`
 	CollegeID   int           `json:"college_id" db:"college_id"`

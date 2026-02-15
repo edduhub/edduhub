@@ -17,12 +17,23 @@ import { logger } from '@/lib/logger';
 type Webhook = {
   id: number;
   url: string;
-  event_type: string;
-  is_active: boolean;
+  event: string;
+  active: boolean;
   secret: string;
-  created_at: string;
-  last_triggered_at?: string;
-  failure_count: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type WebhookApi = {
+  id?: number;
+  url?: string;
+  event?: string;
+  event_type?: string;
+  active?: boolean;
+  is_active?: boolean;
+  secret?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 const EVENT_TYPES = [
@@ -36,34 +47,46 @@ const EVENT_TYPES = [
   { value: "attendance.marked", label: "Attendance Marked" },
 ];
 
+const normalizeWebhook = (webhook: WebhookApi): Webhook => ({
+  id: webhook.id ?? 0,
+  url: webhook.url ?? "",
+  event: webhook.event ?? webhook.event_type ?? "",
+  active: webhook.active ?? webhook.is_active ?? true,
+  secret: webhook.secret ?? "",
+  createdAt: webhook.created_at ?? new Date().toISOString(),
+  updatedAt: webhook.updated_at ?? new Date().toISOString(),
+});
+
 export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Create/Edit dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
   const [formData, setFormData] = useState({
     url: "",
-    event_type: "",
-    is_active: true,
+    event: "",
+    active: true,
+    secret: "",
   });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchWebhooks();
+    void fetchWebhooks();
   }, []);
 
   const fetchWebhooks = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/webhooks');
-      setWebhooks(Array.isArray(response) ? response : []);
-    } catch (err) {
-      logger.error('Failed to fetch webhooks:', err as Error);
+      setError(null);
+      const response = await api.get<WebhookApi[]>('/api/webhooks');
+      setWebhooks(Array.isArray(response) ? response.map(normalizeWebhook) : []);
+    } catch (fetchError) {
+      logger.error('Failed to fetch webhooks:', fetchError as Error);
       setError('Failed to load webhooks');
+      setWebhooks([]);
     } finally {
       setLoading(false);
     }
@@ -73,13 +96,24 @@ export default function WebhooksPage() {
     try {
       setSubmitting(true);
       setError(null);
-      await api.post('/api/webhooks', formData);
+
+      const payload: Record<string, string | boolean> = {
+        url: formData.url,
+        event: formData.event,
+        active: formData.active,
+      };
+      if (formData.secret.trim()) {
+        payload.secret = formData.secret.trim();
+      }
+
+      await api.post('/api/webhooks', payload);
+
       setSuccess('Webhook created successfully');
       setDialogOpen(false);
       resetForm();
       await fetchWebhooks();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to create webhook');
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : 'Failed to create webhook');
     } finally {
       setSubmitting(false);
     }
@@ -91,13 +125,20 @@ export default function WebhooksPage() {
     try {
       setSubmitting(true);
       setError(null);
-      await api.patch(`/api/webhooks/${editingWebhook.id}`, formData);
+
+      await api.patch(`/api/webhooks/${editingWebhook.id}`, {
+        url: formData.url,
+        event: formData.event,
+        active: formData.active,
+        secret: formData.secret,
+      });
+
       setSuccess('Webhook updated successfully');
       setDialogOpen(false);
       resetForm();
       await fetchWebhooks();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to update webhook');
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Failed to update webhook');
     } finally {
       setSubmitting(false);
     }
@@ -107,11 +148,12 @@ export default function WebhooksPage() {
     if (!confirm('Are you sure you want to delete this webhook?')) return;
 
     try {
+      setError(null);
       await api.delete(`/api/webhooks/${id}`);
       setSuccess('Webhook deleted successfully');
       await fetchWebhooks();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to delete webhook');
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Failed to delete webhook');
     }
   };
 
@@ -120,20 +162,23 @@ export default function WebhooksPage() {
       setError(null);
       await api.post(`/api/webhooks/${id}/test`, {});
       setSuccess('Test event sent successfully');
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to send test event');
+    } catch (testError) {
+      setError(testError instanceof Error ? testError.message : 'Failed to send test event');
     }
   };
 
   const handleToggleActive = async (webhook: Webhook) => {
     try {
+      setError(null);
       await api.patch(`/api/webhooks/${webhook.id}`, {
-        ...webhook,
-        is_active: !webhook.is_active,
+        url: webhook.url,
+        event: webhook.event,
+        active: !webhook.active,
+        secret: webhook.secret,
       });
       await fetchWebhooks();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to update webhook');
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : 'Failed to update webhook');
     }
   };
 
@@ -146,8 +191,9 @@ export default function WebhooksPage() {
   const openEditDialog = (webhook: Webhook) => {
     setFormData({
       url: webhook.url,
-      event_type: webhook.event_type,
-      is_active: webhook.is_active,
+      event: webhook.event,
+      active: webhook.active,
+      secret: webhook.secret,
     });
     setEditingWebhook(webhook);
     setDialogOpen(true);
@@ -156,14 +202,15 @@ export default function WebhooksPage() {
   const resetForm = () => {
     setFormData({
       url: "",
-      event_type: "",
-      is_active: true,
+      event: "",
+      active: true,
+      secret: "",
     });
     setEditingWebhook(null);
   };
 
   const getEventTypeLabel = (type: string) => {
-    return EVENT_TYPES.find(et => et.value === type)?.label || type;
+    return EVENT_TYPES.find((eventType) => eventType.value === type)?.label || type;
   };
 
   return (
@@ -200,16 +247,16 @@ export default function WebhooksPage() {
                   id="url"
                   placeholder="https://example.com/webhook"
                   value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  onChange={(event) => setFormData({ ...formData, url: event.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="event_type">Event Type</Label>
+                <Label htmlFor="event">Event</Label>
                 <Select
-                  value={formData.event_type}
-                  onValueChange={(value) => setFormData({ ...formData, event_type: value })}
+                  value={formData.event}
+                  onValueChange={(value) => setFormData({ ...formData, event: value })}
                 >
-                  <SelectTrigger id="event_type">
+                  <SelectTrigger id="event">
                     <SelectValue placeholder="Select an event type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -221,12 +268,21 @@ export default function WebhooksPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="secret">Secret (optional)</Label>
+                <Input
+                  id="secret"
+                  placeholder="Optional signing secret"
+                  value={formData.secret}
+                  onChange={(event) => setFormData({ ...formData, secret: event.target.value })}
+                />
+              </div>
               <div className="flex items-center justify-between">
-                <Label htmlFor="is_active">Active</Label>
+                <Label htmlFor="active">Active</Label>
                 <Switch
-                  id="is_active"
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                  id="active"
+                  checked={formData.active}
+                  onCheckedChange={(checked) => setFormData({ ...formData, active: checked })}
                 />
               </div>
             </div>
@@ -236,7 +292,7 @@ export default function WebhooksPage() {
               </Button>
               <Button
                 onClick={editingWebhook ? handleUpdate : handleCreate}
-                disabled={submitting || !formData.url || !formData.event_type}
+                disabled={submitting || !formData.url || !formData.event}
               >
                 {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -277,17 +333,17 @@ export default function WebhooksPage() {
               Active
             </CardTitle>
             <div className="text-2xl font-bold text-green-600">
-              {webhooks.filter(w => w.is_active).length}
+              {webhooks.filter((webhook) => webhook.active).length}
             </div>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Failed Deliveries
+              Inactive
             </CardTitle>
             <div className="text-2xl font-bold text-red-600">
-              {webhooks.reduce((acc, w) => acc + w.failure_count, 0)}
+              {webhooks.filter((webhook) => !webhook.active).length}
             </div>
           </CardHeader>
         </Card>
@@ -318,10 +374,10 @@ export default function WebhooksPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>URL</TableHead>
-                  <TableHead>Event Type</TableHead>
+                  <TableHead>Event</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Failures</TableHead>
-                  <TableHead>Last Triggered</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Updated</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -333,31 +389,25 @@ export default function WebhooksPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {getEventTypeLabel(webhook.event_type)}
+                        {getEventTypeLabel(webhook.event)}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Switch
-                          checked={webhook.is_active}
+                          checked={webhook.active}
                           onCheckedChange={() => handleToggleActive(webhook)}
                         />
-                        <Badge className={webhook.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'}>
-                          {webhook.is_active ? 'Active' : 'Inactive'}
+                        <Badge className={webhook.active ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'}>
+                          {webhook.active ? 'Active' : 'Inactive'}
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      {webhook.failure_count > 0 ? (
-                        <span className="text-red-600 font-medium">{webhook.failure_count}</span>
-                      ) : (
-                        <span className="text-muted-foreground">0</span>
-                      )}
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(webhook.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {webhook.last_triggered_at
-                        ? new Date(webhook.last_triggered_at).toLocaleDateString()
-                        : 'Never'}
+                      {new Date(webhook.updatedAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -413,7 +463,7 @@ export default function WebhooksPage() {
           <div>
             <h3 className="font-medium mb-2">Security</h3>
             <p className="text-sm text-muted-foreground">
-              Each webhook includes a secret token for verification. The secret is sent in the <code className="bg-muted px-1 rounded">X-Webhook-Secret</code> header with each request.
+              If configured, each request includes a signature in the <code className="bg-muted px-1 rounded">X-Webhook-Signature</code> header.
             </p>
           </div>
         </CardContent>

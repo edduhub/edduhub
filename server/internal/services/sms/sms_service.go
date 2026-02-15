@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"eduhub/server/internal/services/integrations"
 )
 
 // SMSService defines the interface for SMS operations
@@ -53,10 +55,6 @@ type httpSMSService struct {
 
 // NewSMSService creates a new SMS service instance
 func NewSMSService(config Config) SMSService {
-	if !config.Enabled || config.AccountSID == "" || config.AuthToken == "" {
-		return &mockSMSService{}
-	}
-
 	if config.BaseURL == "" {
 		config.BaseURL = "https://api.twilio.com/2010-04-01"
 	}
@@ -67,6 +65,28 @@ func NewSMSService(config Config) SMSService {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+func (s *httpSMSService) validateConfig() error {
+	if !s.config.Enabled {
+		return integrations.NewDisabledError("sms")
+	}
+
+	missing := make([]string, 0)
+	if strings.TrimSpace(s.config.AccountSID) == "" {
+		missing = append(missing, "TWILIO_ACCOUNT_SID")
+	}
+	if strings.TrimSpace(s.config.AuthToken) == "" {
+		missing = append(missing, "TWILIO_AUTH_TOKEN")
+	}
+	if strings.TrimSpace(s.config.FromPhoneNumber) == "" {
+		missing = append(missing, "TWILIO_PHONE_NUMBER")
+	}
+	if len(missing) > 0 {
+		return integrations.NewMisconfiguredError("sms", missing...)
+	}
+
+	return nil
 }
 
 // NewSMSServiceFromEnv creates SMS service from environment variables
@@ -84,6 +104,10 @@ func NewSMSServiceFromEnv() SMSService {
 
 // SendSMS sends a single SMS message via Twilio API
 func (s *httpSMSService) SendSMS(ctx context.Context, toPhoneNumber, message string) error {
+	if err := s.validateConfig(); err != nil {
+		return err
+	}
+
 	apiURL := fmt.Sprintf("%s/Accounts/%s/Messages.json", s.config.BaseURL, s.config.AccountSID)
 
 	data := url.Values{}
@@ -128,6 +152,10 @@ func (s *httpSMSService) SendSMS(ctx context.Context, toPhoneNumber, message str
 
 // SendBulkSMS sends SMS to multiple recipients
 func (s *httpSMSService) SendBulkSMS(ctx context.Context, phoneNumbers []string, message string) ([]string, []string) {
+	if err := s.validateConfig(); err != nil {
+		return nil, append([]string{}, phoneNumbers...)
+	}
+
 	var successList []string
 	var failedList []string
 
@@ -204,6 +232,9 @@ func (s *httpSMSService) SendExamReminder(ctx context.Context, toPhoneNumber, st
 
 // VerifyPhoneNumber validates a phone number format
 func (s *httpSMSService) VerifyPhoneNumber(ctx context.Context, phoneNumber string) (bool, error) {
+	if err := s.validateConfig(); err != nil {
+		return false, err
+	}
 	if len(phoneNumber) < 10 {
 		return false, nil
 	}
@@ -212,6 +243,10 @@ func (s *httpSMSService) VerifyPhoneNumber(ctx context.Context, phoneNumber stri
 
 // GetSMSStatus retrieves the status of a sent SMS
 func (s *httpSMSService) GetSMSStatus(ctx context.Context, messageSID string) (string, error) {
+	if err := s.validateConfig(); err != nil {
+		return "", err
+	}
+
 	apiURL := fmt.Sprintf("%s/Accounts/%s/Messages/%s.json", s.config.BaseURL, s.config.AccountSID, messageSID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -242,43 +277,4 @@ func (s *httpSMSService) GetSMSStatus(ctx context.Context, messageSID string) (s
 	}
 
 	return result.Status, nil
-}
-
-// mockSMSService is a mock implementation for development/testing
-type mockSMSService struct{}
-
-func (m *mockSMSService) SendSMS(ctx context.Context, toPhoneNumber, message string) error {
-	return nil
-}
-
-func (m *mockSMSService) SendBulkSMS(ctx context.Context, phoneNumbers []string, message string) ([]string, []string) {
-	return phoneNumbers, nil
-}
-
-func (m *mockSMSService) SendTemplateSMS(ctx context.Context, toPhoneNumber, templateName string, variables map[string]string) error {
-	return nil
-}
-
-func (m *mockSMSService) SendFeeReminder(ctx context.Context, toPhoneNumber, studentName string, amount float64, dueDate string) error {
-	return nil
-}
-
-func (m *mockSMSService) SendAttendanceAlert(ctx context.Context, toPhoneNumber, studentName string, date string, status string) error {
-	return nil
-}
-
-func (m *mockSMSService) SendGradeNotification(ctx context.Context, toPhoneNumber, studentName, courseName string, grade string) error {
-	return nil
-}
-
-func (m *mockSMSService) SendExamReminder(ctx context.Context, toPhoneNumber, studentName, examName string, examDate string) error {
-	return nil
-}
-
-func (m *mockSMSService) VerifyPhoneNumber(ctx context.Context, phoneNumber string) (bool, error) {
-	return true, nil
-}
-
-func (m *mockSMSService) GetSMSStatus(ctx context.Context, messageSID string) (string, error) {
-	return "delivered", nil
 }

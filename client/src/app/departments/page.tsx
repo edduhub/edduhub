@@ -12,6 +12,7 @@ type Department = {
   id: number;
   name: string;
   code: string;
+  description?: string;
   hodName?: string;
   studentCount?: number;
   facultyCount?: number;
@@ -25,6 +26,7 @@ export default function DepartmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
   const [newDept, setNewDept] = useState({
     name: "",
@@ -132,6 +134,37 @@ export default function DepartmentsPage() {
         </div>
       )}
 
+      {selectedDepartment && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between space-y-0">
+            <div>
+              <CardTitle>{selectedDepartment.name}</CardTitle>
+              <CardDescription>{selectedDepartment.code}</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedDepartment(null)}>
+              Close
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>
+              <span className="font-medium">Head of Department:</span> {selectedDepartment.hodName || "Not assigned"}
+            </p>
+            <p>
+              <span className="font-medium">Description:</span> {selectedDepartment.description || "No description available"}
+            </p>
+            <p>
+              <span className="font-medium">Students:</span> {selectedDepartment.studentCount ?? 0}
+            </p>
+            <p>
+              <span className="font-medium">Faculty:</span> {selectedDepartment.facultyCount ?? 0}
+            </p>
+            <p>
+              <span className="font-medium">Courses:</span> {selectedDepartment.coursesCount ?? 0}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
@@ -216,7 +249,7 @@ export default function DepartmentsPage() {
                     <div className="text-xs text-muted-foreground">Courses</div>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" onClick={() => setSelectedDepartment(dept)}>
                   View Details
                 </Button>
               </CardContent>

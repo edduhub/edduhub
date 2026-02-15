@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, UserPlus, Download, Loader2 } from "lucide-react";
 import { logger } from '@/lib/logger';
+import type { Student } from "@/lib/types";
 
 export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -17,6 +18,7 @@ export default function StudentsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // Create form state
   const [newStudent, setNewStudent] = useState({
@@ -307,7 +309,7 @@ export default function StudentsPage() {
                         <Avatar className="h-9 w-9">
                           <AvatarImage />
                           <AvatarFallback>
-                            {`${student.firstName[0]}${student.lastName[0]}`.toUpperCase()}
+                            {`${student.firstName.charAt(0)}${student.lastName.charAt(0)}`.toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -330,7 +332,7 @@ export default function StudentsPage() {
                     <TableCell>{student.enrolledCourses}</TableCell>
                     <TableCell>{getStatusBadge(student.status)}</TableCell>
                     <TableCell className="space-x-2">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedStudent(student)}>
                         View
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => toggleStatus(student)} disabled={updateStudent.isPending}>
@@ -344,6 +346,59 @@ export default function StudentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {selectedStudent && (
+        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
+          <Card className="w-full max-w-2xl">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>{`${selectedStudent.firstName} ${selectedStudent.lastName}`}</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(null)}>
+                  Close
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Email</p>
+                  <p className="font-medium">{selectedStudent.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Roll Number</p>
+                  <p className="font-medium">{selectedStudent.rollNo}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Department</p>
+                  <p className="font-medium">{selectedStudent.departmentName || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Semester</p>
+                  <p className="font-medium">{selectedStudent.semester}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Status</p>
+                  <div className="mt-1">{getStatusBadge(selectedStudent.status)}</div>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">GPA</p>
+                  <p className={`font-medium ${getGPAColor(selectedStudent.gpa)}`}>
+                    {selectedStudent.gpa?.toFixed(2) ?? "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Enrolled Courses</p>
+                  <p className="font-medium">{selectedStudent.enrolledCourses ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">Updated</p>
+                  <p className="font-medium">{new Date(selectedStudent.updatedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

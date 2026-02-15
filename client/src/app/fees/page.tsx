@@ -59,6 +59,8 @@ export default function FeesPage() {
     const [payingId, setPayingId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [downloadingStatement, setDownloadingStatement] = useState(false);
+    const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
 
     // SECURITY: Validate Razorpay key is configured
     const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
@@ -168,6 +170,119 @@ export default function FeesPage() {
         .filter((a: FeeAssignment) => a.status !== 'paid')
         .reduce((acc: number, a: FeeAssignment) => acc + (a.amount - a.paid_amount - a.waiver_amount), 0);
 
+    const triggerDownload = (filename: string, content: string, mimeType = "text/plain;charset=utf-8") => {
+        const blob = new Blob([content], { type: mimeType });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
+    const handleDownloadStatement = () => {
+        try {
+            setDownloadingStatement(true);
+            setError(null);
+            setSuccess(null);
+
+            const assignmentLines = assignments.map((assignment) =>
+                [
+                    assignment.id,
+                    `"${assignment.title.replace(/\"/g, '""')}"`,
+                    assignment.category,
+                    assignment.amount,
+                    assignment.paid_amount,
+                    assignment.waiver_amount,
+                    assignment.status,
+                    assignment.due_date,
+                ].join(",")
+            );
+
+            const paymentLines = payments.map((payment) =>
+                [
+                    payment.id,
+                    `"${(payment.transaction_id || "").replace(/\"/g, '""')}"`,
+                    `"${(payment.fee_assignment_title || "Course Fee").replace(/\"/g, '""')}"`,
+                    payment.amount,
+                    payment.payment_method,
+                    payment.payment_status,
+                    payment.payment_date,
+                ].join(",")
+            );
+
+            const statementContent = [
+                "Fee Assignments",
+                "id,title,category,amount,paid_amount,waiver_amount,status,due_date",
+                ...assignmentLines,
+                "",
+                "Payments",
+                "id,transaction_id,fee_title,amount,payment_method,payment_status,payment_date",
+                ...paymentLines,
+            ].join("\n");
+
+            triggerDownload(
+                `fee-statement-${new Date().toISOString().split("T")[0]}.csv`,
+                statementContent,
+                "text/csv;charset=utf-8"
+            );
+            setSuccess("Statement downloaded successfully");
+        } catch (downloadError) {
+            logger.error("Failed to download statement:", downloadError as Error);
+            setError("Failed to download statement");
+        } finally {
+            setDownloadingStatement(false);
+        }
+    };
+
+    const handleQuickPay = async () => {
+        const firstPending = assignments.find(
+            (assignment) =>
+                assignment.status !== "paid" &&
+                assignment.amount - assignment.paid_amount - assignment.waiver_amount > 0
+        );
+
+        if (!firstPending) {
+            setError("No pending fees available for quick pay");
+            return;
+        }
+
+        await initiatePayment(firstPending);
+    };
+
+    const handleInvoiceDownload = (payment: Payment) => {
+        try {
+            setDownloadingInvoiceId(payment.id);
+            setError(null);
+
+            const invoiceText = [
+                "EduHub Fee Payment Invoice",
+                "-------------------------",
+                `Invoice ID: INV-${payment.id}`,
+                `Transaction ID: ${payment.transaction_id || `TXN-${payment.id}`}`,
+                `Student: ${user?.firstName || ""} ${user?.lastName || ""}`.trim(),
+                `Email: ${user?.email || "N/A"}`,
+                `Fee Title: ${payment.fee_assignment_title || "Course Fee"}`,
+                `Amount: INR ${payment.amount.toLocaleString()}`,
+                `Payment Method: ${payment.payment_method}`,
+                `Status: ${payment.payment_status}`,
+                `Payment Date: ${new Date(payment.payment_date).toLocaleString()}`,
+                "",
+                `Generated At: ${new Date().toLocaleString()}`,
+            ].join("\n");
+
+            triggerDownload(`invoice-${payment.id}.txt`, invoiceText);
+            setSuccess("Invoice downloaded");
+        } catch (downloadError) {
+            logger.error("Failed to download invoice:", downloadError as Error);
+            setError("Failed to download invoice");
+        } finally {
+            setDownloadingInvoiceId(null);
+        }
+    };
+
     return (
         <div className="space-y-8 pb-10">
             {/* Error/Success Messages */}
@@ -194,10 +309,10 @@ export default function FeesPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="shadow-sm">
+                    <Button variant="outline" className="shadow-sm" onClick={handleDownloadStatement} disabled={downloadingStatement}>
                         <Download className="mr-2 h-4 w-4" /> Download Statement
                     </Button>
-                    <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20">
+                    <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20" onClick={() => void handleQuickPay()} disabled={!isPaymentConfigured || payingId !== null}>
                         <Zap className="mr-2 h-4 w-4" /> Quick Pay
                     </Button>
                 </div>
@@ -381,7 +496,13 @@ export default function FeesPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => handleInvoiceDownload(payment)}
+                                                        disabled={downloadingInvoiceId === payment.id}
+                                                    >
                                                         <Download className="h-4 w-4" />
                                                     </Button>
                                                 </TableCell>

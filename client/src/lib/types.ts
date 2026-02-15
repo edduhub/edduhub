@@ -148,6 +148,103 @@ export type AssignmentSubmission = {
   status: 'submitted' | 'graded' | 'late';
 };
 
+export type RubricCriterion = {
+  id: number;
+  rubricId: number;
+  name: string;
+  description?: string;
+  weight: number;
+  maxScore: number;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type Rubric = {
+  id: number;
+  facultyId: number;
+  collegeId: number;
+  name: string;
+  description?: string;
+  courseId?: number;
+  isTemplate: boolean;
+  isActive: boolean;
+  maxScore: number;
+  createdAt: string;
+  updatedAt: string;
+  criteria: RubricCriterion[];
+};
+
+export type OfficeHourSlot = {
+  id: number;
+  facultyId: number;
+  collegeId: number;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  location?: string;
+  isVirtual: boolean;
+  virtualLink?: string;
+  maxStudents: number;
+  isActive: boolean;
+  facultyName?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OfficeHourBookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+
+export type OfficeHourBooking = {
+  id: number;
+  officeHourId: number;
+  studentId: number;
+  collegeId: number;
+  bookingDate: string;
+  startTime: string;
+  endTime: string;
+  purpose?: string;
+  status: OfficeHourBookingStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  officeHour?: OfficeHourSlot;
+};
+
+export type CreateRubricInput = {
+  name: string;
+  description?: string;
+  course_id?: number;
+  is_template: boolean;
+  is_active: boolean;
+  max_score: number;
+  criteria: Array<{
+    name: string;
+    description?: string;
+    weight: number;
+    max_score: number;
+    sort_order: number;
+  }>;
+};
+
+export type CreateOfficeHourInput = {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  location?: string;
+  is_virtual: boolean;
+  virtual_link?: string;
+  max_students: number;
+  is_active: boolean;
+};
+
+export type CreateOfficeHourBookingInput = {
+  office_hour_id: number;
+  booking_date: string;
+  start_time?: string;
+  end_time?: string;
+  purpose?: string;
+};
+
 export type Attendance = {
   id: number;
   studentId: number;

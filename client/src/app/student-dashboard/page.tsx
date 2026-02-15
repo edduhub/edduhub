@@ -198,6 +198,9 @@ export default function StudentDashboardPage() {
   }
 
   const { student, academicOverview, courses, assignments, recentGrades, upcomingEvents, announcements } = dashboardData;
+  const navigateToAssignments = (assignmentId: number) => {
+    router.push(`/assignments?focus=${assignmentId}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -563,7 +566,9 @@ export default function StudentDashboardPage() {
                         </TableCell>
                         <TableCell className="text-right">{assignment.maxScore}</TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="default">Submit Now</Button>
+                          <Button size="sm" variant="default" onClick={() => navigateToAssignments(assignment.id)}>
+                            Submit Now
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -595,7 +600,9 @@ export default function StudentDashboardPage() {
                       <TableCell>{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</TableCell>
                       <TableCell className="text-right">{assignment.maxScore}</TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="default">Submit</Button>
+                        <Button size="sm" variant="default" onClick={() => navigateToAssignments(assignment.id)}>
+                          Submit
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

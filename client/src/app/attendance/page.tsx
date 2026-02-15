@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
-import { useAttendanceByStudent } from "@/lib/api-hooks";
+import { api, endpoints } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,19 @@ type AttendanceRecord = {
   date: string;
   status: 'present' | 'absent' | 'late' | 'excused';
   markedBy?: string;
+};
+
+type AttendanceApiRecord = {
+  id?: number;
+  ID?: number;
+  courseId?: number;
+  course_id?: number;
+  courseName?: string;
+  course_name?: string;
+  date?: string;
+  status?: string;
+  markedBy?: string;
+  marked_by?: string;
 };
 
 type CourseAttendance = {
@@ -55,22 +68,49 @@ export default function AttendancePage() {
   const [marking, setMarking] = useState(false);
   const [markingSuccess, setMarkingSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceApiRecord[]>([]);
 
-  // React Query hook - fetch attendance for the current user
-  const studentId = user?.id ? Number(user.id) : 0;
-  const { data: attendanceRecords = [], isLoading: loading } = useAttendanceByStudent(studentId, {
-    enabled: !!user && user.role === 'student',
-  });
+  useEffect(() => {
+    const fetchMyAttendance = async () => {
+      if (!user) {
+        setAttendanceRecords([]);
+        setLoading(false);
+        return;
+      }
+
+      if (user.role !== "student") {
+        setAttendanceRecords([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await api.get<AttendanceApiRecord[]>(endpoints.attendance.myAttendance);
+        setAttendanceRecords(Array.isArray(data) ? data : []);
+      } catch (err) {
+        logger.error("Failed to fetch attendance", err as Error);
+        setError("Failed to load attendance records");
+        setAttendanceRecords([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchMyAttendance();
+  }, [user]);
 
   // Normalize records using useMemo
   const records = useMemo(() => {
     return attendanceRecords.map((record, index) => ({
-      id: record.id ?? index,
-      courseName: record.courseId ? `Course ${record.courseId}` : 'Unknown Course',
-      courseId: record.courseId ?? 0,
+      id: record.id ?? record.ID ?? index,
+      courseName: record.courseName ?? record.course_name ?? (record.courseId || record.course_id ? `Course ${record.courseId ?? record.course_id}` : "Unknown Course"),
+      courseId: record.courseId ?? record.course_id ?? 0,
       date: record.date ?? new Date().toISOString(),
       status: normalizeStatus(record.status),
-      markedBy: record.markedBy,
+      markedBy: record.markedBy ?? record.marked_by,
     }));
   }, [attendanceRecords]);
 
@@ -175,12 +215,27 @@ export default function AttendancePage() {
       setError(null);
       setMarkingSuccess(false);
 
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/attendance/scan`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${endpoints.attendance.processQR}`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qr_data: qrData }),
       });
+
+      if (!response.ok) {
+        let message = "Failed to mark attendance";
+        try {
+          const payload = await response.json();
+          if (payload?.message) {
+            message = payload.message as string;
+          } else if (payload?.error) {
+            message = payload.error as string;
+          }
+        } catch {
+          // no-op; use default message
+        }
+        throw new Error(message);
+      }
 
       setMarkingSuccess(true);
       

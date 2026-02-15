@@ -5,6 +5,7 @@ import (
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/services/forum"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -18,7 +19,10 @@ func NewForumHandler(forumService forum.ForumService) *ForumHandler {
 }
 
 func (h *ForumHandler) ListThreads(c echo.Context) error {
-	collegeID, _ := helpers.ExtractCollegeID(c)
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 	offset, _ := strconv.Atoi(c.QueryParam("offset"))
 
@@ -28,9 +32,27 @@ func (h *ForumHandler) ListThreads(c echo.Context) error {
 		Offset:    offset,
 	}
 
+	courseIDStr := c.QueryParam("course_id")
+	if courseIDStr == "" {
+		courseIDStr = c.QueryParam("courseId")
+	}
+	if courseIDStr != "" {
+		courseID, err := strconv.Atoi(courseIDStr)
+		if err != nil || courseID <= 0 {
+			return helpers.Error(c, "invalid course_id", 400)
+		}
+		filter.CourseID = &courseID
+	}
+
 	if cat := c.QueryParam("category"); cat != "" {
 		cf := models.ForumCategory(cat)
+		if !cf.IsValid() {
+			return helpers.Error(c, "invalid category", 400)
+		}
 		filter.Category = &cf
+	}
+	if query := strings.TrimSpace(c.QueryParam("search")); query != "" {
+		filter.Search = &query
 	}
 
 	threads, err := h.forumService.ListThreads(c.Request().Context(), filter)
@@ -41,8 +63,14 @@ func (h *ForumHandler) ListThreads(c echo.Context) error {
 }
 
 func (h *ForumHandler) GetThread(c echo.Context) error {
-	collegeID, _ := helpers.ExtractCollegeID(c)
-	threadID, _ := strconv.Atoi(c.Param("threadID"))
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+	threadID, err := strconv.Atoi(c.Param("threadID"))
+	if err != nil {
+		return helpers.Error(c, "invalid thread ID", 400)
+	}
 
 	thread, err := h.forumService.GetThread(c.Request().Context(), collegeID, threadID)
 	if err != nil {
@@ -52,8 +80,14 @@ func (h *ForumHandler) GetThread(c echo.Context) error {
 }
 
 func (h *ForumHandler) CreateThread(c echo.Context) error {
-	collegeID, _ := helpers.ExtractCollegeID(c)
-	userID, _ := helpers.ExtractUserID(c)
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+	userID, err := helpers.ExtractUserID(c)
+	if err != nil {
+		return err
+	}
 
 	var thread models.ForumThread
 	if err := c.Bind(&thread); err != nil {
@@ -70,8 +104,14 @@ func (h *ForumHandler) CreateThread(c echo.Context) error {
 }
 
 func (h *ForumHandler) ListReplies(c echo.Context) error {
-	collegeID, _ := helpers.ExtractCollegeID(c)
-	threadID, _ := strconv.Atoi(c.Param("threadID"))
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+	threadID, err := strconv.Atoi(c.Param("threadID"))
+	if err != nil {
+		return helpers.Error(c, "invalid thread ID", 400)
+	}
 
 	replies, err := h.forumService.ListReplies(c.Request().Context(), collegeID, threadID)
 	if err != nil {
@@ -81,9 +121,18 @@ func (h *ForumHandler) ListReplies(c echo.Context) error {
 }
 
 func (h *ForumHandler) CreateReply(c echo.Context) error {
-	collegeID, _ := helpers.ExtractCollegeID(c)
-	userID, _ := helpers.ExtractUserID(c)
-	threadID, _ := strconv.Atoi(c.Param("threadID"))
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+	userID, err := helpers.ExtractUserID(c)
+	if err != nil {
+		return err
+	}
+	threadID, err := strconv.Atoi(c.Param("threadID"))
+	if err != nil {
+		return helpers.Error(c, "invalid thread ID", 400)
+	}
 
 	var reply models.ForumReply
 	if err := c.Bind(&reply); err != nil {

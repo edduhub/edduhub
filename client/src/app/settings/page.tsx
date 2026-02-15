@@ -8,15 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Bell, Globe, Shield, Loader2 } from "lucide-react";
-import { api } from "@/lib/api-client";
+import { api, endpoints } from "@/lib/api-client";
 import { logger } from "@/lib/logger";
 
 interface UserSettings {
   email_notifications: boolean;
   push_notifications: boolean;
+  assignment_reminders: boolean;
+  grade_updates: boolean;
+  announcement_alerts: boolean;
   theme: string;
   language: string;
+  timezone: string;
+  session_timeout: number;
 }
 
 export default function SettingsPage() {
@@ -34,7 +40,15 @@ export default function SettingsPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordForm, setPasswordForm] = useState({
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
 
   useEffect(() => {
     fetchSettings();
@@ -50,7 +64,12 @@ export default function SettingsPage() {
           ...prev,
           emailNotifications: data.email_notifications,
           pushNotifications: data.push_notifications,
+          assignmentReminders: data.assignment_reminders,
+          gradeUpdates: data.grade_updates,
+          announcementAlerts: data.announcement_alerts,
           language: data.language || "en",
+          timezone: data.timezone || "UTC",
+          sessionTimeout: String(data.session_timeout || 30),
         }));
       }
     } catch (err) {
@@ -71,18 +90,56 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
+    setPasswordMessage(null);
     try {
       await api.put("/api/settings", {
         email_notifications: settings.emailNotifications,
         push_notifications: settings.pushNotifications,
+        assignment_reminders: settings.assignmentReminders,
+        grade_updates: settings.gradeUpdates,
+        announcement_alerts: settings.announcementAlerts,
         theme: "system",
         language: settings.language,
+        timezone: settings.timezone,
+        session_timeout: parseInt(settings.sessionTimeout, 10),
       });
     } catch (err) {
       logger.error("Failed to save settings", err as Error);
       setError("Failed to save settings");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    try {
+      setIsChangingPassword(true);
+      setError(null);
+      setPasswordMessage(null);
+
+      if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+        throw new Error("All password fields are required");
+      }
+      if (passwordForm.newPassword.length < 8) {
+        throw new Error("New password must be at least 8 characters");
+      }
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        throw new Error("New password and confirmation do not match");
+      }
+
+      await api.post(endpoints.auth.changePassword, {
+        old_password: passwordForm.oldPassword,
+        new_password: passwordForm.newPassword,
+      });
+
+      setPasswordMessage("Password updated successfully");
+      setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+      setIsPasswordDialogOpen(false);
+    } catch (err) {
+      logger.error("Failed to change password", err as Error);
+      setError(err instanceof Error ? err.message : "Failed to update password");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -106,6 +163,11 @@ export default function SettingsPage() {
       {error && (
         <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
           {error}
+        </div>
+      )}
+      {passwordMessage && (
+        <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-700">
+          {passwordMessage}
         </div>
       )}
 
@@ -228,7 +290,7 @@ export default function SettingsPage() {
             <Separator />
             <div className="space-y-2">
               <Label>Change Password</Label>
-              <Button variant="outline">Update Password</Button>
+              <Button variant="outline" onClick={() => setIsPasswordDialogOpen(true)}>Update Password</Button>
             </div>
           </CardContent>
         </Card>
@@ -285,6 +347,62 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new one.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="old-password">Current Password</Label>
+              <Input
+                id="old-password"
+                type="password"
+                value={passwordForm.oldPassword}
+                onChange={(e) => setPasswordForm(prev => ({ ...prev, oldPassword: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password">Confirm New Password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsPasswordDialogOpen(false)}
+              disabled={isChangingPassword}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePasswordChange}
+              disabled={isChangingPassword}
+            >
+              {isChangingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Update Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -62,6 +62,7 @@ export default function FilesPage() {
 
   // Current folder
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+  const [folderPath, setFolderPath] = useState<Array<{ id: number; name: string }>>([]);
 
   // File upload dialog
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -277,6 +278,23 @@ export default function FilesPage() {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
+  const handleOpenFolder = (folder: FolderItem) => {
+    setFolderPath((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    setCurrentFolderId(folder.id);
+  };
+
+  const handleNavigateBack = () => {
+    if (folderPath.length === 0) return;
+    const next = folderPath.slice(0, -1);
+    setFolderPath(next);
+    setCurrentFolderId(next.length > 0 ? next[next.length - 1].id : null);
+  };
+
+  const handleGoToRoot = () => {
+    setCurrentFolderId(null);
+    setFolderPath([]);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -285,8 +303,21 @@ export default function FilesPage() {
           <p className="text-muted-foreground">
             Manage files with versioning, folders, and tags
           </p>
+          <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Location:</span>
+            <Badge variant="outline">Root</Badge>
+            {folderPath.map((segment) => (
+              <Badge key={segment.id} variant="outline">{segment.name}</Badge>
+            ))}
+          </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={handleNavigateBack} disabled={folderPath.length === 0}>
+            Back
+          </Button>
+          <Button variant="outline" onClick={handleGoToRoot} disabled={currentFolderId === null}>
+            Root
+          </Button>
           <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -528,7 +559,7 @@ export default function FilesPage() {
                     <Card
                       key={folder.id}
                       className="cursor-pointer hover:bg-accent"
-                      onClick={() => setCurrentFolderId(folder.id)}
+                      onClick={() => handleOpenFolder(folder)}
                     >
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">

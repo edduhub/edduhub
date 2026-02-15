@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
 
-const calendarBlockTable = "calendar_blocks"
+const calendarBlockTable = "calendar_events"
 
 var calendarBlockQueryFields = []string{
-	"id", "college_id", "title", "description", "event_type", "date",
+	"id", "college_id", "title", "description", "event_type", "start_time", "end_time",
 	"created_at", "updated_at",
 }
 
@@ -43,12 +43,12 @@ func (r *calendarRepository) CreateCalendarBlock(ctx context.Context, block *mod
 	block.CreatedAt = now
 	block.UpdatedAt = now
 
-	sql := `INSERT INTO calendar_blocks (college_id, title, description, event_type, date, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	sql := `INSERT INTO calendar_events (college_id, title, description, event_type, start_time, end_time, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`
 
 	temp := struct {
 		ID int `db:"id"`
 	}{}
-	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, block.CollegeID, block.Title, block.Description, block.EventType, block.Date, block.CreatedAt, block.UpdatedAt)
+	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, block.CollegeID, block.Title, block.Description, block.EventType, block.StartTime, block.EndTime, block.CreatedAt, block.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("CreateCalendarBlock: failed to execute query or scan ID: %w", err)
 	}
@@ -58,7 +58,7 @@ func (r *calendarRepository) CreateCalendarBlock(ctx context.Context, block *mod
 
 func (r *calendarRepository) GetCalendarBlockByID(ctx context.Context, blockID int, collegeID int) (*models.CalendarBlock, error) {
 	block := &models.CalendarBlock{}
-	sql := `SELECT id, college_id, title, description, event_type, date, created_at, updated_at FROM calendar_blocks WHERE id = $1 AND college_id = $2`
+	sql := `SELECT id, college_id, title, description, event_type, start_time, end_time, created_at, updated_at FROM calendar_events WHERE id = $1 AND college_id = $2`
 
 	err := pgxscan.Get(ctx, r.DB.Pool, block, sql, blockID, collegeID)
 	if err != nil {
@@ -73,9 +73,9 @@ func (r *calendarRepository) GetCalendarBlockByID(ctx context.Context, blockID i
 func (r *calendarRepository) UpdateCalendarBlock(ctx context.Context, block *models.CalendarBlock) error {
 	block.UpdatedAt = time.Now()
 
-	sql := `UPDATE calendar_blocks SET title = $1, description = $2, event_type = $3, date = $4, updated_at = $5 WHERE id = $6 AND college_id = $7`
+	sql := `UPDATE calendar_events SET title = $1, description = $2, event_type = $3, start_time = $4, end_time = $5, updated_at = $6 WHERE id = $7 AND college_id = $8`
 
-	commandTag, err := r.DB.Pool.Exec(ctx, sql, block.Title, block.Description, block.EventType, block.Date, block.UpdatedAt, block.ID, block.CollegeID)
+	commandTag, err := r.DB.Pool.Exec(ctx, sql, block.Title, block.Description, block.EventType, block.StartTime, block.EndTime, block.UpdatedAt, block.ID, block.CollegeID)
 	if err != nil {
 		return fmt.Errorf("UpdateCalendarBlock: failed to execute query: %w", err)
 	}
@@ -88,7 +88,7 @@ func (r *calendarRepository) UpdateCalendarBlock(ctx context.Context, block *mod
 
 func (r *calendarRepository) UpdateCalendarBlockPartial(ctx context.Context, collegeID int, calendarID int, req *models.UpdateCalendarRequest) error {
 	// Build dynamic query based on non-nil fields
-	sql := `UPDATE calendar_blocks SET updated_at = NOW()`
+	sql := `UPDATE calendar_events SET updated_at = NOW()`
 	args := []interface{}{}
 	argIndex := 1
 
@@ -107,9 +107,14 @@ func (r *calendarRepository) UpdateCalendarBlockPartial(ctx context.Context, col
 		args = append(args, *req.EventType)
 		argIndex++
 	}
-	if req.Date != nil {
-		sql += fmt.Sprintf(`, date = $%d`, argIndex)
-		args = append(args, *req.Date)
+	if req.StartTime != nil {
+		sql += fmt.Sprintf(`, start_time = $%d`, argIndex)
+		args = append(args, *req.StartTime)
+		argIndex++
+	}
+	if req.EndTime != nil {
+		sql += fmt.Sprintf(`, end_time = $%d`, argIndex)
+		args = append(args, *req.EndTime)
 		argIndex++
 	}
 
@@ -132,7 +137,7 @@ func (r *calendarRepository) UpdateCalendarBlockPartial(ctx context.Context, col
 }
 
 func (r *calendarRepository) DeleteCalendarBlock(ctx context.Context, blockID int, collegeID int) error {
-	sql := `DELETE FROM calendar_blocks WHERE id = $1 AND college_id = $2`
+	sql := `DELETE FROM calendar_events WHERE id = $1 AND college_id = $2`
 
 	commandTag, err := r.DB.Pool.Exec(ctx, sql, blockID, collegeID)
 	if err != nil {
@@ -159,11 +164,11 @@ func (r *calendarRepository) applyCalendarBlockFilter(filter models.CalendarBloc
 		args = append(args, *filter.EventType)
 	}
 	if filter.StartDate != nil {
-		clauses = append(clauses, fmt.Sprintf("date >= $%d", len(args)+1))
+		clauses = append(clauses, fmt.Sprintf("start_time >= $%d", len(args)+1))
 		args = append(args, *filter.StartDate)
 	}
 	if filter.EndDate != nil {
-		clauses = append(clauses, fmt.Sprintf("date <= $%d", len(args)+1))
+		clauses = append(clauses, fmt.Sprintf("start_time <= $%d", len(args)+1))
 		args = append(args, *filter.EndDate)
 	}
 
@@ -180,7 +185,7 @@ func (r *calendarRepository) GetCalendarBlocks(ctx context.Context, filter model
 	}
 
 	whereClause, args := r.applyCalendarBlockFilter(filter)
-	baseSQL := "SELECT id, college_id, title, description, event_type, date, created_at, updated_at FROM calendar_blocks " + whereClause + " ORDER BY date ASC, created_at ASC"
+	baseSQL := "SELECT id, college_id, title, description, event_type, start_time, end_time, created_at, updated_at FROM calendar_events " + whereClause + " ORDER BY start_time ASC, created_at ASC"
 
 	sql := baseSQL
 	if filter.Limit > 0 {
@@ -207,7 +212,7 @@ func (r *calendarRepository) CountCalendarBlocks(ctx context.Context, filter mod
 	}
 
 	whereClause, args := r.applyCalendarBlockFilter(filter)
-	sql := "SELECT COUNT(*) FROM calendar_blocks " + whereClause
+	sql := "SELECT COUNT(*) FROM calendar_events " + whereClause
 
 	temp := struct {
 		Count int `db:"count"`

@@ -35,8 +35,8 @@ export default function AnnouncementsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPriority, setSelectedPriority] = useState<string>("all");
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [, setLoading] = useState(true);
-  const [, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formData, setFormData] = useState({
@@ -49,6 +49,7 @@ export default function AnnouncementsPage() {
     const fetchAnnouncements = async () => {
       try {
         setLoading(true);
+        setError(null);
         const response = await api.get('/api/announcements');
         setAnnouncements(Array.isArray(response) ? response : []);
       } catch (err) {
@@ -71,6 +72,7 @@ export default function AnnouncementsPage() {
 
     try {
       setCreating(true);
+      setError(null);
       const newAnnouncement = await api.post(endpoints.announcements.create, {
         title: formData.title,
         content: formData.content,
@@ -317,50 +319,66 @@ export default function AnnouncementsPage() {
         {pinnedAnnouncements.length > 0 && (
           <div className="text-sm font-medium">All Announcements</div>
         )}
-        {regularAnnouncements.map((announcement) => (
-          <Card key={announcement.id} className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <div className="flex items-start gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback>
-                    {announcement.author.split(' ').map(n => n[0]).join('').toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CardTitle className="text-lg">{announcement.title}</CardTitle>
-                    {getPriorityBadge(announcement.priority)}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{announcement.author}</span>
-                    <span>•</span>
-                    <span className="capitalize">{announcement.authorRole}</span>
-                    {announcement.courseName && (
-                      <>
-                        <span>•</span>
-                        <span>{announcement.courseName}</span>
-                      </>
-                    )}
-                    {announcement.departmentName && (
-                      <>
-                        <span>•</span>
-                        <span>{announcement.departmentName}</span>
-                      </>
-                    )}
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {format(new Date(announcement.publishedAt), 'MMM dd, HH:mm')}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : (
+          regularAnnouncements.map((announcement) => (
+            <Card key={announcement.id} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback>
+                      {announcement.author.split(' ').map(n => n[0]).join('').toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CardTitle className="text-lg">{announcement.title}</CardTitle>
+                      {getPriorityBadge(announcement.priority)}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{announcement.author}</span>
+                      <span>•</span>
+                      <span className="capitalize">{announcement.authorRole}</span>
+                      {announcement.courseName && (
+                        <>
+                          <span>•</span>
+                          <span>{announcement.courseName}</span>
+                        </>
+                      )}
+                      {announcement.departmentName && (
+                        <>
+                          <span>•</span>
+                          <span>{announcement.departmentName}</span>
+                        </>
+                      )}
+                      <span>•</span>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {format(new Date(announcement.publishedAt), 'MMM dd, HH:mm')}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">{announcement.content}</p>
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{announcement.content}</p>
+              </CardContent>
+            </Card>
+          ))
+        )}
+        {error && (
+          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        {!loading && regularAnnouncements.length === 0 && pinnedAnnouncements.length === 0 && (
+          <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+            No announcements found.
+          </div>
+        )}
       </div>
     </div>
   );

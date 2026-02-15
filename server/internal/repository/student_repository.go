@@ -228,17 +228,12 @@ FROM students
 WHERE kratos_identity_id = $1`
 
 	var student models.Student
-	var enrollmentYear sqlDriver.NullInt32
-	err := pgxscan.Select(ctx, s.Pool, &student, sql, kratosID)
+	err := pgxscan.Get(ctx, s.Pool, &student, sql, kratosID)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("FindByKratosID: failed to execute query: %w", err)
-	}
-
-	if enrollmentYear.Valid {
-		student.EnrollmentYear = int(enrollmentYear.Int32)
 	}
 
 	return &student, nil

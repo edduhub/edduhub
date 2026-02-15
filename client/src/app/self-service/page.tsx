@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from 'react';
-import { useSelfServiceRequests, useCreateSelfServiceRequest } from '@/lib/api-hooks';
+import { useSelfServiceRequests, useCreateSelfServiceRequest, useUpdateSelfServiceRequest, useAllSelfServiceRequests } from '@/lib/api-hooks';
+import { useAuth } from '@/lib/auth-context';
 import { logger } from '@/lib/logger';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,7 +19,10 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
-  Loader2
+  Loader2,
+  Users,
+  XCircle,
+  PlayCircle
 } from 'lucide-react';
 
 type RequestStatus = 'pending' | 'approved' | 'rejected' | 'processing';
@@ -35,7 +39,9 @@ type Request = {
 };
 
 export default function StudentSelfServicePage() {
+  const { user } = useAuth();
   const { data: requests = [] } = useSelfServiceRequests();
+  const isAdminOrFaculty = user?.role === 'admin' || user?.role === 'faculty' || user?.role === 'super_admin';
 
   return (
     <div className="min-h-screen bg-muted/10">
@@ -50,7 +56,7 @@ export default function StudentSelfServicePage() {
 
         {/* Request Tabs */}
         <Tabs defaultValue="enroll" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto">
+          <TabsList className={`grid w-full grid-cols-${isAdminOrFaculty ? 5 : 4} lg:w-auto`}>
             <TabsTrigger value="enroll">
               <BookOpen className="w-4 h-4 mr-2" />
               Enrollment
@@ -63,6 +69,12 @@ export default function StudentSelfServicePage() {
               <FileText className="w-4 h-4 mr-2" />
               Documents
             </TabsTrigger>
+            {isAdminOrFaculty && (
+              <TabsTrigger value="admin">
+                <Users className="w-4 h-4 mr-2" />
+                Manage
+              </TabsTrigger>
+            )}
             <TabsTrigger value="history">
               <Clock className="w-4 h-4 mr-2" />
               History
@@ -81,6 +93,12 @@ export default function StudentSelfServicePage() {
             <DocumentRequestForm />
           </TabsContent>
 
+          {isAdminOrFaculty && (
+            <TabsContent value="admin" className="space-y-4">
+              <AdminRequestManager />
+            </TabsContent>
+          )}
+
           <TabsContent value="history" className="space-y-4">
             <RequestHistory requests={requests} />
           </TabsContent>
@@ -97,10 +115,14 @@ function EnrollmentRequestForm() {
     specialRequests: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const createRequest = useCreateSelfServiceRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    setSubmitSuccess(null);
     setIsSubmitting(true);
 
     try {
@@ -111,9 +133,10 @@ function EnrollmentRequestForm() {
       });
       
       setFormData({ courseCode: '', reason: '', specialRequests: '' });
+      setSubmitSuccess('Enrollment request submitted successfully.');
     } catch (error) {
       logger.error('Failed to submit request:', error as Error);
-      alert('Failed to submit request. Please try again.');
+      setSubmitError('Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -192,6 +215,9 @@ function EnrollmentRequestForm() {
             </ul>
           </div>
 
+          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+          {submitSuccess && <p className="text-sm text-green-700">{submitSuccess}</p>}
+
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
@@ -219,10 +245,14 @@ function ScheduleChangeRequestForm() {
     reason: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const createRequest = useCreateSelfServiceRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    setSubmitSuccess(null);
     setIsSubmitting(true);
 
     try {
@@ -233,9 +263,10 @@ function ScheduleChangeRequestForm() {
       });
       
       setFormData({ courseId: '', currentSection: '', requestedSection: '', reason: '' });
+      setSubmitSuccess('Schedule change request submitted successfully.');
     } catch (error) {
       logger.error('Failed to submit request:', error as Error);
-      alert('Failed to submit request. Please try again.');
+      setSubmitError('Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -327,6 +358,9 @@ function ScheduleChangeRequestForm() {
             </ul>
           </div>
 
+          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+          {submitSuccess && <p className="text-sm text-green-700">{submitSuccess}</p>}
+
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
@@ -355,17 +389,24 @@ function DocumentRequestForm() {
     address: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const createRequest = useCreateSelfServiceRequest();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    setSubmitSuccess(null);
     setIsSubmitting(true);
 
     try {
+      const requestType = formData.documentType === 'transcript' ? 'transcript' : 'document';
       await createRequest.mutateAsync({
-        type: 'document',
+        type: requestType,
         title: `Document Request: ${formData.documentType}`,
         description: `Purpose: ${formData.purpose}\nCopies: ${formData.copies}\nDelivery: ${formData.deliveryMethod}\nAddress: ${formData.address || 'N/A'}`,
+        document_type: formData.documentType,
+        delivery_method: formData.deliveryMethod,
       });
       
       setFormData({
@@ -375,9 +416,10 @@ function DocumentRequestForm() {
         deliveryMethod: 'pickup',
         address: '',
       });
+      setSubmitSuccess('Document request submitted successfully.');
     } catch (error) {
       logger.error('Failed to submit request:', error as Error);
-      alert('Failed to submit request. Please try again.');
+      setSubmitError('Failed to submit request. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -432,7 +474,13 @@ function DocumentRequestForm() {
                 min="1"
                 max="10"
                 value={formData.copies}
-                onChange={(e) => setFormData({ ...formData, copies: parseInt(e.target.value) })}
+                onChange={(e) => {
+                  const parsed = Number.parseInt(e.target.value, 10);
+                  const nextCopies = Number.isFinite(parsed)
+                    ? Math.min(10, Math.max(1, parsed))
+                    : 1;
+                  setFormData({ ...formData, copies: nextCopies });
+                }}
                 required
               />
             </div>
@@ -479,6 +527,9 @@ function DocumentRequestForm() {
               <li>• Express processing available for additional fee</li>
             </ul>
           </div>
+
+          {submitError && <p className="text-sm text-destructive">{submitError}</p>}
+          {submitSuccess && <p className="text-sm text-green-700">{submitSuccess}</p>}
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? (
@@ -527,6 +578,11 @@ function RequestHistory({ requests }: { requests: Request[] }) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {requests.length === 0 && (
+            <div className="rounded-lg border p-6 text-sm text-muted-foreground">
+              No requests submitted yet.
+            </div>
+          )}
           {requests.map((request) => (
             <div 
               key={request.id} 
@@ -558,6 +614,207 @@ function RequestHistory({ requests }: { requests: Request[] }) {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminRequestManager() {
+  const { data: allRequests = [], isLoading } = useAllSelfServiceRequests();
+  const updateRequest = useUpdateSelfServiceRequest();
+  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
+  const [responseText, setResponseText] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+
+  const statusColors: Record<RequestStatus, string> = {
+    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    approved: 'bg-green-100 text-green-800 border-green-200',
+    rejected: 'bg-red-100 text-red-800 border-red-200',
+    processing: 'bg-blue-100 text-blue-800 border-blue-200',
+  };
+
+  const filteredRequests = filterStatus === 'all' 
+    ? allRequests 
+    : allRequests.filter(r => r.status === filterStatus);
+
+  const handleStatusChange = async (requestId: number, newStatus: 'approved' | 'rejected' | 'processing') => {
+    try {
+      await updateRequest.mutateAsync({
+        requestId,
+        input: { 
+          status: newStatus,
+          response: responseText || undefined
+        }
+      });
+      setSelectedRequest(null);
+      setResponseText('');
+    } catch (error) {
+      logger.error('Failed to update request:', error as Error);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-10 flex justify-center">
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="w-5 h-5" />
+          Manage Requests
+        </CardTitle>
+        <CardDescription>
+          Review and process student self-service requests
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Filter */}
+        <div className="flex gap-2 flex-wrap">
+          {['all', 'pending', 'processing', 'approved', 'rejected'].map((status) => (
+            <Button
+              key={status}
+              variant={filterStatus === status ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilterStatus(status)}
+              className="capitalize"
+            >
+              {status}
+            </Button>
+          ))}
+        </div>
+
+        {/* Requests List */}
+        <div className="space-y-4">
+          {filteredRequests.length === 0 && (
+            <div className="rounded-lg border p-6 text-sm text-muted-foreground">
+              No requests found.
+            </div>
+          )}
+          {filteredRequests.map((request) => (
+            <div 
+              key={request.id} 
+              className={`p-4 border rounded-lg ${statusColors[request.status]}`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge className="capitalize">{request.type}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      ID: {request.id}
+                    </span>
+                  </div>
+                  <h4 className="font-semibold mb-1">{request.title}</h4>
+                  <p className="text-sm mb-2">{request.description}</p>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>Submitted: {new Date(request.submittedAt).toLocaleString()}</span>
+                    {request.respondedAt && (
+                      <span>Updated: {new Date(request.respondedAt).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {request.response && (
+                    <div className="mt-3 p-3 bg-white/50 rounded">
+                      <h5 className="font-medium text-sm mb-1">Response:</h5>
+                      <p className="text-sm">{request.response}</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2 items-end">
+                  <Badge className="capitalize">{request.status}</Badge>
+                  {request.status !== 'approved' && request.status !== 'rejected' && (
+                    <div className="flex gap-1 mt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700"
+                        onClick={() => setSelectedRequest(request)}
+                      >
+                        <PlayCircle className="w-3 h-3 mr-1" />
+                        Process
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Process Dialog */}
+        {selectedRequest && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className="w-full max-w-md mx-4">
+              <CardHeader>
+                <CardTitle>Process Request</CardTitle>
+                <CardDescription>
+                  Review and update request #{selectedRequest.id}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="font-medium">{selectedRequest.title}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{selectedRequest.description}</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="response">Response Message (Optional)</Label>
+                  <Textarea
+                    id="response"
+                    value={responseText}
+                    onChange={(e) => setResponseText(e.target.value)}
+                    placeholder="Add a response note for the student..."
+                    className="min-h-[100px]"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={() => handleStatusChange(selectedRequest.id, 'approved')}
+                    disabled={updateRequest.isPending}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Approve
+                  </Button>
+                  <Button
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    onClick={() => handleStatusChange(selectedRequest.id, 'processing')}
+                    disabled={updateRequest.isPending}
+                  >
+                    <PlayCircle className="w-4 h-4 mr-2" />
+                    Process
+                  </Button>
+                  <Button
+                    className="flex-1 bg-red-600 hover:bg-red-700"
+                    variant="destructive"
+                    onClick={() => handleStatusChange(selectedRequest.id, 'rejected')}
+                    disabled={updateRequest.isPending}
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Reject
+                  </Button>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setSelectedRequest(null);
+                    setResponseText('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

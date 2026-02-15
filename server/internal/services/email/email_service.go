@@ -125,11 +125,20 @@ func (s *emailService) SendTemplateEmail(ctx context.Context, to, subject, templ
 }
 
 func (s *emailService) SendBulkEmail(ctx context.Context, recipients []string, subject, body string) error {
-	for _, recipient := range recipients {
-		// Send emails asynchronously
-		go s.SendEmail(ctx, recipient, subject, body)
+	if len(recipients) == 0 {
+		return nil
 	}
-	return nil
+
+	var firstError error
+	for _, recipient := range recipients {
+		if err := s.SendEmail(ctx, recipient, subject, body); err != nil {
+			if firstError == nil {
+				firstError = err
+			}
+		}
+	}
+
+	return firstError
 }
 
 func (s *emailService) SendWelcomeEmail(ctx context.Context, to, name string) error {

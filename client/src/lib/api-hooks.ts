@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { api, endpoints } from './api-client';
+import { normalizeForumThread, type ForumThreadApi } from './forum';
 import type {
   DashboardResponse,
   StudentDashboardResponse,
@@ -22,6 +23,13 @@ import type {
   AuditLog,
   Placement,
   ForumThread,
+  Rubric,
+  RubricCriterion,
+  OfficeHourSlot,
+  OfficeHourBooking,
+  CreateRubricInput,
+  CreateOfficeHourInput,
+  CreateOfficeHourBookingInput,
 } from './types';
 
 // Query keys for cache management
@@ -59,6 +67,9 @@ export const queryKeys = {
   placements: ['placements'] as const,
   forumThreads: ['forumThreads'] as const,
   forumThreadsByCourse: (courseId: number) => ['forumThreads', 'course', courseId] as const,
+  facultyRubrics: ['faculty-tools', 'rubrics'] as const,
+  facultyOfficeHours: ['faculty-tools', 'office-hours'] as const,
+  facultyBookings: ['faculty-tools', 'bookings'] as const,
 };
 
 type NotificationAPI = {
@@ -226,6 +237,102 @@ type SelfServiceRequestAPI = {
   respondedAt?: string;
   responded_at?: string;
   response?: string;
+  document_type?: string;
+  delivery_method?: string;
+};
+
+type RubricCriterionAPI = {
+  id?: number;
+  rubricId?: number;
+  rubric_id?: number;
+  name?: string;
+  description?: string;
+  weight?: number;
+  maxScore?: number;
+  max_score?: number;
+  sortOrder?: number;
+  sort_order?: number;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+type RubricAPI = {
+  id?: number;
+  facultyId?: number;
+  faculty_id?: number;
+  collegeId?: number;
+  college_id?: number;
+  name?: string;
+  description?: string;
+  courseId?: number;
+  course_id?: number;
+  isTemplate?: boolean;
+  is_template?: boolean;
+  isActive?: boolean;
+  is_active?: boolean;
+  maxScore?: number;
+  max_score?: number;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+  criteria?: RubricCriterionAPI[];
+};
+
+type OfficeHourSlotAPI = {
+  id?: number;
+  facultyId?: number;
+  faculty_id?: number;
+  collegeId?: number;
+  college_id?: number;
+  dayOfWeek?: number;
+  day_of_week?: number;
+  startTime?: string;
+  start_time?: string;
+  endTime?: string;
+  end_time?: string;
+  location?: string;
+  isVirtual?: boolean;
+  is_virtual?: boolean;
+  virtualLink?: string;
+  virtual_link?: string;
+  maxStudents?: number;
+  max_students?: number;
+  isActive?: boolean;
+  is_active?: boolean;
+  facultyName?: string;
+  faculty_name?: string;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
+
+type OfficeHourBookingAPI = {
+  id?: number;
+  officeHourId?: number;
+  office_hour_id?: number;
+  studentId?: number;
+  student_id?: number;
+  collegeId?: number;
+  college_id?: number;
+  bookingDate?: string;
+  booking_date?: string;
+  startTime?: string;
+  start_time?: string;
+  endTime?: string;
+  end_time?: string;
+  purpose?: string;
+  status?: string;
+  notes?: string;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+  officeHour?: OfficeHourSlotAPI;
+  office_hour?: OfficeHourSlotAPI;
 };
 
 type ParentStudentsResponse = {
@@ -244,8 +351,22 @@ type ParentAssignmentsResponse = {
   assignments?: AssignmentAPI[];
 };
 
-type SelfServiceRequestsResponse = {
-  requests?: SelfServiceRequestAPI[];
+type SelfServiceRequestsResponse =
+  | {
+      requests?: SelfServiceRequestAPI[];
+    }
+  | SelfServiceRequestAPI[];
+
+type RubricListResponse = {
+  rubrics?: RubricAPI[];
+};
+
+type OfficeHourListResponse = {
+  office_hours?: OfficeHourSlotAPI[];
+};
+
+type BookingListResponse = {
+  bookings?: OfficeHourBookingAPI[];
 };
 
 type CreateAnnouncementInput = {
@@ -382,14 +503,82 @@ const mapSelfServiceRequest = (item: SelfServiceRequestAPI): SelfServiceRequest 
       : 'pending';
 
   return {
-    id: item.id,
+    id: item.id ?? 0,
     type: normalizedType,
     title: item.title ?? '',
     description: item.description ?? '',
     status: normalizedStatus,
     submittedAt: toISODateString(item.submittedAt ?? item.submitted_at),
     respondedAt: item.respondedAt ?? item.responded_at,
-    response: item.response,
+    response: item.response ?? (item as SelfServiceRequestAPI & { admin_response?: string }).admin_response,
+  };
+};
+
+const mapRubricCriterion = (item: RubricCriterionAPI): RubricCriterion => ({
+  id: item.id ?? 0,
+  rubricId: item.rubricId ?? item.rubric_id ?? 0,
+  name: item.name ?? '',
+  description: item.description,
+  weight: item.weight ?? 0,
+  maxScore: item.maxScore ?? item.max_score ?? 0,
+  sortOrder: item.sortOrder ?? item.sort_order ?? 0,
+  createdAt: item.createdAt ?? item.created_at,
+  updatedAt: item.updatedAt ?? item.updated_at,
+});
+
+const mapRubric = (item: RubricAPI): Rubric => ({
+  id: item.id ?? 0,
+  facultyId: item.facultyId ?? item.faculty_id ?? 0,
+  collegeId: item.collegeId ?? item.college_id ?? 0,
+  name: item.name ?? '',
+  description: item.description,
+  courseId: item.courseId ?? item.course_id,
+  isTemplate: item.isTemplate ?? item.is_template ?? false,
+  isActive: item.isActive ?? item.is_active ?? true,
+  maxScore: item.maxScore ?? item.max_score ?? 0,
+  createdAt: toISODateString(item.createdAt ?? item.created_at),
+  updatedAt: toISODateString(item.updatedAt ?? item.updated_at),
+  criteria: (item.criteria ?? []).map(mapRubricCriterion),
+});
+
+const mapOfficeHourSlot = (item: OfficeHourSlotAPI): OfficeHourSlot => ({
+  id: item.id ?? 0,
+  facultyId: item.facultyId ?? item.faculty_id ?? 0,
+  collegeId: item.collegeId ?? item.college_id ?? 0,
+  dayOfWeek: item.dayOfWeek ?? item.day_of_week ?? 0,
+  startTime: item.startTime ?? item.start_time ?? '',
+  endTime: item.endTime ?? item.end_time ?? '',
+  location: item.location,
+  isVirtual: item.isVirtual ?? item.is_virtual ?? false,
+  virtualLink: item.virtualLink ?? item.virtual_link,
+  maxStudents: item.maxStudents ?? item.max_students ?? 1,
+  isActive: item.isActive ?? item.is_active ?? true,
+  facultyName: item.facultyName ?? item.faculty_name,
+  createdAt: toISODateString(item.createdAt ?? item.created_at),
+  updatedAt: toISODateString(item.updatedAt ?? item.updated_at),
+});
+
+const mapOfficeHourBooking = (item: OfficeHourBookingAPI): OfficeHourBooking => {
+  const status = item.status;
+  const normalizedStatus: OfficeHourBooking['status'] =
+    status === 'confirmed' || status === 'cancelled' || status === 'completed' || status === 'no_show'
+      ? status
+      : 'confirmed';
+
+  return {
+    id: item.id ?? 0,
+    officeHourId: item.officeHourId ?? item.office_hour_id ?? 0,
+    studentId: item.studentId ?? item.student_id ?? 0,
+    collegeId: item.collegeId ?? item.college_id ?? 0,
+    bookingDate: toISODateString(item.bookingDate ?? item.booking_date),
+    startTime: item.startTime ?? item.start_time ?? '',
+    endTime: item.endTime ?? item.end_time ?? '',
+    purpose: item.purpose,
+    status: normalizedStatus,
+    notes: item.notes,
+    createdAt: toISODateString(item.createdAt ?? item.created_at),
+    updatedAt: toISODateString(item.updatedAt ?? item.updated_at),
+    officeHour: item.officeHour || item.office_hour ? mapOfficeHourSlot((item.officeHour ?? item.office_hour) as OfficeHourSlotAPI) : undefined,
   };
 };
 
@@ -866,9 +1055,9 @@ export function useForumThreads(courseId?: number, options?: UseQueryOptions<For
   return useQuery({
     queryKey: courseId ? queryKeys.forumThreadsByCourse(courseId) : queryKeys.forumThreads,
     queryFn: async () => {
-      const url = courseId ? `${endpoints.forum.threads}?courseId=${courseId}` : endpoints.forum.threads;
-      const data = await api.get<ForumThread[]>(url);
-      return data || [];
+      const url = courseId ? `${endpoints.forum.threads}?course_id=${courseId}` : endpoints.forum.threads;
+      const data = await api.get<ForumThreadApi[]>(url);
+      return Array.isArray(data) ? data.map(normalizeForumThread) : [];
     },
     ...options,
   });
@@ -985,14 +1174,17 @@ type CreateSelfServiceRequestInput = {
   type: 'enrollment' | 'schedule' | 'transcript' | 'document';
   title: string;
   description: string;
+  document_type?: string;
+  delivery_method?: string;
 };
 
 export function useSelfServiceRequests(options?: UseQueryOptions<SelfServiceRequest[], Error>) {
   return useQuery({
     queryKey: ['self-service', 'requests'],
     queryFn: async () => {
-      const data = await api.get<SelfServiceRequestsResponse>('/api/self-service/requests');
-      return (data?.requests || []).map(mapSelfServiceRequest);
+      const data = await api.get<SelfServiceRequestsResponse>(endpoints.selfService.requests);
+      const requests = Array.isArray(data) ? data : (data?.requests || []);
+      return requests.map(mapSelfServiceRequest);
     },
     ...options,
   });
@@ -1003,11 +1195,210 @@ export function useCreateSelfServiceRequest() {
   
   return useMutation({
     mutationFn: async (input: CreateSelfServiceRequestInput) => {
-      const data = await api.post<SelfServiceRequestAPI>('/api/self-service/requests', input);
+      const data = await api.post<SelfServiceRequestAPI>(endpoints.selfService.requests, input);
       return mapSelfServiceRequest(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['self-service', 'requests'] });
+    },
+  });
+}
+
+export type UpdateSelfServiceRequestInput = {
+  status?: 'pending' | 'approved' | 'rejected' | 'processing';
+  response?: string;
+};
+
+export function useUpdateSelfServiceRequest() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ requestId, input }: { requestId: number; input: UpdateSelfServiceRequestInput }) => {
+      const data = await api.put<SelfServiceRequestAPI>(endpoints.selfService.request(requestId), input);
+      return mapSelfServiceRequest(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['self-service', 'requests'] });
+      queryClient.invalidateQueries({ queryKey: ['self-service', 'all-requests'] });
+    },
+  });
+}
+
+// Admin: Fetch all requests (not just own)
+export function useAllSelfServiceRequests(options?: UseQueryOptions<SelfServiceRequest[], Error>) {
+  return useQuery({
+    queryKey: ['self-service', 'all-requests'],
+    queryFn: async () => {
+      const data = await api.get<SelfServiceRequestsResponse>(`${endpoints.selfService.requests}?all=true`);
+      const requests = Array.isArray(data) ? data : (data?.requests || []);
+      return requests.map(mapSelfServiceRequest);
+    },
+    ...options,
+  });
+}
+
+export function useFacultyRubrics(facultyId?: number, options?: UseQueryOptions<Rubric[], Error>) {
+  return useQuery({
+    queryKey: [...queryKeys.facultyRubrics, facultyId ?? 'all'],
+    queryFn: async () => {
+      const endpoint = facultyId
+        ? `${endpoints.facultyTools.rubrics}?faculty_id=${facultyId}`
+        : endpoints.facultyTools.rubrics;
+      const data = await api.get<RubricListResponse>(endpoint);
+      return (data?.rubrics || []).map(mapRubric);
+    },
+    ...options,
+  });
+}
+
+export function useCreateRubric() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateRubricInput) => {
+      const data = await api.post<RubricAPI>(endpoints.facultyTools.rubrics, input);
+      return mapRubric(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyRubrics });
+    },
+  });
+}
+
+export function useUpdateRubric() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rubricId, input }: { rubricId: number; input: CreateRubricInput }) => {
+      const data = await api.put<RubricAPI>(endpoints.facultyTools.rubric(rubricId), input);
+      return mapRubric(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyRubrics });
+    },
+  });
+}
+
+export function useDeleteRubric() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (rubricId: number) => api.delete<{ deleted: boolean }>(endpoints.facultyTools.rubric(rubricId)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyRubrics });
+    },
+  });
+}
+
+export function useOfficeHours(params?: { activeOnly?: boolean; facultyId?: number }, options?: UseQueryOptions<OfficeHourSlot[], Error>) {
+  return useQuery({
+    queryKey: [...queryKeys.facultyOfficeHours, params?.activeOnly ?? false, params?.facultyId ?? 'all'],
+    queryFn: async () => {
+      const search = new URLSearchParams();
+      if (params?.activeOnly) search.set('active_only', 'true');
+      if (params?.facultyId) search.set('faculty_id', String(params.facultyId));
+      const endpoint = search.size
+        ? `${endpoints.facultyTools.officeHours}?${search.toString()}`
+        : endpoints.facultyTools.officeHours;
+      const data = await api.get<OfficeHourListResponse>(endpoint);
+      return (data?.office_hours || []).map(mapOfficeHourSlot);
+    },
+    ...options,
+  });
+}
+
+export function useCreateOfficeHour() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateOfficeHourInput) => {
+      const data = await api.post<OfficeHourSlotAPI>(endpoints.facultyTools.officeHours, input);
+      return mapOfficeHourSlot(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyOfficeHours });
+    },
+  });
+}
+
+export function useUpdateOfficeHour() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ officeHourId, input }: { officeHourId: number; input: CreateOfficeHourInput }) => {
+      const data = await api.put<OfficeHourSlotAPI>(endpoints.facultyTools.officeHour(officeHourId), input);
+      return mapOfficeHourSlot(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyOfficeHours });
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyBookings });
+    },
+  });
+}
+
+export function useDeleteOfficeHour() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (officeHourId: number) => api.delete<{ deleted: boolean }>(endpoints.facultyTools.officeHour(officeHourId)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyOfficeHours });
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyBookings });
+    },
+  });
+}
+
+export function useBookings(params?: { officeHourId?: number; studentId?: number; facultyId?: number }, options?: UseQueryOptions<OfficeHourBooking[], Error>) {
+  return useQuery({
+    queryKey: [...queryKeys.facultyBookings, params?.officeHourId ?? 'all', params?.studentId ?? 'all', params?.facultyId ?? 'all'],
+    queryFn: async () => {
+      const search = new URLSearchParams();
+      if (params?.officeHourId) search.set('office_hour_id', String(params.officeHourId));
+      if (params?.studentId) search.set('student_id', String(params.studentId));
+      if (params?.facultyId) search.set('faculty_id', String(params.facultyId));
+      const endpoint = search.size
+        ? `${endpoints.facultyTools.bookings}?${search.toString()}`
+        : endpoints.facultyTools.bookings;
+      const data = await api.get<BookingListResponse>(endpoint);
+      return (data?.bookings || []).map(mapOfficeHourBooking);
+    },
+    ...options,
+  });
+}
+
+export function useOfficeHourBookings(officeHourId: number, options?: UseQueryOptions<OfficeHourBooking[], Error>) {
+  return useQuery({
+    queryKey: [...queryKeys.facultyBookings, 'office-hour', officeHourId],
+    queryFn: async () => {
+      const data = await api.get<BookingListResponse>(endpoints.facultyTools.officeHourBookings(officeHourId));
+      return (data?.bookings || []).map(mapOfficeHourBooking);
+    },
+    enabled: !!officeHourId,
+    ...options,
+  });
+}
+
+export function useCreateBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: CreateOfficeHourBookingInput) => {
+      const data = await api.post<OfficeHourBookingAPI>(endpoints.facultyTools.bookings, input);
+      return mapOfficeHourBooking(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyBookings });
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyOfficeHours });
+    },
+  });
+}
+
+export function useUpdateBookingStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ bookingId, status, notes }: { bookingId: number; status: OfficeHourBooking['status']; notes?: string }) => {
+      const body: { status: OfficeHourBooking['status']; notes?: string } = { status };
+      if (notes !== undefined) {
+        body.notes = notes;
+      }
+      const data = await api.patch<OfficeHourBookingAPI>(endpoints.facultyTools.bookingStatus(bookingId), body);
+      return mapOfficeHourBooking(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.facultyBookings });
     },
   });
 }

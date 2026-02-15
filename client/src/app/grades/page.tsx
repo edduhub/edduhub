@@ -60,14 +60,15 @@ export default function GradesPage() {
   const { user } = useAuth();
   const [grades, setGrades] = useState<Grade[]>([]);
   const [courseGrades, setCourseGrades] = useState<CourseGrade[]>([]);
-  const [, setLoading] = useState(true);
-  const [, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const fetchGrades = async () => {
       try {
         setLoading(true);
+        setError(null);
         // Student 'my' grades
         try {
           const gradesResponse = await api.get<ApiGrade[]>(endpoints.grades.myGrades);
@@ -190,6 +191,12 @@ export default function GradesPage() {
         </Button>
       </div>
 
+      {error && (
+        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
@@ -236,6 +243,11 @@ export default function GradesPage() {
           <CardDescription>Overall performance in each course</CardDescription>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
           <div className="space-y-4">
             {courseGrades.map((course) => (
               <div key={course.courseCode} className="space-y-2">
@@ -259,7 +271,13 @@ export default function GradesPage() {
                 </p>
               </div>
             ))}
+            {courseGrades.length === 0 && (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                No course grade summaries available.
+              </div>
+            )}
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -269,6 +287,11 @@ export default function GradesPage() {
           <CardDescription>Individual assessment scores</CardDescription>
         </CardHeader>
         <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -306,8 +329,16 @@ export default function GradesPage() {
                   <TableCell className="text-muted-foreground">{grade.date}</TableCell>
                 </TableRow>
               ))}
+              {grades.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                    No grade records found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
     </div>

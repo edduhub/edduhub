@@ -10,6 +10,7 @@ import (
 
 type ProfileService interface {
 	GetProfileByUserID(ctx context.Context, userID int) (*models.Profile, error)
+	GetProfileByKratosID(ctx context.Context, kratosID string) (*models.Profile, error)
 	GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error)
 	UpdateProfile(ctx context.Context, userID int, req *models.UpdateProfileRequest) error
 	CreateProfile(ctx context.Context, profile *models.Profile) error
@@ -31,6 +32,10 @@ func (s *profileService) GetProfileByUserID(ctx context.Context, userID int) (*m
 	return s.profileRepo.GetProfileByUserID(ctx, strconv.Itoa(userID))
 }
 
+func (s *profileService) GetProfileByKratosID(ctx context.Context, kratosID string) (*models.Profile, error) {
+	return s.profileRepo.GetProfileByUserID(ctx, kratosID)
+}
+
 func (s *profileService) GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error) {
 	return s.profileRepo.GetProfileByID(ctx, profileID)
 }
@@ -41,7 +46,7 @@ func (s *profileService) UpdateProfile(ctx context.Context, userID int, req *mod
 	if err != nil {
 		return err
 	}
-	
+
 	return s.profileRepo.UpdateProfilePartial(ctx, strconv.Itoa(profile.ID), req)
 }
 

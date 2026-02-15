@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Request } from '@playwright/test';
 
 /**
  * End-to-End Security Tests for EduHub
@@ -26,7 +26,7 @@ test.describe('Multi-Tenant Security', () => {
     await page.goto('/dashboard');
     
     // Intercept API calls
-    const requests = [];
+    const requests: Request[] = [];
     page.on('request', request => {
       if (request.url().includes('/api/')) {
         requests.push(request);

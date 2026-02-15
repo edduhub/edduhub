@@ -3,8 +3,10 @@ package analytics
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
+	"eduhub/server/internal/config"
 	"eduhub/server/internal/repository"
 )
 
@@ -155,14 +157,16 @@ type CourseComparison struct {
 }
 
 type advancedAnalyticsService struct {
-	db             *repository.DB
-	basicAnalytics AnalyticsService
+	db              *repository.DB
+	basicAnalytics  AnalyticsService
+	analyticsConfig *config.AnalyticsConfig
 }
 
 func NewAdvancedAnalyticsService(db *repository.DB, basicAnalytics AnalyticsService) AdvancedAnalyticsService {
 	return &advancedAnalyticsService{
-		db:             db,
-		basicAnalytics: basicAnalytics,
+		db:              db,
+		basicAnalytics:  basicAnalytics,
+		analyticsConfig: config.LoadAnalyticsConfig(),
 	}
 }
 
@@ -641,8 +645,11 @@ func (s *advancedAnalyticsService) identifyAtRiskStudents(ctx context.Context, c
 		}
 
 		riskLevel := "medium"
-		if len(riskFactors) >= 2 {
+		probability := s.calculateRiskProbability(avgGrade, attendanceRate, recentGrades, recentAttendance)
+		if probability >= s.analyticsConfig.RiskLevelHighThreshold {
 			riskLevel = "high"
+		} else if probability < s.analyticsConfig.RiskLevelLowThreshold {
+			riskLevel = "low"
 		}
 
 		interventions := make([]string, 0)
@@ -658,7 +665,7 @@ func (s *advancedAnalyticsService) identifyAtRiskStudents(ctx context.Context, c
 			StudentID:     studentID,
 			RiskLevel:     riskLevel,
 			RiskFactors:   riskFactors,
-			Probability:   0.8, // Simplified - would use ML model in production
+			Probability:   probability,
 			Interventions: interventions,
 		})
 	}
@@ -693,11 +700,14 @@ func (s *advancedAnalyticsService) predictCourseCompletionRates(ctx context.Cont
 		var enrolled, completed int
 		var avgDuration float64
 
-		if err := rows.Scan(&courseID, &courseName, &enrolled, &avgDuration, &completed); err != nil {
+		if err := rows.Scan(&courseID, &courseName, &enrolled, &completed, &avgDuration); err != nil {
 			continue
 		}
 
-		completionRate := float64(completed) / float64(enrolled) * 100
+		completionRate := 0.0
+		if enrolled > 0 {
+			completionRate = float64(completed) / float64(enrolled) * 100
+		}
 		predictedRate := completionRate * 1.1 // Simplified prediction
 
 		completionRates = append(completionRates, CompletionRate{
@@ -730,6 +740,49 @@ func (s *advancedAnalyticsService) generatePredictiveRecommendations(atRiskStude
 	}
 
 	return recommendations
+}
+
+func (s *advancedAnalyticsService) calculateRiskProbability(avgGrade, attendanceRate float64, recentGrades, recentAttendance int) float64 {
+	cfg := s.analyticsConfig
+	score := 0.0
+
+	switch {
+	case avgGrade < 40:
+		score += cfg.RiskWeightGradeVeryLow
+	case avgGrade < 60:
+		score += cfg.RiskWeightGradeLow
+	case avgGrade < 70:
+		score += cfg.RiskWeightGradeMedium
+	}
+
+	switch {
+	case attendanceRate < 50:
+		score += cfg.RiskWeightAttendanceVeryLow
+	case attendanceRate < 70:
+		score += cfg.RiskWeightAttendanceLow
+	case attendanceRate < 80:
+		score += cfg.RiskWeightAttendanceMedium
+	}
+
+	switch {
+	case recentGrades == 0:
+		score += cfg.RiskWeightNoRecentGrades
+	case recentGrades < 2:
+		score += cfg.RiskWeightFewRecentGrades
+	}
+
+	if recentAttendance == 0 {
+		score += cfg.RiskWeightNoRecentAttendance
+	}
+
+	if score < cfg.RiskMinScore {
+		score = cfg.RiskMinScore
+	}
+	if score > cfg.RiskMaxScore {
+		score = cfg.RiskMaxScore
+	}
+
+	return math.Round(score*100) / 100
 }
 
 func (s *advancedAnalyticsService) getTotalStudentsInCollege(ctx context.Context, collegeID int) (int, error) {

@@ -21,6 +21,7 @@ import (
 	"eduhub/server/internal/services/email"
 	"eduhub/server/internal/services/enrollment"
 	"eduhub/server/internal/services/exam"
+	"eduhub/server/internal/services/facultytools"
 	"eduhub/server/internal/services/fee"
 	"eduhub/server/internal/services/file"
 	"eduhub/server/internal/services/forum"
@@ -32,6 +33,7 @@ import (
 	"eduhub/server/internal/services/quiz"
 	"eduhub/server/internal/services/report"
 	"eduhub/server/internal/services/role"
+	"eduhub/server/internal/services/selfservice"
 	"eduhub/server/internal/services/settings"
 	storageservice "eduhub/server/internal/services/storage"
 	"eduhub/server/internal/services/student"
@@ -80,6 +82,8 @@ type Services struct {
 	ExamService              exam.ExamService
 	PlacementService         placement.PlacementService
 	ForumService             forum.ForumService
+	SelfServiceService       selfservice.SelfServiceService
+	FacultyToolsService      facultytools.FacultyToolsService
 	SettingsService          settings.SettingsService
 	DB                       *repository.DB
 }
@@ -189,6 +193,8 @@ func NewServices(cfg *config.Config) *Services {
 	examRepo := repository.NewExamRepository(cfg.DB)
 	placementRepo := repository.NewPlacementRepository(cfg.DB)
 	forumRepo := repository.NewForumRepository(cfg.DB)
+	selfServiceRepo := repository.NewSelfServiceRepository(cfg.DB)
+	facultyToolsRepo := repository.NewFacultyToolsRepository(cfg.DB)
 
 	answerOptionRepo := repository.NewAnswerOptionRepository(cfg.DB)
 	questionService := quiz.NewSimpleQuestionService(questionRepo)
@@ -239,6 +245,8 @@ func NewServices(cfg *config.Config) *Services {
 	examService := exam.NewExamService(examRepo, studentRepo, courseRepo, userRepo)
 	placementService := placement.NewPlacementService(placementRepo, studentRepo)
 	forumService := forum.NewForumService(forumRepo)
+	selfServiceService := selfservice.NewSelfServiceService(selfServiceRepo)
+	facultyToolsService := facultytools.NewFacultyToolsService(facultyToolsRepo)
 
 	settingsRepo := repository.NewSettingsRepository(cfg.DB)
 	settingsService := settings.NewSettingsService(settingsRepo)
@@ -279,6 +287,8 @@ func NewServices(cfg *config.Config) *Services {
 		ExamService:              examService,
 		PlacementService:         placementService,
 		ForumService:             forumService,
+		SelfServiceService:       selfServiceService,
+		FacultyToolsService:      facultyToolsService,
 		SettingsService:          settingsService,
 		DB:                       cfg.DB,
 	}

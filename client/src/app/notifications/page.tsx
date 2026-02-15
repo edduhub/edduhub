@@ -40,6 +40,7 @@ export default function NotificationsPage() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('all');
+    const [typeFilter, setTypeFilter] = useState<'all' | Notification['type']>('all');
     const wsRef = useRef<WebSocket | null>(null);
 
     const fetchNotifications = useCallback(async () => {
@@ -47,8 +48,8 @@ export default function NotificationsPage() {
             const data = await api.get<Notification[]>(endpoints.notifications.list);
             setNotifications(data || []);
 
-            const countData = await api.get<{ unread_count: number }>(endpoints.notifications.unreadCount);
-            setUnreadCount(countData.unread_count);
+            const countData = await api.get<{ unread_count?: number; unreadCount?: number }>(endpoints.notifications.unreadCount);
+            setUnreadCount(countData.unread_count ?? countData.unreadCount ?? 0);
         } catch (error) {
             logger.error('Failed to fetch notifications:', error as Error);
         } finally {
@@ -137,6 +138,14 @@ export default function NotificationsPage() {
     const filteredNotifications = activeTab === 'unread'
         ? notifications.filter(n => !n.isRead)
         : notifications;
+    const displayedNotifications = typeFilter === 'all'
+        ? filteredNotifications
+        : filteredNotifications.filter((notification) => notification.type === typeFilter);
+    const cycleFilter = () => {
+        const order: Array<'all' | Notification['type']> = ['all', 'info', 'success', 'warning', 'error'];
+        const next = order[(order.indexOf(typeFilter) + 1) % order.length];
+        setTypeFilter(next);
+    };
 
     const getTypeIcon = (type: Notification['type']) => {
         switch (type) {
@@ -175,7 +184,7 @@ export default function NotificationsPage() {
                             Mark all as read
                         </Button>
                     )}
-                    <Button variant="ghost" size="icon">
+                    <Button variant="ghost" size="icon" onClick={fetchNotifications} title="Refresh notifications">
                         <Settings className="w-5 h-5" />
                     </Button>
                 </div>
@@ -205,9 +214,9 @@ export default function NotificationsPage() {
                                     </TabsTrigger>
                                 </TabsList>
                                 <div className="flex items-center gap-2">
-                                    <Button variant="ghost" size="sm" className="text-xs">
+                                    <Button variant="ghost" size="sm" className="text-xs" onClick={cycleFilter}>
                                         <Filter className="w-3 h-3 mr-2" />
-                                        Filter
+                                        Filter: {typeFilter}
                                     </Button>
                                 </div>
                             </div>
@@ -216,7 +225,7 @@ export default function NotificationsPage() {
                 </CardHeader>
                 <CardContent className="px-0">
                     <div className="divide-y divide-border/50">
-                        {filteredNotifications.length === 0 ? (
+                        {displayedNotifications.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
                                 <div className="p-4 bg-muted/20 rounded-full">
                                     <Bell className="w-12 h-12 text-muted-foreground/50" />
@@ -226,12 +235,14 @@ export default function NotificationsPage() {
                                     <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                                         {activeTab === 'unread'
                                             ? "You've caught up with everything! No unread notifications found."
-                                            : "When you receive notifications, they'll appear here."}
+                                            : typeFilter !== 'all'
+                                                ? `No ${typeFilter} notifications found.`
+                                                : "When you receive notifications, they'll appear here."}
                                     </p>
                                 </div>
                             </div>
                         ) : (
-                            filteredNotifications.map((notification) => (
+                            displayedNotifications.map((notification) => (
                                 <div
                                     key={notification.id}
                                     className={cn(

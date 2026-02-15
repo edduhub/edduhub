@@ -23,6 +23,7 @@ type RegisterData = {
   role: string;
   collegeId: string;
   collegeName: string;
+  rollNo: string;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

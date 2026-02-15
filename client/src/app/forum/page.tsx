@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,16 +21,28 @@ import {
 } from 'lucide-react';
 import type { ForumThread, ForumCategory } from '@/lib/types';
 import { api, endpoints } from '@/lib/api-client';
+import { normalizeForumThread, type ForumThreadApi } from '@/lib/forum';
 import { logger } from '@/lib/logger';
+
+type CourseApi = {
+  id: number;
+  name?: string;
+  title?: string;
+};
+
+type SortMode = 'latest' | 'popular' | 'unanswered';
 
 export default function ForumPage() {
   const searchParams = useSearchParams();
-  const courseId = searchParams.get('courseId');
+  const courseParam = searchParams.get('courseId') ?? searchParams.get('course_id');
+  const parsedCourseId = courseParam ? Number.parseInt(courseParam, 10) : NaN;
+  const courseId = Number.isFinite(parsedCourseId) && parsedCourseId > 0 ? parsedCourseId : null;
 
   const [threads, setThreads] = useState<ForumThread[]>([]);
   const [filteredThreads, setFilteredThreads] = useState<ForumThread[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<ForumCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('latest');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
@@ -42,21 +55,25 @@ export default function ForumPage() {
       if (selectedCategory !== 'all') {
         params.append('category', selectedCategory);
       }
+      if (courseId !== null) {
+        params.append('course_id', String(courseId));
+      }
       if (params.toString()) {
         url += `?${params.toString()}`;
       }
-      const data = await api.get<ForumThread[]>(url);
-      setThreads(data || []);
+      const data = await api.get<ForumThreadApi[]>(url);
+      const normalized = Array.isArray(data) ? data.map(normalizeForumThread) : [];
+      setThreads(normalized);
     } catch (error) {
       logger.error('Failed to fetch threads:', error as Error);
       setThreads([]);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, courseId]);
 
   const filterThreads = useCallback(() => {
-    let filtered = threads;
+    let filtered = [...threads];
 
     // Filter by category
     if (selectedCategory !== 'all') {
@@ -73,8 +90,22 @@ export default function ForumPage() {
       );
     }
 
+    if (sortMode === 'unanswered') {
+      filtered = filtered.filter(t => t.replyCount === 0);
+    }
+
+    filtered.sort((a, b) => {
+      if (sortMode === 'popular') {
+        if (b.viewCount !== a.viewCount) return b.viewCount - a.viewCount;
+        return b.replyCount - a.replyCount;
+      }
+      const aDate = new Date(a.updatedAt || a.createdAt).getTime();
+      const bDate = new Date(b.updatedAt || b.createdAt).getTime();
+      return bDate - aDate;
+    });
+
     setFilteredThreads(filtered);
-  }, [threads, searchQuery, selectedCategory]);
+  }, [threads, searchQuery, selectedCategory, sortMode]);
 
   useEffect(() => {
     fetchThreads();
@@ -164,15 +195,27 @@ export default function ForumPage() {
 
         {/* Sort Options */}
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm">
+          <Button
+            variant={sortMode === 'latest' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSortMode('latest')}
+          >
             <Clock className="w-4 h-4 mr-2" />
             Latest
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant={sortMode === 'popular' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSortMode('popular')}
+          >
             <TrendingUp className="w-4 h-4 mr-2" />
             Popular
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant={sortMode === 'unanswered' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSortMode('unanswered')}
+          >
             <Filter className="w-4 h-4 mr-2" />
             Unanswered
           </Button>
@@ -194,7 +237,12 @@ export default function ForumPage() {
             </Card>
           ) : (
             filteredThreads.map((thread) => (
-              <ForumThreadCard key={thread.id} thread={thread} categoryColors={categoryColors} categoryLabels={categoryLabels} />
+              <ForumThreadCard
+                key={thread.id}
+                thread={thread}
+                categoryColors={categoryColors}
+                categoryLabels={categoryLabels}
+              />
             ))
           )}
         </div>
@@ -222,64 +270,66 @@ function ForumThreadCard({
   categoryLabels: Record<ForumCategory, string>
 }) {
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-lg font-semibold">{thread.title}</h3>
-              {thread.isPinned && (
-                <Badge variant="default" className="flex items-center gap-1">
-                  <Pin className="w-3 h-3" />
-                  Pinned
+    <Link href={`/forum/${thread.id}` as never} className="block">
+      <Card className="hover:shadow-md transition-shadow cursor-pointer">
+        <CardHeader>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-semibold">{thread.title}</h3>
+                {thread.isPinned && (
+                  <Badge variant="default" className="flex items-center gap-1">
+                    <Pin className="w-3 h-3" />
+                    Pinned
+                  </Badge>
+                )}
+                {thread.isLocked && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Lock className="w-3 h-3" />
+                    Locked
+                  </Badge>
+                )}
+                <Badge className={categoryColors[thread.category]}>
+                  {categoryLabels[thread.category]}
                 </Badge>
-              )}
-              {thread.isLocked && (
-                <Badge variant="secondary" className="flex items-center gap-1">
-                  <Lock className="w-3 h-3" />
-                  Locked
-                </Badge>
-              )}
-              <Badge className={categoryColors[thread.category]}>
-                {categoryLabels[thread.category]}
-              </Badge>
-            </div>
+              </div>
 
-            <p className="text-sm text-muted-foreground line-clamp-2">
-              {thread.content}
-            </p>
+              <p className="text-sm text-muted-foreground line-clamp-2">
+                {thread.content}
+              </p>
 
-            <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-              <span className="flex items-center gap-1">
-                <User className="w-4 h-4" />
-                {thread.authorName}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
-                {new Date(thread.createdAt).toLocaleDateString()}
-              </span>
-              <span className="flex items-center gap-1">
-                <MessageSquare className="w-4 h-4" />
-                {thread.replyCount} replies
-              </span>
-              <span className="flex items-center gap-1">
-                <TrendingUp className="w-4 h-4" />
-                {thread.viewCount} views
-              </span>
-            </div>
+              <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                <span className="flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  {thread.authorName}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-4 h-4" />
+                  {new Date(thread.createdAt).toLocaleDateString()}
+                </span>
+                <span className="flex items-center gap-1">
+                  <MessageSquare className="w-4 h-4" />
+                  {thread.replyCount} replies
+                </span>
+                <span className="flex items-center gap-1">
+                  <TrendingUp className="w-4 h-4" />
+                  {thread.viewCount} views
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {thread.tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="flex items-center gap-1">
-                  <Tag className="w-3 h-3" />
-                  {tag}
-                </Badge>
-              ))}
+              <div className="flex items-center gap-2 flex-wrap">
+                {thread.tags.map((tag) => (
+                  <Badge key={tag} variant="outline" className="flex items-center gap-1">
+                    <Tag className="w-3 h-3" />
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </CardHeader>
-    </Card>
+        </CardHeader>
+      </Card>
+    </Link>
   );
 }
 
@@ -288,7 +338,7 @@ function CreateThreadDialog({
   onClose,
   onSuccess
 }: {
-  courseId: string | null
+  courseId: number | null
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -298,6 +348,36 @@ function CreateThreadDialog({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableCourses, setAvailableCourses] = useState<CourseApi[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(courseId);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (courseId !== null) {
+      setSelectedCourseId(courseId);
+      return;
+    }
+
+    let mounted = true;
+    const fetchCourses = async () => {
+      try {
+        const data = await api.get<CourseApi[]>(endpoints.courses.list);
+        if (!mounted) return;
+        const courses = Array.isArray(data) ? data : [];
+        setAvailableCourses(courses);
+        if (courses.length > 0) {
+          setSelectedCourseId(courses[0].id);
+        }
+      } catch (error) {
+        logger.error('Failed to fetch courses for forum thread creation:', error as Error);
+      }
+    };
+
+    fetchCourses();
+    return () => {
+      mounted = false;
+    };
+  }, [courseId]);
 
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
@@ -312,11 +392,18 @@ function CreateThreadDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    if (!selectedCourseId || selectedCourseId <= 0) {
+      setFormError('Please select a course.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       await api.post(endpoints.forum.createThread, {
-        courseId: parseInt(courseId || '0'),
+        course_id: selectedCourseId,
         title,
         content,
         category,
@@ -330,6 +417,7 @@ function CreateThreadDialog({
       setTags([]);
     } catch (error) {
       logger.error('Failed to create thread:', error as Error);
+      setFormError('Failed to create thread. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -351,6 +439,28 @@ function CreateThreadDialog({
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {courseId === null && (
+              <div className="space-y-2">
+                <label htmlFor="course" className="text-sm font-medium">
+                  Course
+                </label>
+                <select
+                  id="course"
+                  value={selectedCourseId ?? ''}
+                  onChange={(e) => setSelectedCourseId(Number.parseInt(e.target.value, 10))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  required
+                >
+                  {availableCourses.length === 0 && <option value="">No courses available</option>}
+                  {availableCourses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.name || course.title || `Course ${course.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <label htmlFor="title" className="text-sm font-medium">
                 Title
@@ -405,7 +515,7 @@ function CreateThreadDialog({
                   id="tags"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       handleAddTag();
@@ -432,6 +542,8 @@ function CreateThreadDialog({
                 ))}
               </div>
             </div>
+
+            {formError && <p className="text-sm text-destructive">{formError}</p>}
 
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={onClose}>

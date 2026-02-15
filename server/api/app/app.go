@@ -71,10 +71,12 @@ func (a *App) Start() error {
 	a.e.Use(middleware.ValidatorMiddleware())
 
 	a.e.Use(echomid.CORSWithConfig(echomid.CORSConfig{
-		AllowOrigins: a.config.AppConfig.CORSOrigins,
-		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		MaxAge:       3600,
+		AllowOrigins:     a.config.AppConfig.CORSOrigins,
+		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With", "X-Client-Version"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           3600,
 	}))
 
 	a.e.Use(echomid.GzipWithConfig(echomid.GzipConfig{

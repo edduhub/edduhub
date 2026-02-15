@@ -1,57 +1,25 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"eduhub/server/internal/helpers"
+	"eduhub/server/internal/models"
+	"eduhub/server/internal/services/selfservice"
 
 	"github.com/labstack/echo/v4"
 )
 
-// SelfServiceRequest represents a student self-service request
-type SelfServiceRequest struct {
-	ID             int        `json:"id" db:"id"`
-	StudentID      int        `json:"student_id" db:"student_id"`
-	CollegeID      int        `json:"college_id" db:"college_id"`
-	Type           string     `json:"type" db:"type"` // enrollment, schedule, transcript, document
-	Title          string     `json:"title" db:"title"`
-	Description    string     `json:"description" db:"description"`
-	Status         string     `json:"status" db:"status"` // pending, approved, rejected, processing
-	SubmittedAt    time.Time  `json:"submitted_at" db:"submitted_at"`
-	RespondedAt    *time.Time `json:"responded_at,omitempty" db:"responded_at"`
-	Response       *string    `json:"response,omitempty" db:"response"`
-	DocumentType   *string    `json:"document_type,omitempty" db:"document_type"`
-	DeliveryMethod *string    `json:"delivery_method,omitempty" db:"delivery_method"`
-}
-
-// CreateSelfServiceRequestInput represents input for creating a request
-type CreateSelfServiceRequestInput struct {
-	Type           string  `json:"type" validate:"required,oneof=enrollment schedule transcript document"`
-	Title          string  `json:"title" validate:"required,max=200"`
-	Description    string  `json:"description" validate:"required,max=1000"`
-	DocumentType   *string `json:"document_type,omitempty"`
-	DeliveryMethod *string `json:"delivery_method,omitempty"`
-}
-
-// UpdateSelfServiceRequestInput represents input for updating a request
-type UpdateSelfServiceRequestInput struct {
-	Status   string `json:"status" validate:"required,oneof=approved rejected processing"`
-	Response string `json:"response" validate:"required,max=1000"`
-}
-
-// SelfServiceHandler handles student self-service requests
+// SelfServiceHandler handles student self-service requests.
 type SelfServiceHandler struct {
-	// In-memory store for demonstration
-	requests []SelfServiceRequest
+	service selfservice.SelfServiceService
 }
 
-// NewSelfServiceHandler creates a new SelfServiceHandler
-func NewSelfServiceHandler() *SelfServiceHandler {
-	return &SelfServiceHandler{
-		requests: []SelfServiceRequest{},
-	}
+// NewSelfServiceHandler creates a new SelfServiceHandler.
+func NewSelfServiceHandler(service selfservice.SelfServiceService) *SelfServiceHandler {
+	return &SelfServiceHandler{service: service}
 }
 
 // GetMyRequests godoc
@@ -69,18 +37,19 @@ func (h *SelfServiceHandler) GetMyRequests(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
 
-	// Filter requests for this student
-	var studentRequests []SelfServiceRequest
-	for _, req := range h.requests {
-		if req.StudentID == studentID {
-			studentRequests = append(studentRequests, req)
-		}
+	requests, err := h.service.ListStudentRequests(c.Request().Context(), collegeID, studentID)
+	if err != nil {
+		return helpers.Error(c, "Failed to fetch requests", http.StatusInternalServerError)
 	}
 
 	return helpers.Success(c, map[string]interface{}{
-		"requests": studentRequests,
-		"total":    len(studentRequests),
+		"requests": requests,
+		"total":    len(requests),
 	}, http.StatusOK)
 }
 
@@ -91,7 +60,7 @@ func (h *SelfServiceHandler) GetMyRequests(c echo.Context) error {
 // @Accept json
 // @Produce json
 // @Param requestID path int true "Request ID"
-// @Success 200 {object} SelfServiceRequest
+// @Success 200 {object} models.SelfServiceRequest
 // @Failure 401 {object} helpers.ErrorResponse
 // @Failure 403 {object} helpers.ErrorResponse
 // @Failure 404 {object} helpers.ErrorResponse
@@ -101,24 +70,28 @@ func (h *SelfServiceHandler) GetRequest(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
 
 	requestID, err := strconv.Atoi(c.Param("requestID"))
 	if err != nil {
 		return helpers.Error(c, "Invalid request ID", http.StatusBadRequest)
 	}
 
-	// Find the request
-	for _, req := range h.requests {
-		if req.ID == requestID {
-			// Verify ownership
-			if req.StudentID != studentID {
-				return helpers.Error(c, "Access denied", http.StatusForbidden)
-			}
-			return helpers.Success(c, req, http.StatusOK)
+	request, err := h.service.GetStudentRequest(c.Request().Context(), collegeID, studentID, requestID)
+	if err != nil {
+		if errors.Is(err, selfservice.ErrRequestNotFound) {
+			return helpers.NotFound(c, map[string]interface{}{"error": "Request not found"}, http.StatusNotFound)
 		}
+		if errors.Is(err, selfservice.ErrAccessDenied) {
+			return helpers.Error(c, "Access denied", http.StatusForbidden)
+		}
+		return helpers.Error(c, "Failed to fetch request", http.StatusInternalServerError)
 	}
 
-	return helpers.NotFound(c, map[string]interface{}{"error": "Request not found"}, http.StatusNotFound)
+	return helpers.Success(c, request, http.StatusOK)
 }
 
 // CreateRequest godoc
@@ -127,8 +100,8 @@ func (h *SelfServiceHandler) GetRequest(c echo.Context) error {
 // @Tags Self-Service
 // @Accept json
 // @Produce json
-// @Param request body CreateSelfServiceRequestInput true "Request details"
-// @Success 201 {object} SelfServiceRequest
+// @Param request body models.CreateSelfServiceRequestInput true "Request details"
+// @Success 201 {object} models.SelfServiceRequest
 // @Failure 400 {object} helpers.ErrorResponse
 // @Failure 401 {object} helpers.ErrorResponse
 // @Failure 500 {object} helpers.ErrorResponse
@@ -138,39 +111,31 @@ func (h *SelfServiceHandler) CreateRequest(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-
 	collegeID, err := helpers.ExtractCollegeID(c)
 	if err != nil {
 		return err
 	}
 
-	var input CreateSelfServiceRequestInput
+	var input models.CreateSelfServiceRequestInput
 	if err := c.Bind(&input); err != nil {
 		return helpers.Error(c, "Invalid request body", http.StatusBadRequest)
 	}
 
-	// Validate input
-	if input.Type == "" || input.Title == "" || input.Description == "" {
-		return helpers.Error(c, "Type, title, and description are required", http.StatusBadRequest)
-	}
-
-	// Create new request
-	newRequest := SelfServiceRequest{
-		ID:             len(h.requests) + 1,
+	request := &models.SelfServiceRequest{
 		StudentID:      studentID,
 		CollegeID:      collegeID,
 		Type:           input.Type,
 		Title:          input.Title,
 		Description:    input.Description,
-		Status:         "pending",
-		SubmittedAt:    time.Now(),
 		DocumentType:   input.DocumentType,
 		DeliveryMethod: input.DeliveryMethod,
 	}
 
-	h.requests = append(h.requests, newRequest)
+	if err := h.service.CreateStudentRequest(c.Request().Context(), request); err != nil {
+		return helpers.Error(c, err.Error(), http.StatusBadRequest)
+	}
 
-	return helpers.Success(c, newRequest, http.StatusCreated)
+	return helpers.Success(c, request, http.StatusCreated)
 }
 
 // UpdateRequest godoc
@@ -180,40 +145,47 @@ func (h *SelfServiceHandler) CreateRequest(c echo.Context) error {
 // @Accept json
 // @Produce json
 // @Param requestID path int true "Request ID"
-// @Param request body UpdateSelfServiceRequestInput true "Update details"
-// @Success 200 {object} SelfServiceRequest
+// @Param request body models.UpdateSelfServiceRequestInput true "Update details"
+// @Success 200 {object} models.SelfServiceRequest
 // @Failure 400 {object} helpers.ErrorResponse
 // @Failure 401 {object} helpers.ErrorResponse
 // @Failure 403 {object} helpers.ErrorResponse
 // @Failure 404 {object} helpers.ErrorResponse
 // @Router /api/self-service/requests/{requestID} [put]
 func (h *SelfServiceHandler) UpdateRequest(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
 	requestID, err := strconv.Atoi(c.Param("requestID"))
 	if err != nil {
 		return helpers.Error(c, "Invalid request ID", http.StatusBadRequest)
 	}
 
-	var input UpdateSelfServiceRequestInput
+	var input models.UpdateSelfServiceRequestInput
 	if err := c.Bind(&input); err != nil {
 		return helpers.Error(c, "Invalid request body", http.StatusBadRequest)
 	}
 
-	if input.Status == "" || input.Response == "" {
-		return helpers.Error(c, "Status and response are required", http.StatusBadRequest)
+	kratosID, err := helpers.GetKratosID(c)
+	if err != nil {
+		return helpers.Error(c, "Unauthorized", http.StatusUnauthorized)
+	}
+	responderUserID, err := h.service.ResolveUserIDByKratosID(c.Request().Context(), kratosID)
+	if err != nil {
+		return helpers.Error(c, "Unable to resolve admin user", http.StatusUnauthorized)
 	}
 
-	// Find and update the request
-	for i, req := range h.requests {
-		if req.ID == requestID {
-			now := time.Now()
-			h.requests[i].Status = input.Status
-			h.requests[i].Response = &input.Response
-			h.requests[i].RespondedAt = &now
-			return helpers.Success(c, h.requests[i], http.StatusOK)
+	updated, err := h.service.UpdateRequest(c.Request().Context(), collegeID, requestID, responderUserID, input.Status, input.Response)
+	if err != nil {
+		if errors.Is(err, selfservice.ErrRequestNotFound) {
+			return helpers.NotFound(c, map[string]interface{}{"error": "Request not found"}, http.StatusNotFound)
 		}
+		return helpers.Error(c, err.Error(), http.StatusBadRequest)
 	}
 
-	return helpers.NotFound(c, map[string]interface{}{"error": "Request not found"}, http.StatusNotFound)
+	return helpers.Success(c, updated, http.StatusOK)
 }
 
 // GetRequestTypes godoc
@@ -226,38 +198,8 @@ func (h *SelfServiceHandler) UpdateRequest(c echo.Context) error {
 // @Router /api/self-service/types [get]
 func (h *SelfServiceHandler) GetRequestTypes(c echo.Context) error {
 	return helpers.Success(c, map[string]interface{}{
-		"types": []map[string]interface{}{
-			{
-				"id":          "enrollment",
-				"name":        "Course Enrollment",
-				"description": "Request to enroll in a course",
-			},
-			{
-				"id":          "schedule",
-				"name":        "Schedule Change",
-				"description": "Request to change your class schedule",
-			},
-			{
-				"id":          "transcript",
-				"name":        "Official Transcript",
-				"description": "Request official academic transcripts",
-			},
-			{
-				"id":          "document",
-				"name":        "Document Request",
-				"description": "Request other academic documents",
-			},
-		},
-		"documentTypes": []map[string]interface{}{
-			{"id": "transcript", "name": "Official Transcript"},
-			{"id": "certificate", "name": "Enrollment Certificate"},
-			{"id": "id_card", "name": "ID Card Replacement"},
-			{"id": "other", "name": "Other Document"},
-		},
-		"deliveryMethods": []map[string]interface{}{
-			{"id": "pickup", "name": "In-Person Pickup"},
-			{"id": "email", "name": "Email (Digital Copy)"},
-			{"id": "postal", "name": "Postal Mail"},
-		},
+		"types":           h.service.RequestTypes(),
+		"documentTypes":   h.service.DocumentTypes(),
+		"deliveryMethods": h.service.DeliveryMethods(),
 	}, http.StatusOK)
 }

@@ -3,11 +3,13 @@ package handler
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"eduhub/server/internal/helpers"
+	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
 	"eduhub/server/internal/services/assignment"
 	"eduhub/server/internal/services/attendance"
@@ -154,12 +156,25 @@ func (h *ParentHandler) GetChildDashboard(c echo.Context) error {
 	}
 
 	// Return basic student info
+	attendanceRecords, _ := h.attendanceService.GetAttendanceByStudent(c.Request().Context(), collegeID, studentID, 1000, 0)
+	attendanceRate := calculateAttendanceRate(attendanceRecords)
+
+	grades, _ := h.gradesService.GetGradesByStudent(c.Request().Context(), collegeID, studentID)
+	averageGrade := calculateAverageGrade(grades)
+
+	pendingAssignments, err := h.getPendingAssignmentCount(c.Request().Context(), collegeID, studentID)
+	if err != nil {
+		return helpers.Error(c, "Failed to compute dashboard metrics", http.StatusInternalServerError)
+	}
+
 	return helpers.Success(c, map[string]interface{}{
 		"student": student,
 		"metrics": map[string]interface{}{
 			"enrolledCourses":    len(student.Enrollments),
-			"attendanceRate":     0,
-			"pendingAssignments": 0,
+			"attendanceRate":     attendanceRate,
+			"pendingAssignments": pendingAssignments,
+			"averageGrade":       averageGrade,
+			"assessmentsCount":   len(grades),
 		},
 	}, http.StatusOK)
 }
@@ -426,4 +441,57 @@ func (h *ParentHandler) getLinkedStudentIDSet(ctx context.Context, collegeID, pa
 		return nil, rows.Err()
 	}
 	return ids, nil
+}
+
+func (h *ParentHandler) getPendingAssignmentCount(ctx context.Context, collegeID, studentID int) (int, error) {
+	var count int
+	err := h.db.Pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM assignments a
+		JOIN enrollments e
+		  ON e.course_id = a.course_id
+		 AND e.college_id = a.college_id
+		 AND e.student_id = $2
+		LEFT JOIN assignment_submissions s
+		  ON s.assignment_id = a.id
+		 AND s.student_id = $2
+		WHERE a.college_id = $1
+		  AND s.id IS NULL
+		  AND a.due_date >= NOW()`,
+		collegeID, studentID,
+	).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func calculateAttendanceRate(records []*models.Attendance) float64 {
+	if len(records) == 0 {
+		return 0
+	}
+
+	present := 0
+	for _, record := range records {
+		if strings.EqualFold(record.Status, "present") {
+			present++
+		}
+	}
+
+	rate := (float64(present) / float64(len(records))) * 100
+	return math.Round(rate*100) / 100
+}
+
+func calculateAverageGrade(grades []*models.Grade) float64 {
+	if len(grades) == 0 {
+		return 0
+	}
+
+	total := 0.0
+	for _, grade := range grades {
+		total += grade.Percentage
+	}
+
+	avg := total / float64(len(grades))
+	return math.Round(avg*100) / 100
 }

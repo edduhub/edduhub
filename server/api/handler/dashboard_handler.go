@@ -121,7 +121,8 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 			upcomingEvents = append(upcomingEvents, map[string]interface{}{
 				"id":     event.ID,
 				"title":  event.Title,
-				"start":  event.Date,
+				"start":  event.StartTime,
+				"end":    event.EndTime,
 				"course": event.Description,
 			})
 		}
@@ -384,7 +385,8 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 				"id":          event.ID,
 				"title":       event.Title,
 				"description": event.Description,
-				"date":        event.Date,
+				"start":       event.StartTime,
+				"end":         event.EndTime,
 				"eventType":   event.EventType,
 			})
 		}

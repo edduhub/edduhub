@@ -5,6 +5,7 @@ import (
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
 	"errors"
+	"strings"
 )
 
 type ForumService interface {
@@ -29,9 +30,21 @@ func NewForumService(forumRepo repository.ForumRepository) ForumService {
 }
 
 func (s *forumService) CreateThread(ctx context.Context, thread *models.ForumThread) error {
+	thread.Title = strings.TrimSpace(thread.Title)
+	thread.Content = strings.TrimSpace(thread.Content)
 	if thread.Title == "" || thread.Content == "" {
 		return errors.New("title and content are required")
 	}
+	if thread.CourseID <= 0 {
+		return errors.New("course_id is required")
+	}
+	if thread.Category == "" {
+		thread.Category = models.CategoryGeneral
+	}
+	if !thread.Category.IsValid() {
+		return errors.New("invalid category")
+	}
+	thread.Tags = sanitizeTags(thread.Tags)
 	return s.forumRepo.CreateThread(ctx, thread)
 }
 
@@ -87,6 +100,7 @@ func (s *forumService) DeleteThread(ctx context.Context, collegeID, threadID int
 }
 
 func (s *forumService) CreateReply(ctx context.Context, reply *models.ForumReply) error {
+	reply.Content = strings.TrimSpace(reply.Content)
 	if reply.Content == "" {
 		return errors.New("reply content cannot be empty")
 	}
@@ -127,4 +141,25 @@ func (s *forumService) MarkAnswer(ctx context.Context, collegeID, threadID, repl
 		return errors.New("only thread author can mark accepted answer")
 	}
 	return s.forumRepo.MarkAnswer(ctx, collegeID, threadID, replyID)
+}
+
+func sanitizeTags(tags []string) []string {
+	if len(tags) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(tags))
+	result := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, exists := seen[lower]; exists {
+			continue
+		}
+		seen[lower] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
 }

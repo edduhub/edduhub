@@ -2,6 +2,7 @@
 
 import { AuthSession, ValidationError, Quiz, Profile, User } from './types';
 import { APIError as CustomAPIError } from './errors';
+import { logger } from './logger';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const AUTH_STORAGE_KEY = 'edduhub_auth';
@@ -15,7 +16,8 @@ function getAuthToken(): string | null {
   try {
     const session = JSON.parse(auth) as AuthSession;
     return session.token;
-  } catch {
+  } catch (err) {
+    logger.error('Failed to parse auth token', err as Error);
     return null;
   }
 }
@@ -141,7 +143,8 @@ export async function apiClient<T>(
           details = errorData.details;
           validationErrors = errorData.validationErrors;
         }
-      } catch {
+      } catch (err) {
+        logger.error('Failed to parse error response', err as Error);
         message = response.statusText || message;
       }
 
@@ -211,6 +214,7 @@ export const endpoints = {
     logout: '/auth/logout',
     refresh: '/auth/refresh',
     profile: '/api/profile',
+    changePassword: '/auth/change-password',
   },
 
   // Students
@@ -245,7 +249,8 @@ export const endpoints = {
     update: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}`,
     delete: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}`,
     submit: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}/submit`,
-    grade: (submissionId: number) => `/api/courses/0/assignments/submissions/${submissionId}/grade`,
+    grade: (courseId: number, submissionId: number) =>
+      `/api/courses/${courseId}/assignments/submissions/${submissionId}/grade`,
   },
 
   // Attendance
@@ -430,6 +435,55 @@ export const endpoints = {
     companyStats: '/api/placements/company-stats',
     company: (name: string) => `/api/placements/company/${name}`,
     studentPlacements: (studentId: number) => `/api/students/${studentId}/placements`,
+  },
+
+  // Exams
+  exams: {
+    list: '/api/exams',
+    get: (examId: number) => `/api/exams/${examId}`,
+    create: '/api/exams',
+    update: (examId: number) => `/api/exams/${examId}`,
+    delete: (examId: number) => `/api/exams/${examId}`,
+    stats: (examId: number) => `/api/exams/${examId}/stats`,
+    results: (examId: number) => `/api/exams/${examId}/results`,
+    studentResult: (examId: number, studentId: number) => `/api/exams/${examId}/results/${studentId}`,
+    studentResults: (studentId: number) => `/api/students/${studentId}/exam-results`,
+  },
+
+  // Exam Rooms
+  examRooms: {
+    list: '/api/exam-rooms',
+    create: '/api/exam-rooms',
+    get: (roomId: number) => `/api/exam-rooms/${roomId}`,
+    update: (roomId: number) => `/api/exam-rooms/${roomId}`,
+    delete: (roomId: number) => `/api/exam-rooms/${roomId}`,
+    availability: (roomId: number) => `/api/exam-rooms/${roomId}/availability`,
+  },
+
+  // Revaluation
+  revaluation: {
+    list: '/api/revaluation-requests',
+    create: '/api/revaluation-requests',
+    approve: (requestId: number) => `/api/revaluation-requests/${requestId}/approve`,
+    reject: (requestId: number) => `/api/revaluation-requests/${requestId}/reject`,
+  },
+
+  // Self-Service
+  selfService: {
+    requests: '/api/self-service/requests',
+    request: (requestId: number) => `/api/self-service/requests/${requestId}`,
+    types: '/api/self-service/types',
+  },
+
+  // Faculty Tools
+  facultyTools: {
+    rubrics: '/api/faculty-tools/rubrics',
+    rubric: (rubricId: number) => `/api/faculty-tools/rubrics/${rubricId}`,
+    officeHours: '/api/faculty-tools/office-hours',
+    officeHour: (officeHourId: number) => `/api/faculty-tools/office-hours/${officeHourId}`,
+    bookings: '/api/faculty-tools/bookings',
+    bookingStatus: (bookingId: number) => `/api/faculty-tools/bookings/${bookingId}/status`,
+    officeHourBookings: (officeHourId: number) => `/api/faculty-tools/office-hours/${officeHourId}/bookings`,
   },
 
   // Forum

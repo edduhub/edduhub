@@ -34,12 +34,12 @@ func NewProfileHandler(profileService profile.ProfileService, auditService audit
 
 // GetUserProfile retrieves the current user's profile
 func (h *ProfileHandler) GetUserProfile(c echo.Context) error {
-	userID, err := helpers.ExtractUserID(c)
+	kratosID, err := helpers.GetKratosID(c)
 	if err != nil {
 		return helpers.Error(c, "user ID required", 401)
 	}
 
-	profileData, err := h.profileService.GetProfileByUserID(c.Request().Context(), userID)
+	profileData, err := h.profileService.GetProfileByKratosID(c.Request().Context(), kratosID)
 	if err != nil {
 		return helpers.Error(c, "profile not found", 404)
 	}
@@ -354,14 +354,14 @@ func (h *ProfileHandler) UpdateUserProfile(c echo.Context) error {
 
 	// Log audit event
 	auditLog := &models.AuditLog{
-		CollegeID: collegeID,
-		UserID:    userID,
-		Action:    "UPDATE",
+		CollegeID:  collegeID,
+		UserID:     userID,
+		Action:     "UPDATE",
 		EntityType: "profile",
-		EntityID:  currentProfile.ID,
-		Changes:   map[string]interface{}{"updated_fields": getUpdatedFields(&req)},
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
+		EntityID:   currentProfile.ID,
+		Changes:    map[string]interface{}{"updated_fields": getUpdatedFields(&req)},
+		IPAddress:  ipAddress,
+		UserAgent:  userAgent,
 	}
 
 	if err := h.auditService.LogAction(c.Request().Context(), auditLog); err != nil {

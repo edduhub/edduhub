@@ -42,6 +42,7 @@ type Handlers struct {
 	Forum             *ForumHandler
 	Parent            *ParentHandler
 	SelfService       *SelfServiceHandler
+	FacultyTools      *FacultyToolsHandler
 	Settings          *SettingsHandler
 }
 
@@ -101,7 +102,8 @@ func NewHandlers(services *services.Services) *Handlers {
 			services.EmailService,
 			services.DB,
 		),
-		SelfService: NewSelfServiceHandler(),
-		Settings:    NewSettingsHandler(services.SettingsService),
+		SelfService:  NewSelfServiceHandler(services.SelfServiceService),
+		FacultyTools: NewFacultyToolsHandler(services.FacultyToolsService),
+		Settings:     NewSettingsHandler(services.SettingsService),
 	}
 }

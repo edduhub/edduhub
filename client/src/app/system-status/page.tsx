@@ -22,12 +22,23 @@ type ServiceStatus = {
   lastChecked: string;
 };
 
+type EndpointProbe = {
+  path: string;
+  method: 'GET';
+  status: 'healthy' | 'unhealthy' | 'unknown';
+  responseTimeMs?: number;
+};
+
 export default function SystemStatusPage() {
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [healthResponseMs, setHealthResponseMs] = useState<number | null>(null);
+  const [readinessStatus, setReadinessStatus] = useState<'healthy' | 'unhealthy' | 'unknown'>('unknown');
+  const [livenessStatus, setLivenessStatus] = useState<'healthy' | 'unhealthy' | 'unknown'>('unknown');
+  const [endpointProbes, setEndpointProbes] = useState<EndpointProbe[]>([]);
 
   useEffect(() => {
     fetchHealthStatus();
@@ -48,17 +59,77 @@ export default function SystemStatusPage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/system/health`, {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+      const healthStart = performance.now();
+      const response = await fetch(`${apiBase}/health`, {
         method: 'GET',
         credentials: 'include',
       });
+      const healthElapsed = Math.round(performance.now() - healthStart);
+      setHealthResponseMs(healthElapsed);
 
       const result = await response.json();
       setHealthStatus(result.data || result);
       setLastRefresh(new Date());
+
+      const runProbe = async (path: string, expectedStatus: string) => {
+        const start = performance.now();
+        try {
+          const probeResponse = await fetch(`${apiBase}${path}`, {
+            method: 'GET',
+            credentials: 'include',
+          });
+          const duration = Math.round(performance.now() - start);
+          const probeJson = await probeResponse.json().catch(() => ({}));
+          const probeStatus = probeJson?.data?.status || probeJson?.status;
+          const isHealthy = probeResponse.ok && probeStatus === expectedStatus;
+
+          return {
+            path,
+            method: 'GET' as const,
+            status: (isHealthy ? 'healthy' : 'unhealthy') as EndpointProbe['status'],
+            responseTimeMs: duration,
+          };
+        } catch {
+          const duration = Math.round(performance.now() - start);
+          return {
+            path,
+            method: 'GET' as const,
+            status: 'unhealthy' as const,
+            responseTimeMs: duration,
+          };
+        }
+      };
+
+      const [readinessProbe, livenessProbe] = await Promise.all([
+        runProbe('/ready', 'ready'),
+        runProbe('/alive', 'alive'),
+      ]);
+
+      setReadinessStatus(readinessProbe.status);
+      setLivenessStatus(livenessProbe.status);
+      setEndpointProbes([
+        {
+          path: '/health',
+          method: 'GET',
+          status: response.ok ? 'healthy' : 'unhealthy',
+          responseTimeMs: healthElapsed,
+        },
+        readinessProbe,
+        livenessProbe,
+      ]);
     } catch (error) {
       logger.error('Failed to fetch health status:', error instanceof Error ? error : new Error(String(error)));
       setError('Failed to fetch system health status');
+      setHealthResponseMs(null);
+      setReadinessStatus('unknown');
+      setLivenessStatus('unknown');
+      setEndpointProbes([
+        { path: '/health', method: 'GET', status: 'unknown' },
+        { path: '/ready', method: 'GET', status: 'unknown' },
+        { path: '/alive', method: 'GET', status: 'unknown' },
+      ]);
       setHealthStatus({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
@@ -105,6 +176,18 @@ export default function SystemStatusPage() {
       name: 'Database',
       status: healthStatus?.database === 'connected' ? 'healthy' : healthStatus?.database ? 'unhealthy' : 'unknown',
       message: healthStatus?.database || 'Database status unknown',
+      lastChecked: healthStatus?.timestamp || new Date().toISOString(),
+    },
+    {
+      name: 'Readiness Probe',
+      status: readinessStatus,
+      message: readinessStatus === 'healthy' ? 'Service is ready to receive traffic' : 'Readiness check failed',
+      lastChecked: healthStatus?.timestamp || new Date().toISOString(),
+    },
+    {
+      name: 'Liveness Probe',
+      status: livenessStatus,
+      message: livenessStatus === 'healthy' ? 'Service process is alive' : 'Liveness check failed',
       lastChecked: healthStatus?.timestamp || new Date().toISOString(),
     },
   ];
@@ -177,27 +260,27 @@ export default function SystemStatusPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Server className="h-4 w-4" />
-              Uptime
+              API Health
             </CardTitle>
-            <div className="text-2xl font-bold">99.9%</div>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Cpu className="h-4 w-4" />
-              CPU Usage
-            </CardTitle>
-            <div className="text-2xl font-bold">32%</div>
+            <div className="text-2xl font-bold capitalize">{systemStatus}</div>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <HardDrive className="h-4 w-4" />
-              Memory Usage
+              Database
             </CardTitle>
-            <div className="text-2xl font-bold">58%</div>
+            <div className="text-2xl font-bold capitalize">{healthStatus?.database || 'unknown'}</div>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Cpu className="h-4 w-4" />
+              Readiness
+            </CardTitle>
+            <div className="text-2xl font-bold capitalize">{readinessStatus}</div>
           </CardHeader>
         </Card>
         <Card>
@@ -206,7 +289,7 @@ export default function SystemStatusPage() {
               <Clock className="h-4 w-4" />
               Response Time
             </CardTitle>
-            <div className="text-2xl font-bold">45ms</div>
+            <div className="text-2xl font-bold">{healthResponseMs !== null ? `${healthResponseMs}ms` : 'N/A'}</div>
           </CardHeader>
         </Card>
       </div>
@@ -288,18 +371,20 @@ export default function SystemStatusPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2 font-mono text-sm">
-            <div className="flex justify-between p-2 rounded bg-muted">
-              <span>/api/system/health</span>
-              <Badge variant="outline">GET</Badge>
-            </div>
-            <div className="flex justify-between p-2 rounded bg-muted">
-              <span>/api/system/readiness</span>
-              <Badge variant="outline">GET</Badge>
-            </div>
-            <div className="flex justify-between p-2 rounded bg-muted">
-              <span>/api/system/liveness</span>
-              <Badge variant="outline">GET</Badge>
-            </div>
+            {endpointProbes.map((probe) => (
+              <div key={probe.path} className="flex items-center justify-between rounded bg-muted p-2">
+                <span>{probe.path}</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{probe.method}</Badge>
+                  <Badge className={probe.status === 'healthy' ? 'bg-green-100 text-green-800' : probe.status === 'unhealthy' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}>
+                    {probe.status}
+                  </Badge>
+                  <Badge variant="outline">
+                    {probe.responseTimeMs !== undefined ? `${probe.responseTimeMs}ms` : '--'}
+                  </Badge>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

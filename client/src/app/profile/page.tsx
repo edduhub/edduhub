@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { api, endpoints, fetchProfile } from "@/lib/api-client";
 import { Profile } from "@/lib/types";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Camera, Mail, Calendar, Edit2 } from "lucide-react";
+import { Camera, Mail, Calendar, Edit2, Loader2 } from "lucide-react";
 import { logger } from '@/lib/logger';
 
 type ApiProfile = {
@@ -24,9 +24,23 @@ type ApiProfile = {
 
 type UpdateProfilePayload = {
   bio?: string;
-  phoneNumber?: string;
+  phone_number?: string;
   address?: string;
-  dateOfBirth?: string;
+  date_of_birth?: string;
+};
+
+type StudentDashboardApi = {
+  student?: {
+    semester?: number;
+    department?: number;
+    departmentName?: string;
+    department_name?: string;
+  };
+  academicOverview?: {
+    gpa?: number;
+    enrolledCourses?: number;
+    enrolled_courses?: number;
+  };
 };
 
 const formatDateForInput = (value?: string) => {
@@ -43,7 +57,17 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
-  const [, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileImageUrl, setProfileImageUrl] = useState("");
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [academicInfo, setAcademicInfo] = useState({
+    department: "N/A",
+    semester: "N/A",
+    gpa: "N/A",
+    enrolledCourses: "N/A",
+  });
   const [profileData, setProfileData] = useState({
     firstName: user?.firstName || "",
     lastName: user?.lastName || "",
@@ -62,6 +86,7 @@ export default function ProfilePage() {
         const data = await fetchProfile();
         setProfile(data);
         const apiProfile = data as Profile & ApiProfile;
+        setProfileImageUrl(apiProfile.profile_image || user?.avatar || "");
         setProfileData({
           firstName: user?.firstName || "",
           lastName: user?.lastName || "",
@@ -71,6 +96,34 @@ export default function ProfilePage() {
           address: apiProfile.address || "",
           bio: apiProfile.bio || ""
         });
+
+        if (user?.role === "student") {
+          try {
+            const dashboard = await api.get<StudentDashboardApi>("/api/student/dashboard");
+            const semester = dashboard?.student?.semester;
+            const department =
+              dashboard?.student?.departmentName ||
+              dashboard?.student?.department_name ||
+              (dashboard?.student?.department ? `Department ${dashboard.student.department}` : undefined);
+            const gpa = dashboard?.academicOverview?.gpa;
+            const enrolledCourses = dashboard?.academicOverview?.enrolledCourses ?? dashboard?.academicOverview?.enrolled_courses;
+
+            setAcademicInfo({
+              department: department || "N/A",
+              semester: typeof semester === "number" ? String(semester) : "N/A",
+              gpa: typeof gpa === "number" ? gpa.toFixed(2) : "N/A",
+              enrolledCourses: typeof enrolledCourses === "number" ? String(enrolledCourses) : "N/A",
+            });
+          } catch (dashboardError) {
+            logger.warn("Failed to load student academic info for profile:", { error: dashboardError });
+            setAcademicInfo({
+              department: "N/A",
+              semester: "N/A",
+              gpa: "N/A",
+              enrolledCourses: "N/A",
+            });
+          }
+        }
       } catch (err) {
         logger.error('Error occurred', err as Error);
         setError("Failed to load profile");
@@ -89,12 +142,15 @@ export default function ProfilePage() {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
 
       const payload: UpdateProfilePayload = {
         bio: profileData.bio || undefined,
-        phoneNumber: profileData.phone || undefined,
+        phone_number: profileData.phone || undefined,
         address: profileData.address || undefined,
-        dateOfBirth: profileData.dateOfBirth || undefined,
+        date_of_birth: profileData.dateOfBirth
+          ? new Date(`${profileData.dateOfBirth}T00:00:00Z`).toISOString()
+          : undefined,
       };
 
       await api.patch(endpoints.auth.profile, payload);
@@ -111,11 +167,75 @@ export default function ProfilePage() {
       }));
 
       setIsEditing(false);
+      setSuccess("Profile updated successfully");
     } catch (err) {
       logger.error('Error occurred', err as Error);
       setError("Failed to update profile");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetFormFromProfile = () => {
+    const apiProfile = profile as (Profile & ApiProfile) | null;
+    setProfileData({
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      email: user?.email || "",
+      phone: apiProfile?.phone_number || "",
+      dateOfBirth: formatDateForInput(apiProfile?.date_of_birth),
+      address: apiProfile?.address || "",
+      bio: apiProfile?.bio || "",
+    });
+  };
+
+  const handleCancelEdit = () => {
+    resetFormFromProfile();
+    setIsEditing(false);
+  };
+
+  const handleProfileImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingImage(true);
+      setError(null);
+      setSuccess(null);
+
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/profile/upload-image`,
+        {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = result?.error || result?.message || "Failed to upload profile image";
+        throw new Error(message);
+      }
+
+      const imageUrl = result?.data?.url || result?.url;
+      if (typeof imageUrl === "string" && imageUrl.length > 0) {
+        setProfileImageUrl(imageUrl);
+        setProfile((prev) => (prev ? { ...prev, profile_image: imageUrl } : prev));
+      }
+
+      setSuccess("Profile image updated successfully");
+    } catch (uploadError) {
+      logger.error("Failed to upload profile image", uploadError as Error);
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload profile image");
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) {
+        imageInputRef.current.value = "";
+      }
     }
   };
 
@@ -141,6 +261,16 @@ export default function ProfilePage() {
           Manage your personal information
         </p>
       </div>
+      {error && (
+        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-700">
+          {success}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
         <Card>
@@ -148,16 +278,25 @@ export default function ProfilePage() {
             <div className="flex flex-col items-center space-y-4">
               <div className="relative">
                 <Avatar className="h-32 w-32">
-                  <AvatarImage src={user?.avatar} />
+                  <AvatarImage src={profileImageUrl || user?.avatar} />
                   <AvatarFallback className="text-2xl">{userInitials}</AvatarFallback>
                 </Avatar>
                 <Button
                   size="icon"
                   variant="outline"
                   className="absolute bottom-0 right-0 rounded-full"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={uploadingImage}
                 >
-                  <Camera className="h-4 w-4" />
+                  {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                 </Button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleProfileImageUpload}
+                />
               </div>
               <div className="text-center space-y-1">
                 <h2 className="text-xl font-bold">
@@ -214,7 +353,7 @@ export default function ProfilePage() {
                   id="firstName"
                   value={profileData.firstName}
                   onChange={(e) => setProfileData(prev => ({ ...prev, firstName: e.target.value }))}
-                  disabled={!isEditing}
+                  disabled
                 />
               </div>
               <div className="space-y-2">
@@ -223,7 +362,7 @@ export default function ProfilePage() {
                   id="lastName"
                   value={profileData.lastName}
                   onChange={(e) => setProfileData(prev => ({ ...prev, lastName: e.target.value }))}
-                  disabled={!isEditing}
+                  disabled
                 />
               </div>
             </div>
@@ -235,7 +374,7 @@ export default function ProfilePage() {
                 type="email"
                 value={profileData.email}
                 onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
-                disabled={!isEditing}
+                disabled
               />
             </div>
 
@@ -284,7 +423,7 @@ export default function ProfilePage() {
 
             {isEditing && (
               <div className="flex justify-end gap-4">
-                <Button variant="outline" onClick={() => setIsEditing(false)} disabled={loading}>
+                <Button variant="outline" onClick={handleCancelEdit} disabled={loading}>
                   Cancel
                 </Button>
                 <Button onClick={handleSave} disabled={loading}>
@@ -303,22 +442,26 @@ export default function ProfilePage() {
             <CardDescription>Your academic details</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">College ID</p>
                 <p className="font-medium">{profile?.college_id || user.collegeId}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Department</p>
-                <p className="font-medium">N/A</p>
+                <p className="font-medium">{academicInfo.department}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Semester</p>
-                <p className="font-medium">N/A</p>
+                <p className="font-medium">{academicInfo.semester}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">GPA</p>
-                <p className="font-medium">N/A</p>
+                <p className="font-medium">{academicInfo.gpa}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Enrolled Courses</p>
+                <p className="font-medium">{academicInfo.enrolledCourses}</p>
               </div>
             </div>
           </CardContent>

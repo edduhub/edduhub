@@ -39,6 +39,7 @@ export default function RegisterPage() {
     confirmPassword: '',
     firstName: '',
     lastName: '',
+    rollNo: '',
     role: 'student',
     collegeId: '',
     collegeName: '',
@@ -91,6 +92,9 @@ export default function RegisterPage() {
     if (!formData.collegeName.trim()) {
       errors.collegeName = 'College name is required';
     }
+    if (!formData.rollNo.trim()) {
+      errors.rollNo = 'Roll number is required';
+    }
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -115,6 +119,7 @@ export default function RegisterPage() {
         role: formData.role,
         collegeId: formData.collegeId,
         collegeName: formData.collegeName,
+        rollNo: formData.rollNo,
       });
       router.push('/');
     } catch (err: unknown) {
@@ -275,6 +280,25 @@ export default function RegisterPage() {
                 <option value="faculty">Faculty</option>
                 <option value="admin">Admin</option>
               </select>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="rollNo" className="text-sm font-medium">
+                Roll Number
+              </label>
+              <Input
+                id="rollNo"
+                name="rollNo"
+                type="text"
+                placeholder="STU001"
+                value={formData.rollNo}
+                onChange={handleChange}
+                required
+                disabled={isLoading}
+              />
+              {fieldErrors.rollNo && (
+                <p className="text-sm text-destructive">{fieldErrors.rollNo}</p>
+              )}
             </div>
 
             <Button

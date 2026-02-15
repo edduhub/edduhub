@@ -58,11 +58,12 @@ export default function AuditLogsPage() {
   const [stats, setStats] = useState<AuditStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 
   // Filters
   const [filters, setFilters] = useState({
-    action: "",
-    entity: "",
+    action: "all",
+    entity: "all",
     user_id: "",
     search: "",
   });
@@ -81,8 +82,8 @@ export default function AuditLogsPage() {
       params.append('limit', limit.toString());
       params.append('offset', ((page - 1) * limit).toString());
 
-      if (filters.action) params.append('action', filters.action);
-      if (filters.entity) params.append('entity', filters.entity);
+      if (filters.action && filters.action !== "all") params.append('action', filters.action);
+      if (filters.entity && filters.entity !== "all") params.append('entity', filters.entity);
       if (filters.user_id) params.append('user_id', filters.user_id);
 
       const response = await api.get(`/api/audit/logs?${params.toString()}`);
@@ -118,8 +119,8 @@ export default function AuditLogsPage() {
 
   const clearFilters = () => {
     setFilters({
-      action: "",
-      entity: "",
+      action: "all",
+      entity: "all",
       user_id: "",
       search: "",
     });
@@ -226,7 +227,7 @@ export default function AuditLogsPage() {
                   <SelectValue placeholder="All actions" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All actions</SelectItem>
+                  <SelectItem value="all">All actions</SelectItem>
                   {ACTION_TYPES.map((action) => (
                     <SelectItem key={action} value={action}>
                       {action}
@@ -242,7 +243,7 @@ export default function AuditLogsPage() {
                   <SelectValue placeholder="All entities" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All entities</SelectItem>
+                  <SelectItem value="all">All entities</SelectItem>
                   {ENTITY_TYPES.map((entity) => (
                     <SelectItem key={entity} value={entity}>
                       {entity}
@@ -332,7 +333,7 @@ export default function AuditLogsPage() {
                       <TableCell className="font-mono text-xs">{log.ip_address}</TableCell>
                       <TableCell>
                         {log.changes ? (
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedLog(log)}>
                             View Changes
                           </Button>
                         ) : (
@@ -369,6 +370,22 @@ export default function AuditLogsPage() {
                   </Button>
                 </div>
               </div>
+
+              {selectedLog && (
+                <div className="mt-4 rounded-lg border bg-muted/20 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="font-semibold">
+                      Changes for log #{selectedLog.id}
+                    </h3>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedLog(null)}>
+                      Close
+                    </Button>
+                  </div>
+                  <pre className="max-h-72 overflow-auto rounded-md bg-background p-3 text-xs">
+                    {JSON.stringify(selectedLog.changes, null, 2)}
+                  </pre>
+                </div>
+              )}
             </>
           )}
         </CardContent>

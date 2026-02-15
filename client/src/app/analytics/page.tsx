@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAnalyticsDashboard, useAttendanceTrends } from "@/lib/api-hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,8 +17,10 @@ import {
   AlertTriangle,
   CheckCircle,
   Download,
+  Loader2,
   Calendar,
 } from "lucide-react";
+import { logger } from "@/lib/logger";
 import type {
   PerformanceMetrics,
   AttendanceTrend,
@@ -27,6 +30,8 @@ import type {
 } from "@/lib/types";
 
 export default function StudentAnalyticsPage() {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const { data: dashboardData, isLoading: dashboardLoading } = useAnalyticsDashboard();
   const { data: attendanceData, isLoading: attendanceLoading } = useAttendanceTrends();
 
@@ -130,6 +135,42 @@ export default function StudentAnalyticsPage() {
     { date: "2024-03-15", score: 85, percentile: 75 },
   ];
 
+  const handleExportReport = () => {
+    try {
+      setIsExporting(true);
+      setExportError(null);
+
+      const report = {
+        generated_at: new Date().toISOString(),
+        metrics: {
+          average_score: performanceData?.averageScore ?? 0,
+          attendance_rate: learningAnalytics?.engagementRate ?? 0,
+          completion_rate: learningAnalytics?.completionRate ?? 0,
+          assessments: performanceData?.totalAssessments ?? 0,
+        },
+        predictive_insights: predictiveInsights,
+        attendance_trends: attendanceTrends,
+        performance_trends: performanceTrends,
+      };
+
+      const content = JSON.stringify(report, null, 2);
+      const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `student-analytics-report-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      logger.error("Failed to export analytics report", err as Error);
+      setExportError("Failed to export report");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -152,11 +193,16 @@ export default function StudentAnalyticsPage() {
               Track your academic performance and learning progress
             </p>
           </div>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" />
+          <Button variant="outline" onClick={handleExportReport} disabled={isExporting}>
+            {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
             Export Report
           </Button>
         </div>
+        {exportError && (
+          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {exportError}
+          </div>
+        )}
 
         {/* Predictive Insights */}
         {predictiveInsights.length > 0 && (

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useParentChildren, useParentChildGrades, useParentChildAttendance, useParentChildAssignments } from '@/lib/api-hooks';
-import { useAnnouncements } from '@/lib/api-hooks';
+import { useRouter } from 'next/navigation';
+import { useParentChildren, useParentChildGrades, useParentChildAttendance, useParentChildAssignments, useAnnouncements } from '@/lib/api-hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,6 +20,7 @@ import {
 import type { Student, Announcement } from '@/lib/types';
 
 export default function ParentDashboard() {
+  const router = useRouter();
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const { data: students = [], isLoading: studentsLoading } = useParentChildren();
   const { data: announcements = [] } = useAnnouncements();
@@ -50,7 +51,7 @@ export default function ParentDashboard() {
             <h1 className="text-3xl font-bold">Parent Portal</h1>
             <p className="text-muted-foreground mt-1">Monitor your child&apos;s academic progress</p>
           </div>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => router.push('/notifications')}>
             <Bell className="w-4 h-4 mr-2" />
             Notifications
           </Button>
@@ -187,7 +188,13 @@ export default function ParentDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button>Contact Administration</Button>
+              <Button
+                onClick={() => {
+                  window.location.href = "mailto:admin@edduhub.edu?subject=Parent%20Portal%20Account%20Linking%20Request";
+                }}
+              >
+                Contact Administration
+              </Button>
             </CardContent>
           </Card>
         )}
