@@ -86,14 +86,14 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 		return helpers.Error(c, "unable to complete registration: "+err.Error(), http.StatusBadRequest)
 	}
 
-	userIDValue := interface{}(identity.ID)
+	userIDValue := any(identity.ID)
 	if identity.UserID > 0 {
 		userIDValue = identity.UserID
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"token": token,
-		"user": map[string]interface{}{
+		"user": map[string]any{
 			"id":          userIDValue,
 			"kratosId":    identity.ID,
 			"email":       identity.Traits.Email,
@@ -127,15 +127,15 @@ func (h *AuthHandler) HandleLogin(c echo.Context) error {
 	// Calculate expiration time (24 hours from now as per JWT manager)
 	expiresAt := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 
-	userIDValue := interface{}(identity.ID)
+	userIDValue := any(identity.ID)
 	if identity.UserID > 0 {
 		userIDValue = identity.UserID
 	}
 
 	// Return token and user info
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"token": token,
-		"user": map[string]interface{}{
+		"user": map[string]any{
 			"id":          userIDValue,
 			"kratosId":    identity.ID,
 			"email":       identity.Traits.Email,

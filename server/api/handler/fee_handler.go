@@ -37,7 +37,7 @@ func (h *FeeHandler) CreateFeeStructure(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create fee structure: "+err.Error())
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]any{
 		"message": "Fee structure created successfully",
 		"data":    feeStructure,
 	})
@@ -55,7 +55,7 @@ func (h *FeeHandler) ListFeeStructures(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to list fee structures: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": fees,
 	})
 }
@@ -77,7 +77,7 @@ func (h *FeeHandler) UpdateFeeStructure(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to update fee structure: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Fee structure updated successfully",
 	})
 }
@@ -94,7 +94,7 @@ func (h *FeeHandler) DeleteFeeStructure(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete fee structure: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Fee structure deleted successfully",
 	})
 }
@@ -111,7 +111,7 @@ func (h *FeeHandler) AssignFeeToStudent(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to assign fee: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Fee assigned to student successfully",
 	})
 }
@@ -126,7 +126,7 @@ func (h *FeeHandler) BulkAssignFee(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to bulk assign fee: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Fee assigned to students successfully",
 	})
 }
@@ -139,7 +139,7 @@ func (h *FeeHandler) GetStudentFees(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get student fees: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": assignments,
 	})
 }
@@ -152,7 +152,7 @@ func (h *FeeHandler) GetStudentFeesSummary(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get fees summary: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": summary,
 	})
 }
@@ -173,7 +173,7 @@ func (h *FeeHandler) MakeFeePayment(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to make payment: "+err.Error())
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]any{
 		"message": "Payment successful",
 		"data":    payment,
 	})
@@ -192,7 +192,7 @@ func (h *FeeHandler) InitiateOnlinePayment(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to initiate payment: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": response,
 	})
 }
@@ -207,7 +207,7 @@ func (h *FeeHandler) VerifyPayment(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to verify payment: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Payment verified and completed successfully",
 	})
 }
@@ -240,8 +240,8 @@ func (h *FeeHandler) HandleWebhook(c echo.Context) error {
 
 	// Parse the webhook payload
 	var payload struct {
-		Event   string                 `json:"event"`
-		Payload map[string]interface{} `json:"payload"`
+		Event   string         `json:"event"`
+		Payload map[string]any `json:"payload"`
 	}
 
 	if err := json.Unmarshal(body, &payload); err != nil {
@@ -273,7 +273,7 @@ func (h *FeeHandler) GetStudentPayments(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get payments: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": payments,
 	})
 }

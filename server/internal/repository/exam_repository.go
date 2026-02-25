@@ -11,7 +11,7 @@ type ExamRepository interface {
 	// Exam CRUD
 	CreateExam(ctx context.Context, exam *models.Exam) error
 	GetExamByID(ctx context.Context, collegeID, examID int) (*models.Exam, error)
-	ListExams(ctx context.Context, collegeID int, filters map[string]interface{}, limit, offset int) ([]*models.Exam, error)
+	ListExams(ctx context.Context, collegeID int, filters map[string]any, limit, offset int) ([]*models.Exam, error)
 	UpdateExam(ctx context.Context, exam *models.Exam) error
 	DeleteExam(ctx context.Context, collegeID, examID int) error
 	ListExamsByCourse(ctx context.Context, collegeID, courseID int, limit, offset int) ([]*models.Exam, error)
@@ -35,7 +35,7 @@ type ExamRepository interface {
 	// Revaluation Requests
 	CreateRevaluationRequest(ctx context.Context, request *models.RevaluationRequest) error
 	GetRevaluationRequest(ctx context.Context, requestID int) (*models.RevaluationRequest, error)
-	ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]interface{}) ([]*models.RevaluationRequest, error)
+	ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]any) ([]*models.RevaluationRequest, error)
 	UpdateRevaluationRequest(ctx context.Context, request *models.RevaluationRequest) error
 
 	// Exam Rooms
@@ -94,12 +94,12 @@ func (r *examRepository) GetExamByID(ctx context.Context, collegeID, examID int)
 }
 
 // ListExams retrieves exams with optional filters
-func (r *examRepository) ListExams(ctx context.Context, collegeID int, filters map[string]interface{}, limit, offset int) ([]*models.Exam, error) {
+func (r *examRepository) ListExams(ctx context.Context, collegeID int, filters map[string]any, limit, offset int) ([]*models.Exam, error) {
 	sql := `SELECT id, college_id, course_id, title, description, exam_type, start_time,
 			end_time, duration, total_marks, passing_marks, room_id, status, instructions,
 			allowed_materials, question_paper_sets, created_by, created_at, updated_at
 			FROM exams WHERE college_id = $1`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 	argCount := 1
 
 	// Add optional filters
@@ -183,7 +183,7 @@ func (r *examRepository) DeleteExam(ctx context.Context, collegeID, examID int) 
 
 // ListExamsByCourse retrieves exams for a specific course
 func (r *examRepository) ListExamsByCourse(ctx context.Context, collegeID, courseID int, limit, offset int) ([]*models.Exam, error) {
-	return r.ListExams(ctx, collegeID, map[string]interface{}{"course_id": courseID}, limit, offset)
+	return r.ListExams(ctx, collegeID, map[string]any{"course_id": courseID}, limit, offset)
 }
 
 // EnrollStudent enrolls a student in an exam
@@ -469,12 +469,12 @@ func (r *examRepository) GetRevaluationRequest(ctx context.Context, requestID in
 }
 
 // ListRevaluationRequests retrieves revaluation requests with filters
-func (r *examRepository) ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]interface{}) ([]*models.RevaluationRequest, error) {
+func (r *examRepository) ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]any) ([]*models.RevaluationRequest, error) {
 	sql := `SELECT id, exam_result_id, student_id, college_id, reason, status,
 			previous_marks, revised_marks, reviewed_by, review_comments,
 			requested_at, reviewed_at, created_at, updated_at
 			FROM revaluation_requests WHERE college_id = $1`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 	argCount := 1
 
 	if status, ok := filters["status"]; ok {

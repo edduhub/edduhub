@@ -11,11 +11,11 @@ import (
 
 // Cache interface defines cache operations
 type Cache interface {
-	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
-	Get(ctx context.Context, key string, dest interface{}) error
+	Set(ctx context.Context, key string, value any, ttl time.Duration) error
+	Get(ctx context.Context, key string, dest any) error
 	Delete(ctx context.Context, key string) error
 	Clear(ctx context.Context) error
-	GetOrSet(ctx context.Context, key string, ttl time.Duration, fn func() (interface{}, error)) (interface{}, error)
+	GetOrSet(ctx context.Context, key string, ttl time.Duration, fn func() (any, error)) (any, error)
 	Ping(ctx context.Context) error
 	Close() error
 }
@@ -104,7 +104,7 @@ func (c *RedisCache) buildKey(key string) string {
 }
 
 // Set stores a value in Redis with expiration
-func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (c *RedisCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("failed to marshal value: %w", err)
@@ -114,7 +114,7 @@ func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl
 }
 
 // Get retrieves a value from Redis
-func (c *RedisCache) Get(ctx context.Context, key string, dest interface{}) error {
+func (c *RedisCache) Get(ctx context.Context, key string, dest any) error {
 	data, err := c.client.Get(ctx, c.buildKey(key)).Bytes()
 	if err != nil {
 		if err == redis.Nil {
@@ -157,9 +157,9 @@ func (c *RedisCache) Clear(ctx context.Context) error {
 }
 
 // GetOrSet retrieves from cache or sets if not exists (cache-aside pattern)
-func (c *RedisCache) GetOrSet(ctx context.Context, key string, ttl time.Duration, fn func() (interface{}, error)) (interface{}, error) {
+func (c *RedisCache) GetOrSet(ctx context.Context, key string, ttl time.Duration, fn func() (any, error)) (any, error) {
 	// Try to get from cache first
-	var result interface{}
+	var result any
 	err := c.Get(ctx, key, &result)
 	if err == nil {
 		return result, nil
@@ -197,7 +197,7 @@ func (c *RedisCache) GetClient() *redis.Client {
 }
 
 // CacheKey generates a cache key from components
-func CacheKey(components ...interface{}) string {
+func CacheKey(components ...any) string {
 	data, _ := json.Marshal(components)
 	return string(data)
 }

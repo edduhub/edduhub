@@ -30,16 +30,16 @@ type CourseMaterialService interface {
 
 	// Access tracking
 	LogMaterialAccess(ctx context.Context, materialID, studentID int, durationSeconds int, completed bool) error
-	GetMaterialAccessStats(ctx context.Context, materialID int) (map[string]interface{}, error)
-	GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]interface{}, error)
+	GetMaterialAccessStats(ctx context.Context, materialID int) (map[string]any, error)
+	GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]any, error)
 }
 
 type courseMaterialService struct {
-	courseRepo    repository.CourseRepository
-	materialRepo  repository.CourseMaterialRepository
-	fileRepo      repository.FileRepository
-	studentRepo   repository.StudentRepository
-	validate      *validator.Validate
+	courseRepo   repository.CourseRepository
+	materialRepo repository.CourseMaterialRepository
+	fileRepo     repository.FileRepository
+	studentRepo  repository.StudentRepository
+	validate     *validator.Validate
 }
 
 func NewCourseMaterialService(
@@ -359,7 +359,7 @@ func (s *courseMaterialService) LogMaterialAccess(ctx context.Context, materialI
 }
 
 // GetMaterialAccessStats gets access statistics for a material
-func (s *courseMaterialService) GetMaterialAccessStats(ctx context.Context, materialID int) (map[string]interface{}, error) {
+func (s *courseMaterialService) GetMaterialAccessStats(ctx context.Context, materialID int) (map[string]any, error) {
 	stats, err := s.materialRepo.GetAccessStats(ctx, materialID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get access stats: %w", err)
@@ -368,7 +368,7 @@ func (s *courseMaterialService) GetMaterialAccessStats(ctx context.Context, mate
 }
 
 // GetStudentProgress gets student's progress in a course
-func (s *courseMaterialService) GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]interface{}, error) {
+func (s *courseMaterialService) GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]any, error) {
 	progress, err := s.materialRepo.GetStudentProgress(ctx, courseID, studentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get student progress: %w", err)

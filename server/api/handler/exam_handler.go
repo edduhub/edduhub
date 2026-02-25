@@ -44,21 +44,21 @@ func (h *ExamHandler) CreateExam(c echo.Context) error {
 	}
 
 	exam := &models.Exam{
-		CollegeID:          collegeID,
-		CourseID:           req.CourseID,
-		Title:              req.Title,
-		Description:        req.Description,
-		ExamType:           req.ExamType,
-		StartTime:          req.StartTime,
-		EndTime:            req.EndTime,
-		Duration:           req.Duration,
-		TotalMarks:         req.TotalMarks,
-		PassingMarks:       req.PassingMarks,
-		Instructions:       req.Instructions,
-		AllowedMaterials:   req.AllowedMaterials,
-		QuestionPaperSets:  req.QuestionPaperSets,
-		Status:             "scheduled",
-		CreatedBy:          userID,
+		CollegeID:         collegeID,
+		CourseID:          req.CourseID,
+		Title:             req.Title,
+		Description:       req.Description,
+		ExamType:          req.ExamType,
+		StartTime:         req.StartTime,
+		EndTime:           req.EndTime,
+		Duration:          req.Duration,
+		TotalMarks:        req.TotalMarks,
+		PassingMarks:      req.PassingMarks,
+		Instructions:      req.Instructions,
+		AllowedMaterials:  req.AllowedMaterials,
+		QuestionPaperSets: req.QuestionPaperSets,
+		Status:            "scheduled",
+		CreatedBy:         userID,
 	}
 
 	if err := h.examService.CreateExam(c.Request().Context(), exam); err != nil {
@@ -98,7 +98,7 @@ func (h *ExamHandler) ListExams(c echo.Context) error {
 	}
 
 	// Parse query parameters
-	filters := make(map[string]interface{})
+	filters := make(map[string]any)
 
 	if courseID := c.QueryParam("course_id"); courseID != "" {
 		if id, err := strconv.Atoi(courseID); err == nil {
@@ -645,7 +645,7 @@ func (h *ExamHandler) ListRevaluationRequests(c echo.Context) error {
 		return err
 	}
 
-	filters := make(map[string]interface{})
+	filters := make(map[string]any)
 	if status := c.QueryParam("status"); status != "" {
 		filters["status"] = status
 	}

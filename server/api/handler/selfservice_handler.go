@@ -47,7 +47,7 @@ func (h *SelfServiceHandler) GetMyRequests(c echo.Context) error {
 		return helpers.Error(c, "Failed to fetch requests", http.StatusInternalServerError)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"requests": requests,
 		"total":    len(requests),
 	}, http.StatusOK)
@@ -83,7 +83,7 @@ func (h *SelfServiceHandler) GetRequest(c echo.Context) error {
 	request, err := h.service.GetStudentRequest(c.Request().Context(), collegeID, studentID, requestID)
 	if err != nil {
 		if errors.Is(err, selfservice.ErrRequestNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Request not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Request not found"}, http.StatusNotFound)
 		}
 		if errors.Is(err, selfservice.ErrAccessDenied) {
 			return helpers.Error(c, "Access denied", http.StatusForbidden)
@@ -180,7 +180,7 @@ func (h *SelfServiceHandler) UpdateRequest(c echo.Context) error {
 	updated, err := h.service.UpdateRequest(c.Request().Context(), collegeID, requestID, responderUserID, input.Status, input.Response)
 	if err != nil {
 		if errors.Is(err, selfservice.ErrRequestNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Request not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Request not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, err.Error(), http.StatusBadRequest)
 	}
@@ -197,7 +197,7 @@ func (h *SelfServiceHandler) UpdateRequest(c echo.Context) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/self-service/types [get]
 func (h *SelfServiceHandler) GetRequestTypes(c echo.Context) error {
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"types":           h.service.RequestTypes(),
 		"documentTypes":   h.service.DocumentTypes(),
 		"deliveryMethods": h.service.DeliveryMethods(),

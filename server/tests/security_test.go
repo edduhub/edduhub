@@ -147,7 +147,7 @@ func TestRateLimiting(t *testing.T) {
 		e := echo.New()
 
 		// Make 100+ requests rapidly
-		for i := 0; i < 101; i++ {
+		for range 101 {
 			req := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
 			rec := httptest.NewRecorder()
 			e.NewContext(req, rec)

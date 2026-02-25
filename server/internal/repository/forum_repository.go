@@ -77,7 +77,7 @@ func (r *forumRepository) ListThreads(ctx context.Context, filter models.ForumTh
 		JOIN courses c ON t.course_id = c.id
 		WHERE t.college_id = $1`
 
-	args := []interface{}{filter.CollegeID}
+	args := []any{filter.CollegeID}
 	placeholderID := 2
 
 	if filter.CourseID != nil {

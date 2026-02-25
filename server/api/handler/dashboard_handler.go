@@ -88,7 +88,7 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 	}
 
 	// Get recent announcements
-	announcements := []map[string]interface{}{}
+	announcements := []map[string]any{}
 	isPublished := true
 	announcementFilter := models.AnnouncementFilter{
 		CollegeID:   &collegeID,
@@ -98,7 +98,7 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 	}
 	if announcementList, err := h.announcementService.GetAnnouncements(ctx, announcementFilter); err == nil {
 		for _, a := range announcementList {
-			announcements = append(announcements, map[string]interface{}{
+			announcements = append(announcements, map[string]any{
 				"id":       a.ID,
 				"title":    a.Title,
 				"content":  a.Content,
@@ -108,7 +108,7 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 	}
 
 	// Get upcoming calendar events
-	upcomingEvents := []map[string]interface{}{}
+	upcomingEvents := []map[string]any{}
 	now := time.Now()
 	calendarFilter := models.CalendarBlockFilter{
 		CollegeID: &collegeID,
@@ -118,7 +118,7 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 	}
 	if events, err := h.calendarService.GetEvents(ctx, calendarFilter); err == nil {
 		for _, event := range events {
-			upcomingEvents = append(upcomingEvents, map[string]interface{}{
+			upcomingEvents = append(upcomingEvents, map[string]any{
 				"id":     event.ID,
 				"title":  event.Title,
 				"start":  event.StartTime,
@@ -129,10 +129,10 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 	}
 
 	// Get recent audit activity
-	recentActivity := []map[string]interface{}{}
+	recentActivity := []map[string]any{}
 	if auditLogs, err := h.auditService.GetAuditLogs(ctx, collegeID, nil, "", "", 10, 0); err == nil {
 		for _, log := range auditLogs {
-			recentActivity = append(recentActivity, map[string]interface{}{
+			recentActivity = append(recentActivity, map[string]any{
 				"id":        log.ID,
 				"entity":    log.EntityType,
 				"message":   log.Action,
@@ -148,8 +148,8 @@ func (h *DashboardHandler) GetDashboard(c echo.Context) error {
 	}
 
 	// Build response with real data
-	response := map[string]interface{}{
-		"metrics": map[string]interface{}{
+	response := map[string]any{
+		"metrics": map[string]any{
 			"totalStudents":      totalStudents,
 			"totalCourses":       totalCourses,
 			"totalFaculty":       totalFaculty,
@@ -204,7 +204,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	}
 
 	// Build course data with grades
-	courseData := []map[string]interface{}{}
+	courseData := []map[string]any{}
 	totalCredits := 0.0
 	weightedGradePoints := 0.0
 
@@ -262,7 +262,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 			weightedGradePoints += gradePoint * credits
 		}
 
-		courseData = append(courseData, map[string]interface{}{
+		courseData = append(courseData, map[string]any{
 			"id":               course.ID,
 			"name":             course.Name,
 			"description":      course.Description,
@@ -283,9 +283,9 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	}
 
 	// Get assignments for enrolled courses
-	upcomingAssignments := []map[string]interface{}{}
-	completedAssignments := []map[string]interface{}{}
-	overdueAssignments := []map[string]interface{}{}
+	upcomingAssignments := []map[string]any{}
+	completedAssignments := []map[string]any{}
+	overdueAssignments := []map[string]any{}
 	now := time.Now()
 
 	for _, enr := range enrollments {
@@ -299,7 +299,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 			submission, err := h.assignmentService.GetSubmissionByStudentAndAssignment(ctx, student.StudentID, assignment.ID)
 			isSubmitted := err == nil && submission != nil
 
-			assignmentData := map[string]interface{}{
+			assignmentData := map[string]any{
 				"id":          assignment.ID,
 				"title":       assignment.Title,
 				"courseID":    assignment.CourseID,
@@ -334,7 +334,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 		recentGrades = []*models.Grade{}
 	}
 
-	recentGradesData := []map[string]interface{}{}
+	recentGradesData := []map[string]any{}
 	for _, grade := range recentGrades {
 		// Get course name
 		course, err := h.courseService.FindCourseByID(ctx, collegeID, grade.CourseID)
@@ -343,7 +343,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 			courseName = course.Name
 		}
 
-		recentGradesData = append(recentGradesData, map[string]interface{}{
+		recentGradesData = append(recentGradesData, map[string]any{
 			"id":             grade.ID,
 			"courseName":     courseName,
 			"assessmentName": grade.AssessmentName,
@@ -372,7 +372,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	}
 
 	// Get upcoming calendar events
-	upcomingEvents := []map[string]interface{}{}
+	upcomingEvents := []map[string]any{}
 	calendarFilter := models.CalendarBlockFilter{
 		CollegeID: &collegeID,
 		StartDate: &now,
@@ -381,7 +381,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	events, err := h.calendarService.GetEvents(ctx, calendarFilter)
 	if err == nil {
 		for _, event := range events {
-			upcomingEvents = append(upcomingEvents, map[string]interface{}{
+			upcomingEvents = append(upcomingEvents, map[string]any{
 				"id":          event.ID,
 				"title":       event.Title,
 				"description": event.Description,
@@ -393,7 +393,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	}
 
 	// Get recent announcements
-	announcements := []map[string]interface{}{}
+	announcements := []map[string]any{}
 	isPublished := true
 	announcementFilter := models.AnnouncementFilter{
 		CollegeID:   &collegeID,
@@ -403,7 +403,7 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	announcementList, err := h.announcementService.GetAnnouncements(ctx, announcementFilter)
 	if err == nil {
 		for _, a := range announcementList {
-			announcements = append(announcements, map[string]interface{}{
+			announcements = append(announcements, map[string]any{
 				"id":       a.ID,
 				"title":    a.Title,
 				"content":  a.Content,
@@ -413,13 +413,13 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 	}
 
 	// Build comprehensive response
-	response := map[string]interface{}{
-		"student": map[string]interface{}{
+	response := map[string]any{
+		"student": map[string]any{
 			"id":        student.StudentID,
 			"rollNo":    student.RollNo,
 			"collegeID": student.CollegeID,
 		},
-		"academicOverview": map[string]interface{}{
+		"academicOverview": map[string]any{
 			"gpa":                     gpa,
 			"totalCredits":            totalCredits,
 			"enrolledCourses":         len(courseData),
@@ -428,11 +428,11 @@ func (h *DashboardHandler) GetStudentDashboard(c echo.Context) error {
 			"totalAttendanceSessions": totalAttendanceRecords,
 		},
 		"courses": courseData,
-		"assignments": map[string]interface{}{
+		"assignments": map[string]any{
 			"upcoming":  upcomingAssignments,
 			"completed": completedAssignments,
 			"overdue":   overdueAssignments,
-			"summary": map[string]interface{}{
+			"summary": map[string]any{
 				"upcomingCount":  len(upcomingAssignments),
 				"completedCount": len(completedAssignments),
 				"overdueCount":   len(overdueAssignments),

@@ -106,10 +106,10 @@ func TestFacultyToolsIntegrationFlow(t *testing.T) {
 	}
 
 	bookingDateOne := time.Now().Add(24 * time.Hour).Format("2006-01-02")
-	createBookingOne := []byte(fmt.Sprintf(`{"office_hour_id":%d,"booking_date":"%s","purpose":"Need project guidance"}`,
+	createBookingOne := fmt.Appendf(nil, `{"office_hour_id":%d,"booking_date":"%s","purpose":"Need project guidance"}`,
 		officePayload.ID,
 		bookingDateOne,
-	))
+	)
 	bookingOneReq := httptest.NewRequest(http.MethodPost, "/api/faculty-tools/bookings", bytes.NewReader(createBookingOne))
 	bookingOneReq.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	bookingOneRec := httptest.NewRecorder()
@@ -154,10 +154,10 @@ func TestFacultyToolsIntegrationFlow(t *testing.T) {
 	}
 
 	bookingDateTwo := time.Now().Add(48 * time.Hour).Format("2006-01-02")
-	createBookingTwo := []byte(fmt.Sprintf(`{"office_hour_id":%d,"booking_date":"%s","purpose":"Need revision help"}`,
+	createBookingTwo := fmt.Appendf(nil, `{"office_hour_id":%d,"booking_date":"%s","purpose":"Need revision help"}`,
 		officePayload.ID,
 		bookingDateTwo,
-	))
+	)
 	bookingTwoReq := httptest.NewRequest(http.MethodPost, "/api/faculty-tools/bookings", bytes.NewReader(createBookingTwo))
 	bookingTwoReq.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	bookingTwoRec := httptest.NewRecorder()

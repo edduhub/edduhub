@@ -125,7 +125,7 @@ func (r *placementRepository) DeletePlacement(ctx context.Context, collegeID int
 	return nil
 }
 
-func (r *placementRepository) findPlacements(ctx context.Context, sql string, args []interface{}, limit, offset uint64) ([]*models.Placement, error) {
+func (r *placementRepository) findPlacements(ctx context.Context, sql string, args []any, limit, offset uint64) ([]*models.Placement, error) {
 	fullSQL := fmt.Sprintf("%s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", sql, len(args)+1, len(args)+2)
 	args = append(args, limit, offset)
 
@@ -145,7 +145,7 @@ func (r *placementRepository) FindPlacementsByStudent(ctx context.Context, colle
 			FROM placements p 
 			JOIN placement_applications pa ON p.id = pa.placement_id 
 			WHERE p.college_id = $1 AND pa.student_id = $2`
-	args := []interface{}{collegeID, studentID}
+	args := []any{collegeID, studentID}
 	return r.findPlacements(ctx, sql, args, limit, offset)
 }
 
@@ -155,7 +155,7 @@ func (r *placementRepository) FindPlacementsByCollege(ctx context.Context, colle
 			required_skills, eligibility_criteria, application_deadline, drive_date, 
 			interview_mode, max_applications, status, created_by, created_at, updated_at 
 			FROM placements WHERE college_id = $1`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 	return r.findPlacements(ctx, sql, args, limit, offset)
 }
 
@@ -165,11 +165,11 @@ func (r *placementRepository) FindPlacementsByCompany(ctx context.Context, colle
 			required_skills, eligibility_criteria, application_deadline, drive_date, 
 			interview_mode, max_applications, status, created_by, created_at, updated_at 
 			FROM placements WHERE college_id = $1 AND company_name ILIKE '%' || $2 || '%'`
-	args := []interface{}{collegeID, companyName}
+	args := []any{collegeID, companyName}
 	return r.findPlacements(ctx, sql, args, limit, offset)
 }
 
-func (r *placementRepository) countPlacements(ctx context.Context, sql string, args []interface{}) (int, error) {
+func (r *placementRepository) countPlacements(ctx context.Context, sql string, args []any) (int, error) {
 	temp := struct {
 		Count int `db:"count"`
 	}{}
@@ -182,12 +182,12 @@ func (r *placementRepository) countPlacements(ctx context.Context, sql string, a
 
 func (r *placementRepository) CountPlacementsByStudent(ctx context.Context, collegeID int, studentID int) (int, error) {
 	sql := `SELECT COUNT(*) FROM placements p JOIN placement_applications pa ON p.id = pa.placement_id WHERE p.college_id = $1 AND pa.student_id = $2`
-	args := []interface{}{collegeID, studentID}
+	args := []any{collegeID, studentID}
 	return r.countPlacements(ctx, sql, args)
 }
 
 func (r *placementRepository) CountPlacementsByCollege(ctx context.Context, collegeID int) (int, error) {
 	sql := `SELECT COUNT(*) FROM placements WHERE college_id = $1`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 	return r.countPlacements(ctx, sql, args)
 }

@@ -10,11 +10,11 @@ import (
 
 // ErrorResponse represents a standardized error response
 type ErrorResponse struct {
-	Error   string                 `json:"error"`
-	Message string                 `json:"message"`
-	Code    string                 `json:"code,omitempty"`
-	Details map[string]interface{} `json:"details,omitempty"`
-	Status  int                    `json:"status"`
+	Error   string         `json:"error"`
+	Message string         `json:"message"`
+	Code    string         `json:"code,omitempty"`
+	Details map[string]any `json:"details,omitempty"`
+	Status  int            `json:"status"`
 }
 
 // AppError represents an application error with additional context
@@ -22,7 +22,7 @@ type AppError struct {
 	Status  int
 	Code    string
 	Message string
-	Details map[string]interface{}
+	Details map[string]any
 	Err     error
 }
 
@@ -44,7 +44,7 @@ func NewAppError(status int, code, message string, err error) *AppError {
 }
 
 // WithDetails adds details to the error
-func (e *AppError) WithDetails(details map[string]interface{}) *AppError {
+func (e *AppError) WithDetails(details map[string]any) *AppError {
 	e.Details = details
 	return e
 }
@@ -70,7 +70,7 @@ func ConflictError(message string, err error) *AppError {
 	return NewAppError(http.StatusConflict, "CONFLICT", message, err)
 }
 
-func ValidationError(message string, details map[string]interface{}) *AppError {
+func ValidationError(message string, details map[string]any) *AppError {
 	return NewAppError(http.StatusUnprocessableEntity, "VALIDATION_ERROR", message, nil).WithDetails(details)
 }
 

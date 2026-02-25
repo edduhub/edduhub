@@ -254,7 +254,7 @@ func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
 	}
 
 	// Enrich with course names
-	response := make([]map[string]interface{}, 0, len(attendance))
+	response := make([]map[string]any, 0, len(attendance))
 	for _, record := range attendance {
 		courseName := ""
 		course, err := a.courseService.FindCourseByID(ctx, collegeID, record.CourseID)
@@ -262,7 +262,7 @@ func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
 			courseName = course.Name
 		}
 
-		response = append(response, map[string]interface{}{
+		response = append(response, map[string]any{
 			"id":         record.ID,
 			"courseId":   record.CourseID,
 			"courseName": courseName,

@@ -75,15 +75,15 @@ func (h *AnnouncementHandler) ListAnnouncements(c echo.Context) error {
 	}
 
 	// Enrich announcements with author information
-	enrichedAnnouncements := make([]map[string]interface{}, 0, len(announcements))
+	enrichedAnnouncements := make([]map[string]any, 0, len(announcements))
 	for _, ann := range announcements {
 		author := "System"
 		authorRole := "admin"
 		if ann.CreatedBy != nil {
 			author = *ann.CreatedBy
 		}
-		
-		enrichedAnnouncements = append(enrichedAnnouncements, map[string]interface{}{
+
+		enrichedAnnouncements = append(enrichedAnnouncements, map[string]any{
 			"id":          ann.ID,
 			"title":       ann.Title,
 			"content":     ann.Content,

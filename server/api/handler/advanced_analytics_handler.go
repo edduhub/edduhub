@@ -146,7 +146,7 @@ func (h *AdvancedAnalyticsHandler) GetComparativeAnalysis(c echo.Context) error 
 
 	// Parse comma-separated course IDs
 	var courseIDs []int
-	for _, idStr := range strings.Split(courseIDsParam, ",") {
+	for idStr := range strings.SplitSeq(courseIDsParam, ",") {
 		if id, err := strconv.Atoi(strings.TrimSpace(idStr)); err == nil {
 			courseIDs = append(courseIDs, id)
 		}

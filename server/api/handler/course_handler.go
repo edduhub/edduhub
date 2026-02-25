@@ -86,8 +86,8 @@ func (h *CourseHandler) ListCourses(c echo.Context) error {
 	}
 
 	// Enrich courses with enrollment count and instructor name
-	enrichedCourses := make([]map[string]interface{}, 0, len(courses))
-	
+	enrichedCourses := make([]map[string]any, 0, len(courses))
+
 	for _, course := range courses {
 		// Get enrollment count
 		enrollmentCount := 0
@@ -95,14 +95,14 @@ func (h *CourseHandler) ListCourses(c echo.Context) error {
 		if err == nil {
 			enrollmentCount = len(enrollments)
 		}
-		
+
 		// Get instructor name
 		instructorName := "Unknown"
 		if course.Instructor != nil {
 			instructorName = course.Instructor.Name
 		}
-		
-		enrichedCourses = append(enrichedCourses, map[string]interface{}{
+
+		enrichedCourses = append(enrichedCourses, map[string]any{
 			"id":               course.ID,
 			"code":             "COURSE-" + strconv.Itoa(course.ID),
 			"name":             course.Name,
@@ -211,12 +211,12 @@ func (h *CourseHandler) EnrollStudents(c echo.Context) error {
 	}
 
 	successCount := 0
-	failedEnrollments := []map[string]interface{}{}
+	failedEnrollments := []map[string]any{}
 
 	for _, studentID := range req.StudentIDs {
 		enrolled, err := h.enrollmentService.IsStudentEnrolled(c.Request().Context(), collegeID, studentID, courseID)
 		if err != nil {
-			failedEnrollments = append(failedEnrollments, map[string]interface{}{
+			failedEnrollments = append(failedEnrollments, map[string]any{
 				"student_id": studentID,
 				"error":      "failed to check enrollment status",
 			})
@@ -224,7 +224,7 @@ func (h *CourseHandler) EnrollStudents(c echo.Context) error {
 		}
 
 		if enrolled {
-			failedEnrollments = append(failedEnrollments, map[string]interface{}{
+			failedEnrollments = append(failedEnrollments, map[string]any{
 				"student_id": studentID,
 				"error":      "already enrolled",
 			})
@@ -240,7 +240,7 @@ func (h *CourseHandler) EnrollStudents(c echo.Context) error {
 
 		err = h.enrollmentService.CreateEnrollment(c.Request().Context(), enrollment)
 		if err != nil {
-			failedEnrollments = append(failedEnrollments, map[string]interface{}{
+			failedEnrollments = append(failedEnrollments, map[string]any{
 				"student_id": studentID,
 				"error":      err.Error(),
 			})
@@ -249,7 +249,7 @@ func (h *CourseHandler) EnrollStudents(c echo.Context) error {
 		successCount++
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message":       "enrollment processed",
 		"success_count": successCount,
 		"failed":        failedEnrollments,
@@ -338,11 +338,11 @@ func (h *CourseHandler) ListEnrolledStudents(c echo.Context) error {
 		studentIDs = append(studentIDs, enrollment.StudentID)
 	}
 
-	students := []map[string]interface{}{}
+	students := []map[string]any{}
 	for _, enrollment := range enrollments {
 		profile, err := h.studentService.GetStudentDetailedProfile(c.Request().Context(), collegeID, enrollment.StudentID)
 		if err == nil && profile != nil {
-			students = append(students, map[string]interface{}{
+			students = append(students, map[string]any{
 				"student_id":      profile.Student.StudentID,
 				"roll_no":         profile.Student.RollNo,
 				"user_id":         profile.Student.UserID,

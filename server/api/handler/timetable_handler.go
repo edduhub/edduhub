@@ -34,7 +34,7 @@ func (h *TimetableHandler) CreateTimeTableBlock(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create timetable block: "+err.Error())
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]any{
 		"message": "Timetable block created successfully",
 		"data":    block,
 	})
@@ -60,7 +60,7 @@ func (h *TimetableHandler) GetTimeTableBlocks(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get timetable: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": blocks,
 	})
 }
@@ -84,7 +84,7 @@ func (h *TimetableHandler) UpdateTimeTableBlock(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to update timetable block: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Timetable block updated successfully",
 		"data":    block,
 	})
@@ -102,7 +102,7 @@ func (h *TimetableHandler) DeleteTimeTableBlock(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete timetable block: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Timetable block deleted successfully",
 	})
 }
@@ -115,7 +115,7 @@ func (h *TimetableHandler) GetStudentTimetable(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get student timetable: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": blocks,
 	})
 }

@@ -152,7 +152,7 @@ func (r *roleRepository) DeleteRole(ctx context.Context, roleID int) error {
 func (r *roleRepository) ListRoles(ctx context.Context, filter models.RoleFilter) ([]*models.Role, error) {
 	sql := `SELECT id, name, description, college_id, is_system_role, created_at, updated_at
 			FROM roles WHERE 1=1`
-	args := []interface{}{}
+	args := []any{}
 	paramCount := 0
 
 	if filter.CollegeID != nil {
@@ -200,7 +200,7 @@ func (r *roleRepository) ListRoles(ctx context.Context, filter models.RoleFilter
 
 func (r *roleRepository) CountRoles(ctx context.Context, filter models.RoleFilter) (int, error) {
 	sql := `SELECT COUNT(*) FROM roles WHERE 1=1`
-	args := []interface{}{}
+	args := []any{}
 	paramCount := 0
 
 	if filter.CollegeID != nil {
@@ -281,7 +281,7 @@ func (r *roleRepository) GetPermissionByName(ctx context.Context, name string) (
 func (r *roleRepository) ListPermissions(ctx context.Context, filter models.PermissionFilter) ([]*models.Permission, error) {
 	sql := `SELECT id, name, resource, action, description, created_at, updated_at
 			FROM permissions WHERE 1=1`
-	args := []interface{}{}
+	args := []any{}
 	paramCount := 0
 
 	if filter.Resource != nil {
@@ -323,7 +323,7 @@ func (r *roleRepository) ListPermissions(ctx context.Context, filter models.Perm
 
 func (r *roleRepository) CountPermissions(ctx context.Context, filter models.PermissionFilter) (int, error) {
 	sql := `SELECT COUNT(*) FROM permissions WHERE 1=1`
-	args := []interface{}{}
+	args := []any{}
 	paramCount := 0
 
 	if filter.Resource != nil {

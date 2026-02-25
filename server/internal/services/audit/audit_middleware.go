@@ -29,7 +29,7 @@ func AuditMiddleware(auditService AuditService) echo.MiddlewareFunc {
 			userAgent := c.Request().UserAgent()
 
 			// Capture request body for POST/PUT/PATCH
-			var requestBody map[string]interface{}
+			var requestBody map[string]any
 			if shouldCaptureBody(c) {
 				if body, err := captureRequestBody(c); err == nil {
 					requestBody = body
@@ -49,7 +49,7 @@ func AuditMiddleware(auditService AuditService) echo.MiddlewareFunc {
 
 			// Add request data to changes
 			if requestBody != nil {
-				auditLog.Changes = map[string]interface{}{
+				auditLog.Changes = map[string]any{
 					"request_body": requestBody,
 					"method":       c.Request().Method,
 					"path":         c.Request().URL.Path,
@@ -110,7 +110,7 @@ func shouldCaptureBody(c echo.Context) bool {
 }
 
 // captureRequestBody captures the request body for audit logging
-func captureRequestBody(c echo.Context) (map[string]interface{}, error) {
+func captureRequestBody(c echo.Context) (map[string]any, error) {
 	// Read the body
 	bodyBytes, err := io.ReadAll(c.Request().Body)
 	if err != nil {
@@ -121,10 +121,10 @@ func captureRequestBody(c echo.Context) (map[string]interface{}, error) {
 	c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// Try to parse as JSON
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {
 		// If not JSON, store as string
-		body = map[string]interface{}{
+		body = map[string]any{
 			"raw_body": string(bodyBytes),
 		}
 	}
@@ -136,7 +136,7 @@ func captureRequestBody(c echo.Context) (map[string]interface{}, error) {
 }
 
 // sanitizeBody removes sensitive information from the request body
-func sanitizeBody(body map[string]interface{}) {
+func sanitizeBody(body map[string]any) {
 	sensitiveFields := []string{"password", "token", "secret", "key", "api_key", "access_token"}
 
 	for _, field := range sensitiveFields {
@@ -147,7 +147,7 @@ func sanitizeBody(body map[string]interface{}) {
 
 	// Recursively sanitize nested objects
 	for _, value := range body {
-		if nested, ok := value.(map[string]interface{}); ok {
+		if nested, ok := value.(map[string]any); ok {
 			sanitizeBody(nested)
 		}
 	}
@@ -227,10 +227,10 @@ func getEntityTypeFromPath(path string) string {
 
 // getEntityIDFromPath extracts entity ID from URL path
 func getEntityIDFromPath(path string) int {
-	parts := strings.Split(strings.Trim(path, "/"), "/")
+	parts := strings.SplitSeq(strings.Trim(path, "/"), "/")
 
 	// Look for numeric IDs in the path
-	for _, part := range parts {
+	for part := range parts {
 		if id, err := parseIntSafe(part); err == nil && id > 0 {
 			return id
 		}

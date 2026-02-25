@@ -14,16 +14,16 @@ import (
 )
 
 type AssignmentHandler struct {
-	assignmentService  assignment.AssignmentService
-	enrollmentService  enrollment.EnrollmentService
-	courseService      course.CourseService
+	assignmentService assignment.AssignmentService
+	enrollmentService enrollment.EnrollmentService
+	courseService     course.CourseService
 }
 
 func NewAssignmentHandler(assignmentService assignment.AssignmentService, enrollmentService enrollment.EnrollmentService, courseService course.CourseService) *AssignmentHandler {
 	return &AssignmentHandler{
-		assignmentService:  assignmentService,
-		enrollmentService:  enrollmentService,
-		courseService:      courseService,
+		assignmentService: assignmentService,
+		enrollmentService: enrollmentService,
+		courseService:     courseService,
 	}
 }
 
@@ -198,76 +198,76 @@ func (h *AssignmentHandler) GradeSubmission(c echo.Context) error {
 
 // ListSubmissionsByAssignment returns all submissions for an assignment (Faculty/Admin)
 func (h *AssignmentHandler) ListSubmissionsByAssignment(c echo.Context) error {
-    assignmentIDStr := c.Param("assignmentID")
-    assignmentID, err := strconv.Atoi(assignmentIDStr)
-    if err != nil {
-        return helpers.Error(c, "invalid assignment ID", 400)
-    }
+	assignmentIDStr := c.Param("assignmentID")
+	assignmentID, err := strconv.Atoi(assignmentIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid assignment ID", 400)
+	}
 
-    collegeID, err := helpers.ExtractCollegeID(c)
-    if err != nil {
-        return err
-    }
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
 
-    submissions, err := h.assignmentService.GetSubmissionsByAssignment(c.Request().Context(), collegeID, assignmentID)
-    if err != nil {
-        return helpers.Error(c, err.Error(), 500)
-    }
+	submissions, err := h.assignmentService.GetSubmissionsByAssignment(c.Request().Context(), collegeID, assignmentID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
 
-    return helpers.Success(c, submissions, 200)
+	return helpers.Success(c, submissions, 200)
 }
 
 // BulkGradeSubmissions grades multiple submissions at once (Faculty/Admin)
 func (h *AssignmentHandler) BulkGradeSubmissions(c echo.Context) error {
-    assignmentIDStr := c.Param("assignmentID")
-    _, err := strconv.Atoi(assignmentIDStr)
-    if err != nil {
-        return helpers.Error(c, "invalid assignment ID", 400)
-    }
+	assignmentIDStr := c.Param("assignmentID")
+	_, err := strconv.Atoi(assignmentIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid assignment ID", 400)
+	}
 
-    collegeID, err := helpers.ExtractCollegeID(c)
-    if err != nil {
-        return err
-    }
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
 
-    var body map[string]*assignment.GradeInput
-    if err := c.Bind(&body); err != nil {
-        return helpers.Error(c, "invalid request body", 400)
-    }
+	var body map[string]*assignment.GradeInput
+	if err := c.Bind(&body); err != nil {
+		return helpers.Error(c, "invalid request body", 400)
+	}
 
-    grades := make(map[int]*assignment.GradeInput)
-    for k, v := range body {
-        if id, convErr := strconv.Atoi(k); convErr == nil {
-            grades[id] = v
-        }
-    }
+	grades := make(map[int]*assignment.GradeInput)
+	for k, v := range body {
+		if id, convErr := strconv.Atoi(k); convErr == nil {
+			grades[id] = v
+		}
+	}
 
-    if err := h.assignmentService.BulkGradeSubmissions(c.Request().Context(), collegeID, grades); err != nil {
-        return helpers.Error(c, err.Error(), 500)
-    }
+	if err := h.assignmentService.BulkGradeSubmissions(c.Request().Context(), collegeID, grades); err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
 
-    return helpers.Success(c, "Bulk grading completed", 200)
+	return helpers.Success(c, "Bulk grading completed", 200)
 }
 
 // GetAssignmentGradingStats returns grading statistics for an assignment
 func (h *AssignmentHandler) GetAssignmentGradingStats(c echo.Context) error {
-    assignmentIDStr := c.Param("assignmentID")
-    assignmentID, err := strconv.Atoi(assignmentIDStr)
-    if err != nil {
-        return helpers.Error(c, "invalid assignment ID", 400)
-    }
+	assignmentIDStr := c.Param("assignmentID")
+	assignmentID, err := strconv.Atoi(assignmentIDStr)
+	if err != nil {
+		return helpers.Error(c, "invalid assignment ID", 400)
+	}
 
-    collegeID, err := helpers.ExtractCollegeID(c)
-    if err != nil {
-        return err
-    }
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
 
-    stats, err := h.assignmentService.GetGradingStats(c.Request().Context(), collegeID, assignmentID)
-    if err != nil {
-        return helpers.Error(c, err.Error(), 500)
-    }
+	stats, err := h.assignmentService.GetGradingStats(c.Request().Context(), collegeID, assignmentID)
+	if err != nil {
+		return helpers.Error(c, err.Error(), 500)
+	}
 
-    return helpers.Success(c, stats, 200)
+	return helpers.Success(c, stats, 200)
 }
 
 // GetMyAssignments returns all assignments across all enrolled courses for current student
@@ -288,7 +288,7 @@ func (h *AssignmentHandler) GetMyAssignments(c echo.Context) error {
 		return helpers.Error(c, "failed to fetch enrollments", 500)
 	}
 
-	response := make([]map[string]interface{}, 0)
+	response := make([]map[string]any, 0)
 
 	for _, enrollmentRecord := range enrollments {
 		assignments, err := h.assignmentService.GetAssignmentsByCourse(ctx, collegeID, enrollmentRecord.CourseID)
@@ -316,7 +316,7 @@ func (h *AssignmentHandler) GetMyAssignments(c echo.Context) error {
 				}
 			}
 
-			assignmentData := map[string]interface{}{
+			assignmentData := map[string]any{
 				"id":          a.ID,
 				"title":       a.Title,
 				"description": a.Description,
@@ -326,7 +326,7 @@ func (h *AssignmentHandler) GetMyAssignments(c echo.Context) error {
 				"maxScore":    a.MaxPoints,
 				"status":      status,
 			}
-			
+
 			if score != nil {
 				assignmentData["score"] = *score
 			}

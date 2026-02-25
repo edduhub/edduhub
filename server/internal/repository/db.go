@@ -11,8 +11,8 @@ import (
 // PoolIface defines the methods of pgxpool.Pool used by our repositories.
 // This interface enables context-based queries and better testability.
 type PoolIface interface {
-	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (commandTag pgconn.CommandTag, err error)
 	Close()
 	// Add other methods from pgxpool.Pool if needed by any repository

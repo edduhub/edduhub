@@ -153,7 +153,7 @@ func (h *ProfileHandler) UploadProfileImage(c echo.Context) error {
 		Action:     "UPLOAD",
 		EntityType: "profile_image",
 		EntityID:   currentProfile.ID,
-		Changes:    map[string]interface{}{"filename": file.Filename, "size": file.Size},
+		Changes:    map[string]any{"filename": file.Filename, "size": file.Size},
 		IPAddress:  ipAddress,
 		UserAgent:  userAgent,
 	}
@@ -162,7 +162,7 @@ func (h *ProfileHandler) UploadProfileImage(c echo.Context) error {
 		c.Logger().Error("Failed to log audit event:", err)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"url":      fileURL,
 		"filename": file.Filename,
 		"size":     file.Size,
@@ -206,7 +206,7 @@ func (h *ProfileHandler) GetProfileHistory(c echo.Context) error {
 		return helpers.Error(c, "failed to retrieve profile history", 500)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"history": history,
 		"limit":   limit,
 		"offset":  offset,
@@ -377,7 +377,7 @@ func (h *ProfileHandler) UpdateUserProfile(c echo.Context) error {
 		Action:     "UPDATE",
 		EntityType: "profile",
 		EntityID:   currentProfile.ID,
-		Changes:    map[string]interface{}{"updated_fields": getUpdatedFields(&req)},
+		Changes:    map[string]any{"updated_fields": getUpdatedFields(&req)},
 		IPAddress:  ipAddress,
 		UserAgent:  userAgent,
 	}

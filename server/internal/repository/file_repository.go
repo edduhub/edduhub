@@ -97,7 +97,7 @@ func (r *fileRepository) ListFiles(ctx context.Context, collegeID int, folderID 
 		LEFT JOIN folders fol ON f.folder_id = fol.id
 		WHERE f.college_id = $1`
 
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 	argCount := 1
 
 	if folderID != nil {
@@ -233,7 +233,7 @@ func (r *fileRepository) GetFolderByID(ctx context.Context, collegeID, folderID 
 
 func (r *fileRepository) ListFolders(ctx context.Context, collegeID int, parentID *int) ([]*models.Folder, error) {
 	query := `SELECT * FROM folders WHERE college_id = $1`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 
 	if parentID != nil {
 		query += " AND parent_id = $2"
@@ -285,7 +285,7 @@ func (r *fileRepository) SearchFiles(ctx context.Context, collegeID int, query s
 			fv.filename ILIKE $2
 		)`
 
-	args := []interface{}{collegeID, "%" + query + "%"}
+	args := []any{collegeID, "%" + query + "%"}
 	argCount := 2
 
 	if category != nil {

@@ -74,17 +74,17 @@ func (h *ParentHandler) GetLinkedChildren(c echo.Context) error {
 		return helpers.Error(c, "Failed to fetch students", http.StatusInternalServerError)
 	}
 
-	linkedStudents := make([]map[string]interface{}, 0, len(students))
+	linkedStudents := make([]map[string]any, 0, len(students))
 	if role == "admin" || role == "faculty" {
 		for _, student := range students {
-			linkedStudents = append(linkedStudents, map[string]interface{}{
+			linkedStudents = append(linkedStudents, map[string]any{
 				"id":             student.StudentID,
 				"rollNo":         student.RollNo,
 				"enrollmentYear": student.EnrollmentYear,
 				"isActive":       student.IsActive,
 			})
 		}
-		return helpers.Success(c, map[string]interface{}{
+		return helpers.Success(c, map[string]any{
 			"students": linkedStudents,
 		}, http.StatusOK)
 	}
@@ -95,7 +95,7 @@ func (h *ParentHandler) GetLinkedChildren(c echo.Context) error {
 	}
 	parentUserID, err := h.resolveParentUserID(c.Request().Context(), kratosID)
 	if err != nil {
-		return helpers.Success(c, map[string]interface{}{
+		return helpers.Success(c, map[string]any{
 			"students": linkedStudents,
 		}, http.StatusOK)
 	}
@@ -109,7 +109,7 @@ func (h *ParentHandler) GetLinkedChildren(c echo.Context) error {
 		if _, ok := linkedStudentIDs[student.StudentID]; !ok {
 			continue
 		}
-		linkedStudents = append(linkedStudents, map[string]interface{}{
+		linkedStudents = append(linkedStudents, map[string]any{
 			"id":             student.StudentID,
 			"rollNo":         student.RollNo,
 			"enrollmentYear": student.EnrollmentYear,
@@ -117,7 +117,7 @@ func (h *ParentHandler) GetLinkedChildren(c echo.Context) error {
 		})
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"students": linkedStudents,
 	}, http.StatusOK)
 }
@@ -153,7 +153,7 @@ func (h *ParentHandler) GetChildDashboard(c echo.Context) error {
 
 	student, err := h.studentService.GetStudentDetailedProfile(c.Request().Context(), collegeID, studentID)
 	if err != nil {
-		return helpers.NotFound(c, map[string]interface{}{"error": "Student not found"}, http.StatusNotFound)
+		return helpers.NotFound(c, map[string]any{"error": "Student not found"}, http.StatusNotFound)
 	}
 
 	// Return basic student info
@@ -168,9 +168,9 @@ func (h *ParentHandler) GetChildDashboard(c echo.Context) error {
 		return helpers.Error(c, "Failed to compute dashboard metrics", http.StatusInternalServerError)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"student": student,
-		"metrics": map[string]interface{}{
+		"metrics": map[string]any{
 			"enrolledCourses":    len(student.Enrollments),
 			"attendanceRate":     attendanceRate,
 			"pendingAssignments": pendingAssignments,
@@ -212,13 +212,13 @@ func (h *ParentHandler) GetChildAttendance(c echo.Context) error {
 	// Get attendance records
 	attendance, err := h.attendanceService.GetAttendanceByStudent(c.Request().Context(), collegeID, studentID, 50, 0)
 	if err != nil {
-		return helpers.Success(c, map[string]interface{}{
-			"attendance": []interface{}{},
+		return helpers.Success(c, map[string]any{
+			"attendance": []any{},
 			"total":      0,
 		}, http.StatusOK)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"attendance": attendance,
 		"total":      len(attendance),
 	}, http.StatusOK)
@@ -256,13 +256,13 @@ func (h *ParentHandler) GetChildGrades(c echo.Context) error {
 	// Get grades
 	grades, err := h.gradesService.GetGradesByStudent(c.Request().Context(), collegeID, studentID)
 	if err != nil {
-		return helpers.Success(c, map[string]interface{}{
-			"grades": []interface{}{},
+		return helpers.Success(c, map[string]any{
+			"grades": []any{},
 			"total":  0,
 		}, http.StatusOK)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"grades": grades,
 		"total":  len(grades),
 	}, http.StatusOK)
@@ -300,13 +300,13 @@ func (h *ParentHandler) GetChildAssignments(c echo.Context) error {
 	// Fetch real assignments for the student
 	assignments, err := h.assignmentService.GetAssignmentsByStudent(c.Request().Context(), collegeID, studentID)
 	if err != nil {
-		return helpers.Success(c, map[string]interface{}{
-			"assignments": []interface{}{},
+		return helpers.Success(c, map[string]any{
+			"assignments": []any{},
 			"total":       0,
 		}, http.StatusOK)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"assignments": assignments,
 		"total":       len(assignments),
 	}, http.StatusOK)
@@ -433,7 +433,7 @@ func (h *ParentHandler) ListParentRelationships(c echo.Context) error {
 	if relationships == nil {
 		relationships = []rel{}
 	}
-	return helpers.Success(c, map[string]interface{}{"relationships": relationships}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"relationships": relationships}, http.StatusOK)
 }
 
 // CreateParentRelationship creates a parent-student link (admin only).
@@ -516,7 +516,7 @@ func (h *ParentHandler) CreateParentRelationship(c echo.Context) error {
 		return helpers.Error(c, "Failed to create link: "+err.Error(), http.StatusInternalServerError)
 	}
 
-	return helpers.Success(c, map[string]interface{}{"id": id, "message": "Parent-student link created"}, http.StatusCreated)
+	return helpers.Success(c, map[string]any{"id": id, "message": "Parent-student link created"}, http.StatusCreated)
 }
 
 // DeleteParentRelationship removes a parent-student link (admin only).
@@ -543,7 +543,7 @@ func (h *ParentHandler) DeleteParentRelationship(c echo.Context) error {
 		return helpers.Error(c, "Failed to delete link", http.StatusInternalServerError)
 	}
 	if result.RowsAffected() == 0 {
-		return helpers.NotFound(c, map[string]interface{}{"error": "Relationship not found"}, http.StatusNotFound)
+		return helpers.NotFound(c, map[string]any{"error": "Relationship not found"}, http.StatusNotFound)
 	}
 
 	return helpers.Success(c, map[string]string{"message": "Link removed"}, http.StatusOK)

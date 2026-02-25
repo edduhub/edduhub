@@ -54,18 +54,18 @@ func (r *notificationRepository) CreateNotification(ctx context.Context, notific
 
 func (r *notificationRepository) GetNotificationsByUser(ctx context.Context, collegeID, userID int, unreadOnly bool, limit int) ([]*models.Notification, error) {
 	var sql string
-	var args []interface{}
+	var args []any
 
 	if unreadOnly {
 		sql = `SELECT id, user_id, college_id, title, message, type, is_read, created_at
 			   FROM notifications WHERE college_id = $1 AND user_id = $2 AND is_read = false
 			   ORDER BY created_at DESC LIMIT $3`
-		args = []interface{}{collegeID, userID, limit}
+		args = []any{collegeID, userID, limit}
 	} else {
 		sql = `SELECT id, user_id, college_id, title, message, type, is_read, created_at
 			   FROM notifications WHERE college_id = $1 AND user_id = $2
 			   ORDER BY created_at DESC LIMIT $3`
-		args = []interface{}{collegeID, userID, limit}
+		args = []any{collegeID, userID, limit}
 	}
 
 	var notifications []*models.Notification
@@ -93,7 +93,7 @@ func (r *notificationRepository) DeleteNotification(ctx context.Context, college
 
 func (r *notificationRepository) GetUnreadCount(ctx context.Context, collegeID, userID int) (int, error) {
 	sql := `SELECT COUNT(*) FROM notifications WHERE college_id = $1 AND user_id = $2 AND is_read = false`
-	
+
 	var count int
 	err := r.DB.Pool.QueryRow(ctx, sql, collegeID, userID).Scan(&count)
 	return count, err

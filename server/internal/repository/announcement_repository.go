@@ -99,7 +99,7 @@ func (r *announcementRepository) UpdateAnnouncement(ctx context.Context, announc
 
 func (r *announcementRepository) UpdateAnnouncementPartial(ctx context.Context, collegeID int, announcementID int, req *models.UpdateAnnouncementRequest) error {
 	sql := `UPDATE announcements SET updated_at = NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	if req.Title != nil {
@@ -178,7 +178,7 @@ func (r *announcementRepository) GetAnnouncements(ctx context.Context, filter mo
 
 	sql := `SELECT id, college_id, course_id, title, content, priority, is_published, published_at, expires_at, created_by, created_at, updated_at
 			FROM announcements WHERE college_id = $1`
-	args := []interface{}{*filter.CollegeID}
+	args := []any{*filter.CollegeID}
 	argIndex := 2
 
 	if filter.CourseID != nil {
@@ -223,7 +223,7 @@ func (r *announcementRepository) CountAnnouncements(ctx context.Context, filter 
 	}
 
 	sql := `SELECT COUNT(*) FROM announcements WHERE college_id = $1`
-	args := []interface{}{*filter.CollegeID}
+	args := []any{*filter.CollegeID}
 	argIndex := 2
 
 	if filter.CourseID != nil {

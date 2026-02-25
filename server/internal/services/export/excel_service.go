@@ -15,7 +15,7 @@ type ExcelExportService interface {
 	ExportGradesToExcel(ctx context.Context, grades []*models.Grade, filename string) ([]byte, error)
 	ExportAttendanceToExcel(ctx context.Context, attendance []*models.Attendance, filename string) ([]byte, error)
 	ExportCoursesToExcel(ctx context.Context, courses []*models.Course, filename string) ([]byte, error)
-	ExportFeePaymentsToExcel(ctx context.Context, payments []map[string]interface{}, filename string) ([]byte, error)
+	ExportFeePaymentsToExcel(ctx context.Context, payments []map[string]any, filename string) ([]byte, error)
 	ExportEnrollmentToExcel(ctx context.Context, enrollments []*models.Enrollment, filename string) ([]byte, error)
 }
 
@@ -158,7 +158,7 @@ func (s *csvExportService) ExportCoursesToExcel(ctx context.Context, courses []*
 }
 
 // ExportFeePaymentsToExcel exports fee payment data to CSV format (Excel compatible)
-func (s *csvExportService) ExportFeePaymentsToExcel(ctx context.Context, payments []map[string]interface{}, filename string) ([]byte, error) {
+func (s *csvExportService) ExportFeePaymentsToExcel(ctx context.Context, payments []map[string]any, filename string) ([]byte, error) {
 	var buf []byte
 	writer := csv.NewWriter(&byteWriter{&buf})
 

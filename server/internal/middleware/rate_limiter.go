@@ -125,7 +125,7 @@ func (rl *RateLimiter) Middleware() echo.MiddlewareFunc {
 
 			if !limiter.Allow() {
 				rl.logger.Warn().Str("ip", ip).Msg("Rate limit exceeded")
-				return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+				return c.JSON(http.StatusTooManyRequests, map[string]any{
 					"error":   "Too many requests",
 					"message": "Rate limit exceeded. Please try again later.",
 				})

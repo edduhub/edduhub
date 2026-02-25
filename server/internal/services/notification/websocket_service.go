@@ -28,7 +28,7 @@ type WebSocketService interface {
 
 	BroadcastTypingIndicator(ctx context.Context, collegeID, userID int, isTyping bool) error
 	BroadcastPresence(ctx context.Context, collegeID, userID int, status string) error
-	GetConnectionStats() map[string]interface{}
+	GetConnectionStats() map[string]any
 	Stop()
 }
 
@@ -57,7 +57,7 @@ type websocketService struct {
 type WebSocketMessage struct {
 	Type         string               `json:"type"` // notification, typing, presence, ping, pong, connected
 	Notification *models.Notification `json:"notification,omitempty"`
-	Data         interface{}          `json:"data,omitempty"`
+	Data         any                  `json:"data,omitempty"`
 	Timestamp    time.Time            `json:"timestamp"`
 	UserID       int                  `json:"user_id,omitempty"`
 	CollegeID    int                  `json:"college_id,omitempty"`
@@ -77,7 +77,7 @@ func NewWebSocketService(notificationRepo repository.NotificationRepository, all
 	numWorkers := 10
 	broadcastQueue := make(chan broadcastTask, 1000)
 	workerPool := make([]chan struct{}, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workerPool[i] = make(chan struct{}, 1)
 	}
 
@@ -109,7 +109,7 @@ func NewWebSocketService(notificationRepo repository.NotificationRepository, all
 		},
 	}
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		go ws.broadcastWorker(i)
 	}
 
@@ -392,7 +392,7 @@ func (s *websocketService) BroadcastPresence(ctx context.Context, collegeID, use
 }
 
 // GetConnectionStats returns statistics about active connections
-func (s *websocketService) GetConnectionStats() map[string]interface{} {
+func (s *websocketService) GetConnectionStats() map[string]any {
 	s.clientsMutex.RLock()
 	defer s.clientsMutex.RUnlock()
 
@@ -405,7 +405,7 @@ func (s *websocketService) GetConnectionStats() map[string]interface{} {
 		collegeStats[collegeID] = count
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total_connections": totalConnections,
 		"colleges":          len(s.clients),
 		"college_stats":     collegeStats,

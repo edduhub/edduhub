@@ -89,7 +89,7 @@ func (r *calendarRepository) UpdateCalendarBlock(ctx context.Context, block *mod
 func (r *calendarRepository) UpdateCalendarBlockPartial(ctx context.Context, collegeID int, calendarID int, req *models.UpdateCalendarRequest) error {
 	// Build dynamic query based on non-nil fields
 	sql := `UPDATE calendar_events SET updated_at = NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	if req.Title != nil {

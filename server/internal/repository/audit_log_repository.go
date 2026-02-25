@@ -65,7 +65,7 @@ func (r *auditLogRepository) CreateAuditLog(ctx context.Context, log *models.Aud
 
 func (r *auditLogRepository) GetAuditLogs(ctx context.Context, collegeID int, userID *int, action, entity string, limit, offset int) ([]*models.AuditLog, error) {
 	sql := `SELECT * FROM audit_logs WHERE college_id = $1`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 	idx := 2
 
 	if userID != nil {

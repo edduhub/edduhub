@@ -157,7 +157,7 @@ func (c *collegeRepository) ListColleges(ctx context.Context, limit, offset uint
 func (c *collegeRepository) UpdateCollegePartial(ctx context.Context, id int, req *models.UpdateCollegeRequest) error {
 	// Build dynamic query based on non-nil fields
 	sql := `UPDATE college SET updated_at = NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	if req.Name != nil {

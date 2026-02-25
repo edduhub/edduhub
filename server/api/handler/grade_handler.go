@@ -14,13 +14,13 @@ import (
 )
 
 type GradeHandler struct {
-	gradeService grades.GradeServices
+	gradeService  grades.GradeServices
 	courseService course.CourseService
 }
 
 func NewGradeHandler(gradeService grades.GradeServices, courseService course.CourseService) *GradeHandler {
 	return &GradeHandler{
-		gradeService: gradeService,
+		gradeService:  gradeService,
 		courseService: courseService,
 	}
 }
@@ -241,7 +241,7 @@ func (h *GradeHandler) GetMyCourseGrades(c echo.Context) error {
 	}
 	sort.Ints(courseIDs)
 
-	result := make([]map[string]interface{}, 0, len(courseIDs))
+	result := make([]map[string]any, 0, len(courseIDs))
 	for _, courseID := range courseIDs {
 		agg := aggByCourse[courseID]
 		percentage := 0.0
@@ -283,7 +283,7 @@ func (h *GradeHandler) GetMyCourseGrades(c echo.Context) error {
 			}
 		}
 
-		result = append(result, map[string]interface{}{
+		result = append(result, map[string]any{
 			"courseId":    courseID,
 			"courseName":  courseName,
 			"courseCode":  courseCode,

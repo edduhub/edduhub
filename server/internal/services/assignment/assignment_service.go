@@ -163,10 +163,7 @@ func (a *assignmentService) CalculateLatePenalty(submission *models.AssignmentSu
 
 	// Default penalty: 10% per day, max 50%
 	daysLate := (hoursLate / 24) + 1
-	penalty := daysLate * 10
-	if penalty > 50 {
-		penalty = 50
-	}
+	penalty := min(daysLate*10, 50)
 
 	return penalty
 }

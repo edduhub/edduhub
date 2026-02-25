@@ -67,7 +67,7 @@ func NewCourseRepository(database *DB) CourseRepository {
 
 // Constants for table and column names
 const (
-	courseTable = "courses"
+	courseTable        = "courses"
 	courseSelectFields = "id, name, description, credits, instructor_id, college_id, created_at, updated_at"
 )
 
@@ -161,7 +161,7 @@ func (c *courseRepository) UpdateCourse(ctx context.Context, course *models.Cour
 // CheckCourseNameExists checks if a course with the given name already exists in the college
 func (c *courseRepository) CheckCourseNameExists(ctx context.Context, collegeID int, courseName string, excludeCourseID *int) (bool, error) {
 	sql := fmt.Sprintf(`SELECT COUNT(*) as count FROM %s WHERE college_id = $1 AND LOWER(name) = LOWER($2)`, courseTable)
-	args := []interface{}{int32(collegeID), courseName}
+	args := []any{int32(collegeID), courseName}
 	argIndex := 3
 
 	if excludeCourseID != nil {
@@ -263,7 +263,7 @@ func (c *courseRepository) UpdateCoursePartial(ctx context.Context, collegeID in
 
 	// Build dynamic query based on non-nil fields
 	sql := fmt.Sprintf(`UPDATE %s SET updated_at = NOW()`, courseTable)
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	// Add fields to update based on what's provided

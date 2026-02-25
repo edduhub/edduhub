@@ -10,7 +10,7 @@ import (
 
 type EmailService interface {
 	SendEmail(ctx context.Context, to, subject, body string) error
-	SendTemplateEmail(ctx context.Context, to, subject, templateName string, data interface{}) error
+	SendTemplateEmail(ctx context.Context, to, subject, templateName string, data any) error
 	SendBulkEmail(ctx context.Context, recipients []string, subject, body string) error
 	SendWelcomeEmail(ctx context.Context, to, name string) error
 	SendPasswordResetEmail(ctx context.Context, to, resetLink string) error
@@ -90,12 +90,12 @@ func (s *emailService) SendEmail(ctx context.Context, to, subject, body string) 
 	}
 
 	// Compose email
-	msg := []byte(fmt.Sprintf("From: %s\r\n"+
+	msg := fmt.Appendf(nil, "From: %s\r\n"+
 		"To: %s\r\n"+
 		"Subject: %s\r\n"+
 		"Content-Type: text/html; charset=UTF-8\r\n"+
 		"\r\n"+
-		"%s\r\n", s.fromAddress, to, subject, body))
+		"%s\r\n", s.fromAddress, to, subject, body)
 
 	// SMTP authentication
 	auth := smtp.PlainAuth("", s.smtpUsername, s.smtpPassword, s.smtpHost)
@@ -110,7 +110,7 @@ func (s *emailService) SendEmail(ctx context.Context, to, subject, body string) 
 	return nil
 }
 
-func (s *emailService) SendTemplateEmail(ctx context.Context, to, subject, templateName string, data interface{}) error {
+func (s *emailService) SendTemplateEmail(ctx context.Context, to, subject, templateName string, data any) error {
 	tmpl, ok := s.templates[templateName]
 	if !ok {
 		return fmt.Errorf("template %s not found", templateName)
@@ -152,7 +152,7 @@ func (s *emailService) SendPasswordResetEmail(ctx context.Context, to, resetLink
 }
 
 func (s *emailService) SendGradeNotification(ctx context.Context, to, studentName, courseName string, grade float64) error {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"StudentName": studentName,
 		"CourseName":  courseName,
 		"Grade":       grade,

@@ -62,7 +62,7 @@ func (m *ErrorSanitizationMiddleware) sanitizeError(err error) error {
 }
 
 // sanitizeMessage removes sensitive information from error messages
-func (m *ErrorSanitizationMiddleware) sanitizeMessage(message interface{}) interface{} {
+func (m *ErrorSanitizationMiddleware) sanitizeMessage(message any) any {
 	if msg, ok := message.(string); ok {
 		// Remove database-specific errors
 		if strings.Contains(strings.ToLower(msg), "sql") ||
@@ -93,8 +93,8 @@ func (m *ErrorSanitizationMiddleware) sanitizeMessage(message interface{}) inter
 	}
 
 	// For non-string messages, check if they're map and sanitize
-	if msgMap, ok := message.(map[string]interface{}); ok {
-		sanitized := make(map[string]interface{})
+	if msgMap, ok := message.(map[string]any); ok {
+		sanitized := make(map[string]any)
 		for k, v := range msgMap {
 			if strVal, ok := v.(string); ok {
 				sanitized[k] = m.sanitizeMessage(strVal)
@@ -132,7 +132,7 @@ func (m *ErrorSanitizationMiddleware) RecoverMiddleware(next echo.HandlerFunc) e
 						"error": "An internal error occurred",
 					})
 				} else {
-					c.JSON(http.StatusInternalServerError, map[string]interface{}{
+					c.JSON(http.StatusInternalServerError, map[string]any{
 						"error": "Internal server error",
 						"panic": r,
 					})

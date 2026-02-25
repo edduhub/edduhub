@@ -241,7 +241,7 @@ WHERE kratos_identity_id = $1`
 func (s *studentRepository) UpdateStudentPartial(ctx context.Context, collegeID int, studentID int, req *models.UpdateStudentRequest) error {
 	// Build dynamic query based on non-nil fields
 	sql := `UPDATE students SET updated_at = NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	if req.UserID != nil {

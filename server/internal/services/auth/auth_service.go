@@ -16,7 +16,7 @@ type AuthService interface {
 	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (string, *Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
 	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
-	ValidateCollegeAccess(ctx context.Context, collegeID int) (interface{}, error)
+	ValidateCollegeAccess(ctx context.Context, collegeID int) (any, error)
 	CheckCollegeAccess(identity *Identity, collegeID string) bool
 	HasRole(identity *Identity, role string) bool
 	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
@@ -52,7 +52,7 @@ type JWTManager interface {
 }
 
 type CollegeChecker interface {
-	GetCollegeByID(ctx context.Context, id int) (interface{}, error)
+	GetCollegeByID(ctx context.Context, id int) (any, error)
 }
 
 type UserStore interface {
@@ -88,7 +88,7 @@ func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, jwtMana
 }
 
 // NewAuthServiceWithDependencies creates an auth service with all dependencies for user/profile provisioning
-func NewAuthServiceWithDependencies(kratos *kratosService, keto *ketoService, jwtManager JWTManager, collegeRepo interface{}, userRepo interface{}, profileRepo interface{}, collegeChecker interface{}) AuthService {
+func NewAuthServiceWithDependencies(kratos *kratosService, keto *ketoService, jwtManager JWTManager, collegeRepo any, userRepo any, profileRepo any, collegeChecker any) AuthService {
 	service := &authService{
 		Auth:       kratos,
 		AuthZ:      keto,
@@ -272,7 +272,7 @@ func (a *authService) ChangePassword(ctx context.Context, identityID string, old
 
 // ValidateCollegeAccess verifies that a college with the given ID exists in the database
 // This is a critical security function for multi-tenant isolation
-func (a *authService) ValidateCollegeAccess(ctx context.Context, collegeID int) (interface{}, error) {
+func (a *authService) ValidateCollegeAccess(ctx context.Context, collegeID int) (any, error) {
 	if a.CollegeChecker == nil {
 		// If college checker not injected, assume validation is handled elsewhere
 		return map[string]int{"id": collegeID}, nil

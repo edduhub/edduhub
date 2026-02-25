@@ -90,7 +90,7 @@ func (h *FileUploadHandler) UploadFile(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 500)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"url":      fileURL,
 		"filename": file.Filename,
 		"size":     file.Size,

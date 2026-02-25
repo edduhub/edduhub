@@ -112,7 +112,7 @@ func (r *departmentRepository) ListDepartmentsByCollege(ctx context.Context, col
 }
 func (r *departmentRepository) UpdateDepartmentPartial(ctx context.Context, req *models.UpdateDepartmentRequest) error {
 	sql := `UPDATE departments SET updated_at=NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 	if req.ID != nil {
 		sql += fmt.Sprintf(`, id=$%d`, argIndex)

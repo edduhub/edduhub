@@ -107,7 +107,7 @@ func LoadDatabaseWithRetry(maxRetries int) (*repository.DB, error) {
 	var lastErr error
 
 	// Retry logic with exponential backoff
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 		pool, err = pgxpool.NewWithConfig(ctx, poolConfig)

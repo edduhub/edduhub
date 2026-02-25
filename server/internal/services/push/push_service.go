@@ -45,15 +45,15 @@ type FCMMessage struct {
 		Notification struct {
 			Title string `json:"title"`
 			Body  string `json:"body"`
-		} `json:"notification,omitempty"`
+		} `json:"notification"`
 		Data    map[string]string `json:"data,omitempty"`
 		Android struct {
 			Priority     string `json:"priority,omitempty"`
 			Notification struct {
 				ChannelID string `json:"channel_id,omitempty"`
 				Sound     string `json:"sound,omitempty"`
-			} `json:"notification,omitempty"`
-		} `json:"android,omitempty"`
+			} `json:"notification"`
+		} `json:"android"`
 		APNS struct {
 			Payload struct {
 				APS struct {
@@ -61,7 +61,7 @@ type FCMMessage struct {
 					Badge int    `json:"badge,omitempty"`
 				} `json:"aps"`
 			} `json:"aps"`
-		} `json:"apns,omitempty"`
+		} `json:"apns"`
 	} `json:"message"`
 }
 
@@ -263,7 +263,7 @@ func (s *fcmPushService) SubscribeToTopic(ctx context.Context, deviceTokens []st
 
 	apiURL := fmt.Sprintf("%s/projects/%s/topics:batchAdd", s.config.BaseURL, s.config.ProjectID)
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"tokens": deviceTokens,
 		"topic":  topic,
 	}
@@ -303,7 +303,7 @@ func (s *fcmPushService) UnsubscribeFromTopic(ctx context.Context, deviceTokens 
 
 	apiURL := fmt.Sprintf("%s/projects/%s/topics:batchRemove", s.config.BaseURL, s.config.ProjectID)
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"tokens": deviceTokens,
 		"topic":  topic,
 	}

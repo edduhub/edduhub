@@ -114,7 +114,7 @@ func (r *feeRepository) DeleteFeeStructure(ctx context.Context, feeID int, colle
 
 func (r *feeRepository) ListFeeStructures(ctx context.Context, filter models.FeeFilter) ([]*models.FeeStructure, error) {
 	sql := `SELECT * FROM fee_structures WHERE college_id = $1`
-	args := []interface{}{filter.CollegeID}
+	args := []any{filter.CollegeID}
 	paramCount := 1
 
 	if filter.DepartmentID != nil {

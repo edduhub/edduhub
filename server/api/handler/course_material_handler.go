@@ -169,7 +169,7 @@ func (h *CourseMaterialHandler) UpdateModule(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Module updated successfully",
 	}, 200)
 }
@@ -203,7 +203,7 @@ func (h *CourseMaterialHandler) DeleteModule(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Module deleted successfully",
 	}, 200)
 }
@@ -369,7 +369,7 @@ func (h *CourseMaterialHandler) UpdateMaterial(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Material updated successfully",
 	}, 200)
 }
@@ -403,7 +403,7 @@ func (h *CourseMaterialHandler) DeleteMaterial(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Material deleted successfully",
 	}, 200)
 }
@@ -437,7 +437,7 @@ func (h *CourseMaterialHandler) PublishMaterial(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Material published successfully",
 	}, 200)
 }
@@ -471,7 +471,7 @@ func (h *CourseMaterialHandler) UnpublishMaterial(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Material unpublished successfully",
 	}, 200)
 }
@@ -518,7 +518,7 @@ func (h *CourseMaterialHandler) LogMaterialAccess(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 400)
 	}
 
-	return helpers.Success(c, map[string]interface{}{
+	return helpers.Success(c, map[string]any{
 		"message": "Access logged successfully",
 	}, 200)
 }

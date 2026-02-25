@@ -61,8 +61,8 @@ type RegistrationRequest struct {
 
 func NewKratosService() *kratosService {
 	return &kratosService{
-		PublicURL:  os.Getenv(PUBLIC_URL),
-		AdminURL:   os.Getenv(ADMIN_URL),
+		PublicURL: os.Getenv(PUBLIC_URL),
+		AdminURL:  os.Getenv(ADMIN_URL),
 		HTTPClient: &http.Client{
 			Timeout: defaultHTTPTimeout,
 		},
@@ -85,7 +85,7 @@ func (k *kratosService) Login(ctx context.Context, email, password string) (*Ide
 	}
 	defer resp.Body.Close()
 
-	var flow map[string]interface{}
+	var flow map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
 		return nil, fmt.Errorf("failed to decode login flow: %w", err)
 	}
@@ -96,7 +96,7 @@ func (k *kratosService) Login(ctx context.Context, email, password string) (*Ide
 	}
 
 	// Submit credentials
-	loginData := map[string]interface{}{
+	loginData := map[string]any{
 		"method":     "password",
 		"password":   password,
 		"identifier": email,
@@ -136,7 +136,7 @@ func (k *kratosService) Login(ctx context.Context, email, password string) (*Ide
 }
 
 // InitiateRegistrationFlow starts the registration process by calling Ory Kratos.
-func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[string]interface{}, error) {
+func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[string]any, error) {
 	url := fmt.Sprintf("%s/self-service/registration/api", k.PublicURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -150,7 +150,7 @@ func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[strin
 	}
 	defer resp.Body.Close()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode registration response: %w", err)
 	}
@@ -267,7 +267,7 @@ func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string)
 	}
 	defer resp.Body.Close()
 
-	var flow map[string]interface{}
+	var flow map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
 		return fmt.Errorf("failed to decode password reset flow: %w", err)
 	}
@@ -277,7 +277,7 @@ func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string)
 		return fmt.Errorf("invalid flow ID in response")
 	}
 
-	resetData := map[string]interface{}{
+	resetData := map[string]any{
 		"method": "link",
 		"email":  email,
 	}
@@ -308,7 +308,7 @@ func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string)
 
 // CompletePasswordReset completes the password reset process
 func (k *kratosService) CompletePasswordReset(ctx context.Context, flowID string, newPassword string) error {
-	resetData := map[string]interface{}{
+	resetData := map[string]any{
 		"method":   "password",
 		"password": newPassword,
 	}
@@ -339,7 +339,7 @@ func (k *kratosService) CompletePasswordReset(ctx context.Context, flowID string
 
 // VerifyEmail completes email verification
 func (k *kratosService) VerifyEmail(ctx context.Context, flowID string, token string) error {
-	verifyData := map[string]interface{}{
+	verifyData := map[string]any{
 		"method": "link",
 		"token":  token,
 	}
@@ -383,7 +383,7 @@ func (k *kratosService) InitiateEmailVerification(ctx context.Context, identityI
 	}
 	defer resp.Body.Close()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode verification response: %w", err)
 	}
@@ -406,7 +406,7 @@ func (k *kratosService) ChangePassword(ctx context.Context, identityID string, o
 	}
 	defer resp.Body.Close()
 
-	var flow map[string]interface{}
+	var flow map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
 		return fmt.Errorf("failed to decode settings flow: %w", err)
 	}
@@ -416,7 +416,7 @@ func (k *kratosService) ChangePassword(ctx context.Context, identityID string, o
 		return fmt.Errorf("invalid flow ID in response")
 	}
 
-	changeData := map[string]interface{}{
+	changeData := map[string]any{
 		"method":   "password",
 		"password": newPassword,
 	}

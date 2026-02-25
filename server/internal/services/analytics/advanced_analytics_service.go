@@ -337,7 +337,7 @@ func (s *advancedAnalyticsService) GetComparativeAnalysis(ctx context.Context, c
 	comparisons := make([]CourseComparison, 0)
 
 	// Compare courses pairwise
-	for i := 0; i < len(courseIDs); i++ {
+	for i := range courseIDs {
 		for j := i + 1; j < len(courseIDs); j++ {
 			comparison, err := s.compareCourses(ctx, collegeID, courseIDs[i], courseIDs[j])
 			if err != nil {

@@ -136,7 +136,7 @@ func (r *gradeRepository) UpdateGradePartial(ctx context.Context, collegeID int,
 	}
 
 	sql := "UPDATE grades SET updated_at = NOW()"
-	args := []interface{}{}
+	args := []any{}
 	idx := 1
 	changed := false
 
@@ -265,7 +265,7 @@ func (r *gradeRepository) GetGrades(ctx context.Context, filter models.GradeFilt
 
 	sql := `SELECT id, student_id, course_id, college_id, assessment_name, assessment_type, total_marks, obtained_marks, percentage, grade, remarks, graded_by, graded_at, created_at, updated_at
             FROM grades WHERE college_id = $1`
-	args := []interface{}{*filter.CollegeID}
+	args := []any{*filter.CollegeID}
 	idx := 2
 
 	if filter.StudentID != nil {

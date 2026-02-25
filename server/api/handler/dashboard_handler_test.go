@@ -37,17 +37,17 @@ func TestCalculateGradePoint(t *testing.T) {
 // Test helper to check response structure
 func TestDashboardResponseStructure(t *testing.T) {
 	// Create a sample expected response structure
-	expected := map[string]interface{}{
-		"metrics": map[string]interface{}{
+	expected := map[string]any{
+		"metrics": map[string]any{
 			"totalStudents":      0,
 			"totalCourses":       0,
 			"totalFaculty":       0,
 			"attendanceRate":     0.0,
 			"pendingSubmissions": 0,
 		},
-		"announcements":  []interface{}{},
-		"upcomingEvents": []interface{}{},
-		"recentActivity": []interface{}{},
+		"announcements":  []any{},
+		"upcomingEvents": []any{},
+		"recentActivity": []any{},
 	}
 
 	// Verify the structure can be serialized

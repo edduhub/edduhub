@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +30,7 @@ func (v ValidationErrors) Error() string {
 }
 
 // ValidateRequest validates the request body and binds it to the target struct
-func ValidateRequest(c echo.Context, target interface{}) error {
+func ValidateRequest(c echo.Context, target any) error {
 	// Bind the request body
 	if err := c.Bind(target); err != nil {
 		return BadRequestError("Invalid request format", err)
@@ -38,7 +39,7 @@ func ValidateRequest(c echo.Context, target interface{}) error {
 	// Perform validation
 	if err := ValidateStruct(target); err != nil {
 		if valErrs, ok := err.(ValidationErrors); ok {
-			details := make(map[string]interface{})
+			details := make(map[string]any)
 			for field, errors := range valErrs {
 				details[field] = errors
 			}
@@ -58,11 +59,11 @@ func ValidateRequest(c echo.Context, target interface{}) error {
 }
 
 // ValidateStruct validates a struct based on tags
-func ValidateStruct(s interface{}) error {
+func ValidateStruct(s any) error {
 	errors := make(ValidationErrors)
 
 	val := reflect.ValueOf(s)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 
@@ -88,7 +89,7 @@ func ValidateStruct(s interface{}) error {
 		}
 
 		// Skip validation if field is nil pointer and not required
-		if field.Kind() == reflect.Ptr && field.IsNil() && !strings.Contains(tag, "required") {
+		if field.Kind() == reflect.Pointer && field.IsNil() && !strings.Contains(tag, "required") {
 			continue
 		}
 
@@ -110,12 +111,12 @@ func validateField(name string, field reflect.Value, tag string) []string {
 
 	// Get actual value if it's a pointer
 	actualValue := field
-	if field.Kind() == reflect.Ptr && !field.IsNil() {
+	if field.Kind() == reflect.Pointer && !field.IsNil() {
 		actualValue = field.Elem()
 	}
 
-	rules := strings.Split(tag, ",")
-	for _, rule := range rules {
+	rules := strings.SplitSeq(tag, ",")
+	for rule := range rules {
 		rule = strings.TrimSpace(rule)
 		parts := strings.SplitN(rule, "=", 2)
 		ruleName := parts[0]
@@ -203,11 +204,11 @@ func validateField(name string, field reflect.Value, tag string) []string {
 }
 
 func validateRequired(name string, field reflect.Value) error {
-	if field.Kind() == reflect.Ptr && field.IsNil() {
+	if field.Kind() == reflect.Pointer && field.IsNil() {
 		return fmt.Errorf("%s is required", name)
 	}
 
-	if field.Kind() != reflect.Ptr {
+	if field.Kind() != reflect.Pointer {
 		switch field.Kind() {
 		case reflect.String:
 			if field.String() == "" {
@@ -551,10 +552,8 @@ func validateOneOf(name string, field reflect.Value, values string) error {
 		fieldValue = fmt.Sprintf("%v", field.Interface())
 	}
 
-	for _, allowed := range allowedValues {
-		if fieldValue == allowed {
-			return nil
-		}
+	if slices.Contains(allowedValues, fieldValue) {
+		return nil
 	}
 
 	return fmt.Errorf("%s must be one of: %s", name, strings.Join(allowedValues, ", "))
@@ -572,14 +571,14 @@ func ValidatorMiddleware() echo.MiddlewareFunc {
 }
 
 // BindAndValidate is a helper function to bind and validate request
-func BindAndValidate(c echo.Context, target interface{}) error {
+func BindAndValidate(c echo.Context, target any) error {
 	if err := c.Bind(target); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request format: "+err.Error())
 	}
 
 	if err := ValidateStruct(target); err != nil {
 		if valErrs, ok := err.(ValidationErrors); ok {
-			details := make(map[string]interface{})
+			details := make(map[string]any)
 			for field, errors := range valErrs {
 				details[field] = errors
 			}

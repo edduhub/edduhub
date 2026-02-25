@@ -49,7 +49,7 @@ func (h *FacultyToolsHandler) ListRubrics(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "Failed to fetch rubrics", http.StatusInternalServerError)
 	}
-	return helpers.Success(c, map[string]interface{}{"rubrics": items, "total": len(items)}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"rubrics": items, "total": len(items)}, http.StatusOK)
 }
 
 func (h *FacultyToolsHandler) CreateRubric(c echo.Context) error {
@@ -88,7 +88,7 @@ func (h *FacultyToolsHandler) GetRubric(c echo.Context) error {
 	item, err := h.service.GetRubric(c.Request().Context(), collegeID, rubricID)
 	if err != nil {
 		if errors.Is(err, facultytools.ErrRubricNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Rubric not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Rubric not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, "Failed to fetch rubric", http.StatusInternalServerError)
 	}
@@ -113,7 +113,7 @@ func (h *FacultyToolsHandler) UpdateRubric(c echo.Context) error {
 	updated, err := h.service.UpdateRubric(c.Request().Context(), collegeID, rubricID, &input)
 	if err != nil {
 		if errors.Is(err, facultytools.ErrRubricNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Rubric not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Rubric not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, err.Error(), http.StatusBadRequest)
 	}
@@ -132,11 +132,11 @@ func (h *FacultyToolsHandler) DeleteRubric(c echo.Context) error {
 
 	if err := h.service.DeleteRubric(c.Request().Context(), collegeID, rubricID); err != nil {
 		if errors.Is(err, facultytools.ErrRubricNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Rubric not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Rubric not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, "Failed to delete rubric", http.StatusInternalServerError)
 	}
-	return helpers.Success(c, map[string]interface{}{"deleted": true}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"deleted": true}, http.StatusOK)
 }
 
 func (h *FacultyToolsHandler) ListOfficeHours(c echo.Context) error {
@@ -174,7 +174,7 @@ func (h *FacultyToolsHandler) ListOfficeHours(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "Failed to fetch office hours", http.StatusInternalServerError)
 	}
-	return helpers.Success(c, map[string]interface{}{"office_hours": items, "total": len(items)}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"office_hours": items, "total": len(items)}, http.StatusOK)
 }
 
 func (h *FacultyToolsHandler) CreateOfficeHour(c echo.Context) error {
@@ -212,7 +212,7 @@ func (h *FacultyToolsHandler) GetOfficeHour(c echo.Context) error {
 	item, err := h.service.GetOfficeHour(c.Request().Context(), collegeID, officeHourID)
 	if err != nil {
 		if errors.Is(err, facultytools.ErrOfficeHourNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Office hour not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Office hour not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, "Failed to fetch office hour", http.StatusInternalServerError)
 	}
@@ -237,7 +237,7 @@ func (h *FacultyToolsHandler) UpdateOfficeHour(c echo.Context) error {
 	updated, err := h.service.UpdateOfficeHour(c.Request().Context(), collegeID, officeHourID, &input)
 	if err != nil {
 		if errors.Is(err, facultytools.ErrOfficeHourNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Office hour not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Office hour not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, err.Error(), http.StatusBadRequest)
 	}
@@ -256,11 +256,11 @@ func (h *FacultyToolsHandler) DeleteOfficeHour(c echo.Context) error {
 
 	if err := h.service.DeleteOfficeHour(c.Request().Context(), collegeID, officeHourID); err != nil {
 		if errors.Is(err, facultytools.ErrOfficeHourNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Office hour not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Office hour not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, "Failed to delete office hour", http.StatusInternalServerError)
 	}
-	return helpers.Success(c, map[string]interface{}{"deleted": true}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"deleted": true}, http.StatusOK)
 }
 
 func (h *FacultyToolsHandler) CreateBooking(c echo.Context) error {
@@ -281,7 +281,7 @@ func (h *FacultyToolsHandler) CreateBooking(c echo.Context) error {
 	booking, err := h.service.CreateBooking(c.Request().Context(), collegeID, studentID, &input)
 	if err != nil {
 		if errors.Is(err, facultytools.ErrOfficeHourNotFound) {
-			return helpers.NotFound(c, map[string]interface{}{"error": "Office hour not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Office hour not found"}, http.StatusNotFound)
 		}
 		return helpers.Error(c, err.Error(), http.StatusBadRequest)
 	}
@@ -338,7 +338,7 @@ func (h *FacultyToolsHandler) ListBookings(c echo.Context) error {
 		return helpers.Error(c, "Failed to fetch bookings", http.StatusInternalServerError)
 	}
 
-	return helpers.Success(c, map[string]interface{}{"bookings": items, "total": len(items)}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"bookings": items, "total": len(items)}, http.StatusOK)
 }
 
 func (h *FacultyToolsHandler) ListBookingsByOfficeHour(c echo.Context) error {
@@ -383,7 +383,7 @@ func (h *FacultyToolsHandler) ListBookingsByOfficeHour(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "Failed to fetch bookings", http.StatusInternalServerError)
 	}
-	return helpers.Success(c, map[string]interface{}{"bookings": items, "total": len(items)}, http.StatusOK)
+	return helpers.Success(c, map[string]any{"bookings": items, "total": len(items)}, http.StatusOK)
 }
 
 func (h *FacultyToolsHandler) UpdateBookingStatus(c echo.Context) error {
@@ -419,7 +419,7 @@ func (h *FacultyToolsHandler) UpdateBookingStatus(c echo.Context) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, facultytools.ErrBookingNotFound):
-			return helpers.NotFound(c, map[string]interface{}{"error": "Booking not found"}, http.StatusNotFound)
+			return helpers.NotFound(c, map[string]any{"error": "Booking not found"}, http.StatusNotFound)
 		case errors.Is(err, facultytools.ErrFacultyToolsAccess):
 			return helpers.Error(c, "Access denied", http.StatusForbidden)
 		case errors.Is(err, facultytools.ErrInvalidStatusTransition):

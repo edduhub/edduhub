@@ -231,12 +231,12 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 	services := c.Get("services")
 
 	// Type assert to get our services
-	allServices, ok := services.(*interface{})
+	allServices, ok := services.(*any)
 	if !ok {
 		return helpers.Error(c, "internal server error", 500)
 	}
 
-	servicesMap, ok := (*allServices).(map[string]interface{})
+	servicesMap, ok := (*allServices).(map[string]any)
 	if !ok {
 		return helpers.Error(c, "internal server error", 500)
 	}

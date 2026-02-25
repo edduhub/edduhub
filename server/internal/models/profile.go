@@ -24,7 +24,7 @@ type Profile struct {
 }
 
 // JSONMap is a helper type for storing JSON data
-type JSONMap map[string]interface{}
+type JSONMap map[string]any
 
 // UpdateProfileRequest provides fields for partial updates to Profile via PATCH
 type UpdateProfileRequest struct {

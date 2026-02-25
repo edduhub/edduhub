@@ -228,7 +228,7 @@ func (s *analyticsService) GetAttendanceTrends(ctx context.Context, collegeID in
         COUNT(*) AS expected
         FROM attendance
         WHERE college_id = $1 AND date >= (CURRENT_DATE - INTERVAL '14 day')`
-	args := []interface{}{collegeID}
+	args := []any{collegeID}
 
 	if courseID != nil {
 		query += " AND course_id = $2"
@@ -298,7 +298,7 @@ func (s *analyticsService) GetGradeDistribution(ctx context.Context, collegeID, 
 
 func (s *analyticsService) averageGradePercentage(ctx context.Context, collegeID, studentID int, courseID *int) (float64, error) {
 	query := `SELECT COALESCE(AVG(percentage),0) FROM grades WHERE college_id = $1 AND student_id = $2`
-	args := []interface{}{collegeID, studentID}
+	args := []any{collegeID, studentID}
 
 	if courseID != nil {
 		query += " AND course_id = $3"
@@ -322,7 +322,7 @@ func (s *analyticsService) attendanceRate(ctx context.Context, collegeID, studen
         COALESCE(SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END),0) AS present,
         COUNT(*) AS total
         FROM attendance WHERE college_id = $1 AND student_id = $2`
-	args := []interface{}{collegeID, studentID}
+	args := []any{collegeID, studentID}
 
 	if courseID != nil {
 		query += " AND course_id = $3"
@@ -345,12 +345,12 @@ func (s *analyticsService) assignmentStats(ctx context.Context, collegeID, stude
 	submissionQuery := `SELECT COUNT(*) FROM assignment_submissions s
         JOIN assignments a ON a.id = s.assignment_id
         WHERE s.student_id = $1 AND a.college_id = $2`
-	submissionArgs := []interface{}{studentID, collegeID}
+	submissionArgs := []any{studentID, collegeID}
 
 	totalQuery := `SELECT COUNT(DISTINCT a.id) FROM assignments a
         JOIN enrollments e ON e.course_id = a.course_id AND e.college_id = a.college_id
         WHERE e.student_id = $1 AND a.college_id = $2`
-	totalArgs := []interface{}{studentID, collegeID}
+	totalArgs := []any{studentID, collegeID}
 
 	if courseID != nil {
 		submissionQuery += " AND a.course_id = $3"
@@ -377,7 +377,7 @@ func (s *analyticsService) quizStats(ctx context.Context, collegeID, studentID i
 	query := `SELECT COUNT(*), COALESCE(AVG(score),0) FROM quiz_attempts qa
         JOIN quizzes q ON q.id = qa.quiz_id
         WHERE qa.college_id = $1 AND qa.student_id = $2 AND qa.status IN ('submitted','graded')`
-	args := []interface{}{collegeID, studentID}
+	args := []any{collegeID, studentID}
 
 	if courseID != nil {
 		query += " AND q.course_id = $3"

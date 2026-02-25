@@ -21,7 +21,7 @@ type WebhookService interface {
 	GetWebhook(ctx context.Context, collegeID, webhookID int) (*models.Webhook, error)
 	UpdateWebhook(ctx context.Context, webhook *models.Webhook) error
 	DeleteWebhook(ctx context.Context, collegeID, webhookID int) error
-	TriggerEvent(ctx context.Context, collegeID int, event string, payload interface{}) error
+	TriggerEvent(ctx context.Context, collegeID int, event string, payload any) error
 	TestWebhook(ctx context.Context, collegeID, webhookID int) error
 }
 
@@ -67,7 +67,7 @@ func (s *webhookService) DeleteWebhook(ctx context.Context, collegeID, webhookID
 	return s.webhookRepo.DeleteWebhook(ctx, collegeID, webhookID)
 }
 
-func (s *webhookService) TriggerEvent(ctx context.Context, collegeID int, event string, payload interface{}) error {
+func (s *webhookService) TriggerEvent(ctx context.Context, collegeID int, event string, payload any) error {
 	// Get all active webhooks for this event
 	webhooks, err := s.webhookRepo.GetWebhooksByEvent(ctx, collegeID, event)
 	if err != nil {
@@ -92,7 +92,7 @@ func (s *webhookService) TestWebhook(ctx context.Context, collegeID, webhookID i
 		return err
 	}
 
-	testPayload := map[string]interface{}{
+	testPayload := map[string]any{
 		"event": "test",
 		"data": map[string]string{
 			"message": "This is a test webhook event",
@@ -103,7 +103,7 @@ func (s *webhookService) TestWebhook(ctx context.Context, collegeID, webhookID i
 	return s.sendWebhook(webhook, testPayload)
 }
 
-func (s *webhookService) sendWebhook(webhook *models.Webhook, payload interface{}) error {
+func (s *webhookService) sendWebhook(webhook *models.Webhook, payload any) error {
 	// Marshal payload
 	data, err := json.Marshal(payload)
 	if err != nil {

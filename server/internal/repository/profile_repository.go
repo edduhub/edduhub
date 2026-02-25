@@ -202,7 +202,7 @@ func (r *profileRepository) UpdateProfilePartial(ctx context.Context, profileID 
 	}
 
 	var fields []string
-	args := []interface{}{}
+	args := []any{}
 
 	if req.FirstName != nil {
 		fields = append(fields, fmt.Sprintf("first_name = $%d", len(args)+1))

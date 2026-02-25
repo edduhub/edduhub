@@ -14,7 +14,7 @@ type ExamService interface {
 	// Exam Management
 	CreateExam(ctx context.Context, exam *models.Exam) error
 	GetExam(ctx context.Context, collegeID, examID int) (*models.Exam, error)
-	ListExams(ctx context.Context, collegeID int, filters map[string]interface{}, limit, offset int) ([]*models.Exam, error)
+	ListExams(ctx context.Context, collegeID int, filters map[string]any, limit, offset int) ([]*models.Exam, error)
 	ListExamsByCourse(ctx context.Context, collegeID, courseID int, limit, offset int) ([]*models.Exam, error)
 	UpdateExam(ctx context.Context, exam *models.Exam) error
 	DeleteExam(ctx context.Context, collegeID, examID int) error
@@ -47,7 +47,7 @@ type ExamService interface {
 	// Revaluation Management
 	CreateRevaluationRequest(ctx context.Context, request *models.RevaluationRequest) error
 	GetRevaluationRequest(ctx context.Context, requestID int) (*models.RevaluationRequest, error)
-	ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]interface{}) ([]*models.RevaluationRequest, error)
+	ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]any) ([]*models.RevaluationRequest, error)
 	UpdateRevaluationRequest(ctx context.Context, request *models.RevaluationRequest) error
 	ApproveRevaluationRequest(ctx context.Context, requestID int, reviewedBy int, revisedMarks float64, comments string) error
 	RejectRevaluationRequest(ctx context.Context, requestID int, reviewedBy int, comments string) error
@@ -153,7 +153,7 @@ func (s *examService) GetExam(ctx context.Context, collegeID, examID int) (*mode
 	return s.repo.GetExamByID(ctx, collegeID, examID)
 }
 
-func (s *examService) ListExams(ctx context.Context, collegeID int, filters map[string]interface{}, limit, offset int) ([]*models.Exam, error) {
+func (s *examService) ListExams(ctx context.Context, collegeID int, filters map[string]any, limit, offset int) ([]*models.Exam, error) {
 	if collegeID == 0 {
 		return nil, errors.New("college ID is required")
 	}
@@ -397,14 +397,14 @@ func (s *examService) GenerateHallTicket(ctx context.Context, examID, studentID 
 	}
 
 	hallTicket := &models.HallTicketResponse{
-		ExamID:      examID,
-		StudentID:   studentID,
-		StudentName: user.Name,
-		ExamTitle:   exam.Title,
-		ExamDate:    exam.StartTime,
-		StartTime:   exam.StartTime,
-		EndTime:     exam.EndTime,
-		Duration:    exam.Duration,
+		ExamID:       examID,
+		StudentID:    studentID,
+		StudentName:  user.Name,
+		ExamTitle:    exam.Title,
+		ExamDate:     exam.StartTime,
+		StartTime:    exam.StartTime,
+		EndTime:      exam.EndTime,
+		Duration:     exam.Duration,
 		Instructions: exam.Instructions,
 	}
 
@@ -426,7 +426,6 @@ func (s *examService) GenerateHallTicket(ctx context.Context, examID, studentID 
 
 	return hallTicket, nil
 }
-
 
 func (s *examService) GenerateAllHallTickets(ctx context.Context, examID int) error {
 	enrollments, err := s.repo.ListEnrollments(ctx, examID)
@@ -645,7 +644,7 @@ func (s *examService) GetRevaluationRequest(ctx context.Context, requestID int) 
 	return s.repo.GetRevaluationRequest(ctx, requestID)
 }
 
-func (s *examService) ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]interface{}) ([]*models.RevaluationRequest, error) {
+func (s *examService) ListRevaluationRequests(ctx context.Context, collegeID int, filters map[string]any) ([]*models.RevaluationRequest, error) {
 	if collegeID == 0 {
 		return nil, errors.New("college ID is required")
 	}
@@ -678,27 +677,27 @@ func (s *examService) ApproveRevaluationRequest(ctx context.Context, requestID i
 		return fmt.Errorf("failed to get associated result: %w", err)
 	}
 
-		// Re-calculate result fields
-		exam, err := s.repo.GetExamByID(ctx, result.CollegeID, result.ExamID)
-		if err != nil {
-			return fmt.Errorf("failed to get exam details: %w", err)
-		}
+	// Re-calculate result fields
+	exam, err := s.repo.GetExamByID(ctx, result.CollegeID, result.ExamID)
+	if err != nil {
+		return fmt.Errorf("failed to get exam details: %w", err)
+	}
 
-		result.MarksObtained = &revisedMarks
-		percentage := (revisedMarks / exam.TotalMarks) * 100
-		result.Percentage = &percentage
-		grade := s.CalculateGrade(revisedMarks, exam.TotalMarks)
-		result.Grade = &grade
-		
-		if revisedMarks >= exam.PassingMarks {
-			result.Result = "Pass"
-		} else {
-			result.Result = "Fail"
-		}
+	result.MarksObtained = &revisedMarks
+	percentage := (revisedMarks / exam.TotalMarks) * 100
+	result.Percentage = &percentage
+	grade := s.CalculateGrade(revisedMarks, exam.TotalMarks)
+	result.Grade = &grade
 
-		if err := s.repo.UpdateResult(ctx, result); err != nil {
-			return fmt.Errorf("failed to update exam result: %w", err)
-		}
+	if revisedMarks >= exam.PassingMarks {
+		result.Result = "Pass"
+	} else {
+		result.Result = "Fail"
+	}
+
+	if err := s.repo.UpdateResult(ctx, result); err != nil {
+		return fmt.Errorf("failed to update exam result: %w", err)
+	}
 
 	return s.repo.UpdateRevaluationRequest(ctx, request)
 }

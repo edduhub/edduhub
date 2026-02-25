@@ -40,7 +40,7 @@ type FeeService interface {
 
 	// Webhook processing
 	VerifyWebhookSignature(body []byte, signature string) bool
-	ProcessWebhookEvent(ctx context.Context, eventType string, payload map[string]interface{}) error
+	ProcessWebhookEvent(ctx context.Context, eventType string, payload map[string]any) error
 }
 
 type feeService struct {
@@ -289,7 +289,7 @@ func (s *feeService) InitiateOnlinePayment(ctx context.Context, req *models.Init
 
 	// For Razorpay, we create an order
 	amountInPaise := int(req.Amount * 100)
-	orderData := map[string]interface{}{
+	orderData := map[string]any{
 		"amount":          amountInPaise,
 		"currency":        "INR", // Razorpay usually expects INR
 		"receipt":         fmt.Sprintf("rcpt_%d_%d", studentID, time.Now().Unix()),
@@ -397,7 +397,7 @@ func (s *feeService) VerifyWebhookSignature(body []byte, signature string) bool 
 }
 
 // ProcessWebhookEvent processes Razorpay webhook events (payment.captured, payment.failed, etc.)
-func (s *feeService) ProcessWebhookEvent(ctx context.Context, eventType string, payload map[string]interface{}) error {
+func (s *feeService) ProcessWebhookEvent(ctx context.Context, eventType string, payload map[string]any) error {
 	switch eventType {
 	case "payment.captured":
 		return s.handlePaymentCaptured(ctx, payload)
@@ -412,13 +412,13 @@ func (s *feeService) ProcessWebhookEvent(ctx context.Context, eventType string, 
 }
 
 // handlePaymentCaptured processes successful payment webhooks
-func (s *feeService) handlePaymentCaptured(ctx context.Context, payload map[string]interface{}) error {
-	paymentData, ok := payload["payment"].(map[string]interface{})
+func (s *feeService) handlePaymentCaptured(ctx context.Context, payload map[string]any) error {
+	paymentData, ok := payload["payment"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid payment payload structure")
 	}
 
-	entity, ok := paymentData["entity"].(map[string]interface{})
+	entity, ok := paymentData["entity"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid payment entity structure")
 	}
@@ -435,13 +435,13 @@ func (s *feeService) handlePaymentCaptured(ctx context.Context, payload map[stri
 }
 
 // handlePaymentFailed processes failed payment webhooks
-func (s *feeService) handlePaymentFailed(ctx context.Context, payload map[string]interface{}) error {
-	paymentData, ok := payload["payment"].(map[string]interface{})
+func (s *feeService) handlePaymentFailed(ctx context.Context, payload map[string]any) error {
+	paymentData, ok := payload["payment"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid payment payload structure")
 	}
 
-	entity, ok := paymentData["entity"].(map[string]interface{})
+	entity, ok := paymentData["entity"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid payment entity structure")
 	}
@@ -456,13 +456,13 @@ func (s *feeService) handlePaymentFailed(ctx context.Context, payload map[string
 }
 
 // handleOrderPaid processes order.paid webhooks (alternative to payment.captured)
-func (s *feeService) handleOrderPaid(ctx context.Context, payload map[string]interface{}) error {
-	orderData, ok := payload["order"].(map[string]interface{})
+func (s *feeService) handleOrderPaid(ctx context.Context, payload map[string]any) error {
+	orderData, ok := payload["order"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid order payload structure")
 	}
 
-	entity, ok := orderData["entity"].(map[string]interface{})
+	entity, ok := orderData["entity"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid order entity structure")
 	}

@@ -33,7 +33,7 @@ func (h *RoleHandler) CreateRole(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create role: "+err.Error())
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]any{
 		"message": "Role created successfully",
 		"data":    role,
 	})
@@ -50,7 +50,7 @@ func (h *RoleHandler) GetRole(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "Role not found: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": roleWithPerms,
 	})
 }
@@ -67,7 +67,7 @@ func (h *RoleHandler) ListRoles(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to list roles: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": roles,
 	})
 }
@@ -88,7 +88,7 @@ func (h *RoleHandler) UpdateRole(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to update role: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Role updated successfully",
 		"data":    role,
 	})
@@ -104,7 +104,7 @@ func (h *RoleHandler) DeleteRole(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to delete role: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Role deleted successfully",
 	})
 }
@@ -117,7 +117,7 @@ func (h *RoleHandler) ListPermissions(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to list permissions: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": permissions,
 	})
 }
@@ -137,7 +137,7 @@ func (h *RoleHandler) AssignPermissionsToRole(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to assign permissions: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Permissions assigned successfully",
 	})
 }
@@ -154,7 +154,7 @@ func (h *RoleHandler) AssignRoleToUser(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to assign role: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "Role assigned to user successfully",
 	})
 }
@@ -170,7 +170,7 @@ func (h *RoleHandler) GetUserRoles(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get user roles: "+err.Error())
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data": roles,
 	})
 }

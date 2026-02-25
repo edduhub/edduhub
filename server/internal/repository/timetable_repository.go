@@ -10,7 +10,6 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
-	
 )
 
 const timeTableBlockTable = "timetable_blocks"
@@ -96,14 +95,13 @@ func (r *timetableRepository) DeleteTimeTableBlock(ctx context.Context, blockID 
 	return nil
 }
 
-
 func (r *timetableRepository) GetTimeTableBlocks(ctx context.Context, filter models.TimeTableBlockFilter) ([]*models.TimeTableBlock, error) {
 	if filter.CollegeID == 0 { // Or handle as pointer and check for nil
 		return nil, errors.New("GetTimeTableBlocks: CollegeID filter is required")
 	}
 
 	sql := "SELECT id, college_id, department_id, course_id, class_id, day_of_week, start_time, end_time, room_number, faculty_id, created_at, updated_at FROM timetable_blocks WHERE college_id = $1"
-	args := []interface{}{filter.CollegeID}
+	args := []any{filter.CollegeID}
 	paramCount := 1
 
 	if filter.DepartmentID != nil {
@@ -172,7 +170,7 @@ func (r *timetableRepository) CountTimeTableBlocks(ctx context.Context, filter m
 	}
 
 	sql := "SELECT COUNT(*) FROM timetable_blocks WHERE college_id = $1"
-	args := []interface{}{filter.CollegeID}
+	args := []any{filter.CollegeID}
 	paramCount := 1
 
 	if filter.DepartmentID != nil {

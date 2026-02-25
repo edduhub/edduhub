@@ -23,7 +23,7 @@ func NewSystemHandler(db *repository.DB) *SystemHandler {
 // HealthCheck performs a health check on the system
 func (h *SystemHandler) HealthCheck(c echo.Context) error {
 	if h.db == nil {
-		return helpers.Success(c, map[string]interface{}{
+		return helpers.Success(c, map[string]any{
 			"status":    "unhealthy",
 			"timestamp": time.Now().Format(time.RFC3339),
 			"service":   "eduhub-api",
@@ -35,7 +35,7 @@ func (h *SystemHandler) HealthCheck(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 5*time.Second)
 	defer cancel()
 
-	status := map[string]interface{}{
+	status := map[string]any{
 		"status":    "healthy",
 		"timestamp": time.Now().Format(time.RFC3339),
 		"service":   "eduhub-api",

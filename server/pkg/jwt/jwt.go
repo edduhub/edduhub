@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	ErrInvalidToken    = errors.New("invalid token")
-	ErrExpiredToken   = errors.New("token has expired")
-	ErrWeakSecret     = errors.New("secret key must be at least 32 characters")
-	ErrTokenRevoked   = errors.New("token has been revoked")
+	ErrInvalidToken = errors.New("invalid token")
+	ErrExpiredToken = errors.New("token has expired")
+	ErrWeakSecret   = errors.New("secret key must be at least 32 characters")
+	ErrTokenRevoked = errors.New("token has been revoked")
 )
 
 // Allowed signing methods - only HS256 for security
@@ -105,7 +105,7 @@ func (m *JWTManager) Verify(tokenString string) (*JWTClaims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		&Claims{},
-		func(token *jwt.Token) (interface{}, error) {
+		func(token *jwt.Token) (any, error) {
 			// Explicit algorithm validation - only allow HS256
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, ErrInvalidToken

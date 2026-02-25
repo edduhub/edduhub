@@ -114,7 +114,7 @@ func (r *assignmentRepository) UpdateAssignmentPartial(ctx context.Context, coll
 	}
 
 	sql := `UPDATE assignments SET updated_at = NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	if req.CourseID != nil {

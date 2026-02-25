@@ -13,16 +13,16 @@ import (
 )
 
 type QuizHandler struct {
-	quizService        quiz.QuizService
-	enrollmentService  enrollment.EnrollmentService
-	courseService      course.CourseService
+	quizService       quiz.QuizService
+	enrollmentService enrollment.EnrollmentService
+	courseService     course.CourseService
 }
 
 func NewQuizHandler(quizService quiz.QuizService, enrollmentService enrollment.EnrollmentService, courseService course.CourseService) *QuizHandler {
 	return &QuizHandler{
-		quizService:        quizService,
-		enrollmentService:  enrollmentService,
-		courseService:      courseService,
+		quizService:       quizService,
+		enrollmentService: enrollmentService,
+		courseService:     courseService,
 	}
 }
 
@@ -204,7 +204,7 @@ func (h *QuizHandler) GetMyQuizzes(c echo.Context) error {
 	}
 
 	courseNames := make(map[int]string)
-	result := make([]map[string]interface{}, 0)
+	result := make([]map[string]any, 0)
 
 	for _, enrollmentRecord := range enrollments {
 		quizzes, err := h.quizService.FindQuizzesByCourse(ctx, collegeID, enrollmentRecord.CourseID, 100, 0)
@@ -224,19 +224,19 @@ func (h *QuizHandler) GetMyQuizzes(c echo.Context) error {
 		}
 
 		for _, quiz := range quizzes {
-			result = append(result, map[string]interface{}{
-				"id":             quiz.ID,
-				"title":          quiz.Title,
-				"description":    quiz.Description,
-				"courseId":       quiz.CourseID,
-				"courseName":     courseName,
-				"duration":       quiz.TimeLimitMinutes,
-				"dueDate":        quiz.DueDate,
-				"status":         "not_started",
-				"attempts":       0,
-				"maxAttempts":    1,
+			result = append(result, map[string]any{
+				"id":              quiz.ID,
+				"title":           quiz.Title,
+				"description":     quiz.Description,
+				"courseId":        quiz.CourseID,
+				"courseName":      courseName,
+				"duration":        quiz.TimeLimitMinutes,
+				"dueDate":         quiz.DueDate,
+				"status":          "not_started",
+				"attempts":        0,
+				"maxAttempts":     1,
 				"allowedAttempts": 1,
-				"questions":      quiz.Questions,
+				"questions":       quiz.Questions,
 			})
 		}
 	}

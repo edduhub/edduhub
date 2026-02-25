@@ -119,7 +119,7 @@ func (r *lectureRepository) CountLecturesByCourse(ctx context.Context, collegeID
 func (r *lectureRepository) UpdateLecturePartial(ctx context.Context, collegeID int, lectureID int, req *models.UpdateLectureRequest) error {
 	// Build dynamic query based on non-nil fields
 	sql := `UPDATE lectures SET updated_at = NOW()`
-	args := []interface{}{}
+	args := []any{}
 	argIndex := 1
 
 	if req.CourseID != nil {

@@ -28,7 +28,7 @@ type JobInfo struct {
 	ID       int       `json:"id"`
 	Schedule string    `json:"schedule"`
 	NextRun  time.Time `json:"next_run"`
-	PrevRun  time.Time `json:"prev_run,omitempty"`
+	PrevRun  time.Time `json:"prev_run"`
 }
 
 // cronSchedulerService implements SchedulerService using robfig/cron

@@ -33,8 +33,8 @@ type CourseMaterialRepository interface {
 
 	// Access tracking operations
 	LogAccess(ctx context.Context, materialID, studentID int, durationSeconds int, completed bool) error
-	GetAccessStats(ctx context.Context, materialID int) (map[string]interface{}, error)
-	GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]interface{}, error)
+	GetAccessStats(ctx context.Context, materialID int) (map[string]any, error)
+	GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]any, error)
 }
 
 type courseMaterialRepository struct {
@@ -350,7 +350,7 @@ func (r *courseMaterialRepository) LogAccess(ctx context.Context, materialID, st
 	return nil
 }
 
-func (r *courseMaterialRepository) GetAccessStats(ctx context.Context, materialID int) (map[string]interface{}, error) {
+func (r *courseMaterialRepository) GetAccessStats(ctx context.Context, materialID int) (map[string]any, error) {
 	sql := `SELECT
 				COUNT(DISTINCT student_id) as unique_students,
 				COUNT(*) as total_accesses,
@@ -371,7 +371,7 @@ func (r *courseMaterialRepository) GetAccessStats(ctx context.Context, materialI
 		return nil, fmt.Errorf("GetAccessStats: failed to execute query or scan: %w", err)
 	}
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"uniqueStudents":  stats.UniqueStudents,
 		"totalAccesses":   stats.TotalAccesses,
 		"avgDuration":     stats.AvgDuration,
@@ -381,7 +381,7 @@ func (r *courseMaterialRepository) GetAccessStats(ctx context.Context, materialI
 	return result, nil
 }
 
-func (r *courseMaterialRepository) GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]interface{}, error) {
+func (r *courseMaterialRepository) GetStudentProgress(ctx context.Context, courseID, studentID int) (map[string]any, error) {
 	sql := `SELECT
 				COUNT(DISTINCT cm.id) as total_materials,
 				COUNT(DISTINCT CASE WHEN cma.completed THEN cm.id END) as completed_materials,
@@ -406,7 +406,7 @@ func (r *courseMaterialRepository) GetStudentProgress(ctx context.Context, cours
 		completionPercentage = (float64(progress.CompletedMaterials) / float64(progress.TotalMaterials)) * 100
 	}
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"totalMaterials":       progress.TotalMaterials,
 		"completedMaterials":   progress.CompletedMaterials,
 		"completionPercentage": completionPercentage,
