@@ -35,9 +35,7 @@ func extractBearerToken(c echo.Context) string {
 func (h *AuthHandler) InitiateRegistration(c echo.Context) error {
 	flow, err := h.authService.InitiateRegistrationFlow(c.Request().Context())
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": err.Error(),
-		})
+		return helpers.Error(c, "unable to initiate registration flow", http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, flow)
 }
@@ -82,26 +80,22 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 		return helpers.Error(c, "invalid flow response", http.StatusInternalServerError)
 	}
 
-	// Complete registration
-	identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
+	// Complete registration and generate token
+	token, identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
 	if err != nil {
 		return helpers.Error(c, "unable to complete registration: "+err.Error(), http.StatusBadRequest)
 	}
 
-	// Login the user automatically after registration
-	token, _, err := h.authService.Login(c.Request().Context(), req.Email, req.Password)
-	if err != nil {
-		// Registration succeeded but auto-login failed
-		return helpers.Success(c, map[string]interface{}{
-			"message":  "Registration successful. Please login.",
-			"identity": identity,
-		}, http.StatusCreated)
+	userIDValue := interface{}(identity.ID)
+	if identity.UserID > 0 {
+		userIDValue = identity.UserID
 	}
 
 	return helpers.Success(c, map[string]interface{}{
 		"token": token,
 		"user": map[string]interface{}{
-			"id":          identity.ID,
+			"id":          userIDValue,
+			"kratosId":    identity.ID,
 			"email":       identity.Traits.Email,
 			"firstName":   identity.Traits.Name.First,
 			"lastName":    identity.Traits.Name.Last,
@@ -133,11 +127,17 @@ func (h *AuthHandler) HandleLogin(c echo.Context) error {
 	// Calculate expiration time (24 hours from now as per JWT manager)
 	expiresAt := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 
+	userIDValue := interface{}(identity.ID)
+	if identity.UserID > 0 {
+		userIDValue = identity.UserID
+	}
+
 	// Return token and user info
 	return helpers.Success(c, map[string]interface{}{
 		"token": token,
 		"user": map[string]interface{}{
-			"id":          identity.ID,
+			"id":          userIDValue,
+			"kratosId":    identity.ID,
 			"email":       identity.Traits.Email,
 			"firstName":   identity.Traits.Name.First,
 			"lastName":    identity.Traits.Name.Last,
@@ -167,15 +167,6 @@ func (h *AuthHandler) HandleCallback(c echo.Context) error {
 
 // HandleLogout logs out the current user
 func (h *AuthHandler) HandleLogout(c echo.Context) error {
-	sessionToken := c.Request().Header.Get("X-Session-Token")
-	if sessionToken != "" {
-		err := h.authService.Logout(c.Request().Context(), sessionToken)
-		if err != nil {
-			return helpers.Error(c, "failed to logout: "+err.Error(), http.StatusInternalServerError)
-		}
-
-		return helpers.Success(c, map[string]string{"message": "logout successful"}, http.StatusOK)
-	}
 
 	// JWT mode: no server-side session invalidation is required.
 	jwtToken := extractBearerToken(c)
@@ -191,20 +182,8 @@ func (h *AuthHandler) HandleLogout(c echo.Context) error {
 	return helpers.Success(c, map[string]string{"message": "logout successful"}, http.StatusOK)
 }
 
-// RefreshToken refreshes the session token
+// RefreshToken refreshes the JWT Token
 func (h *AuthHandler) RefreshToken(c echo.Context) error {
-	sessionToken := c.Request().Header.Get("X-Session-Token")
-	if sessionToken != "" {
-		newToken, err := h.authService.RefreshSession(c.Request().Context(), sessionToken)
-		if err != nil {
-			return helpers.Error(c, "failed to refresh token: "+err.Error(), http.StatusUnauthorized)
-		}
-
-		return helpers.Success(c, map[string]string{
-			"session_token": newToken,
-			"message":       "token refreshed successfully",
-		}, http.StatusOK)
-	}
 
 	jwtToken := extractBearerToken(c)
 	if jwtToken == "" {

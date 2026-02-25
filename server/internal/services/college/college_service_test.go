@@ -14,14 +14,15 @@ import (
 
 // Mock CollegeRepository for testing
 type mockCollegeRepository struct {
-	createCollegeFn        func(ctx context.Context, college *models.College) error
-	getCollegeByIDFn       func(ctx context.Context, id int) (*models.College, error)
-	getCollegeByNameFn     func(ctx context.Context, name string) (*models.College, error)
-	updateCollegeFn        func(ctx context.Context, college *models.College) error
-	updateCollegePartialFn func(ctx context.Context, id int, req *models.UpdateCollegeRequest) error
-	deleteCollegeFn        func(ctx context.Context, id int) error
-	listCollegesFn         func(ctx context.Context, limit, offset uint64) ([]*models.College, error)
-	getCollegeStatsFn      func(ctx context.Context, collegeID int) (*models.CollegeStats, error)
+	createCollegeFn          func(ctx context.Context, college *models.College) error
+	getCollegeByIDFn         func(ctx context.Context, id int) (*models.College, error)
+	getCollegeByNameFn       func(ctx context.Context, name string) (*models.College, error)
+	getCollegeByExternalIDFn func(ctx context.Context, externalID string) (*models.College, error)
+	updateCollegeFn          func(ctx context.Context, college *models.College) error
+	updateCollegePartialFn   func(ctx context.Context, id int, req *models.UpdateCollegeRequest) error
+	deleteCollegeFn          func(ctx context.Context, id int) error
+	listCollegesFn           func(ctx context.Context, limit, offset uint64) ([]*models.College, error)
+	getCollegeStatsFn        func(ctx context.Context, collegeID int) (*models.CollegeStats, error)
 }
 
 func (m *mockCollegeRepository) CreateCollege(ctx context.Context, college *models.College) error {
@@ -41,6 +42,13 @@ func (m *mockCollegeRepository) GetCollegeByID(ctx context.Context, id int) (*mo
 func (m *mockCollegeRepository) GetCollegeByName(ctx context.Context, name string) (*models.College, error) {
 	if m.getCollegeByNameFn != nil {
 		return m.getCollegeByNameFn(ctx, name)
+	}
+	return nil, nil
+}
+
+func (m *mockCollegeRepository) GetCollegeByExternalID(ctx context.Context, externalID string) (*models.College, error) {
+	if m.getCollegeByExternalIDFn != nil {
+		return m.getCollegeByExternalIDFn(ctx, externalID)
 	}
 	return nil, nil
 }

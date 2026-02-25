@@ -82,25 +82,10 @@ func (m *OwnershipMiddleware) VerifyStudentOwnership() echo.MiddlewareFunc {
 				return next(c)
 
 			} else if userRole == RoleAdmin || userRole == RoleFaculty {
-				// If Admin or Faculty, allow access based on role.
-				// Further checks (e.g., is faculty teaching this student's course?)
-				// should be handled by Keto permission checks if needed, either here
-				// or in the handler/service.
-				// For now, we allow based on role.
-
-				// Example Keto Check (Optional here, could be separate middleware or in handler):
-				// subject := identity.ID // User's Kratos ID
-				// resource := fmt.Sprintf("%s:%s", StudentResource, requestedStudentIDStr) // e.g., "student_data:123"
-				// action := ViewAction // e.g., "view"
-				// allowed, ketoErr := m.AuthService.CheckPermission(c.Request().Context(), identity, subject, resource, action)
-				// if ketoErr != nil {
-				//   return helpers.Error(c, "Error checking admin/faculty permission", http.StatusInternalServerError)
-				// }
-				// if !allowed {
-				//   return helpers.Error(c, "Forbidden - You do not have permission to view this student's data", http.StatusForbidden)
-				// }
-
-				return next(c) // Allow admin/faculty
+				// Admin and faculty are allowed based on role. For finer-grained
+				// checks (e.g., faculty teaching this student's course), use
+				// Keto permission checks in the handler or a dedicated middleware.
+				return next(c)
 			}
 
 			// If role is none of the above (or empty), deny access.

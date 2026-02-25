@@ -29,10 +29,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.GET("/register", a.Auth.InitiateRegistration, authRateLimiter.Middleware())
 	auth.POST("/register/complete", a.Auth.HandleRegistration, authRateLimiter.Middleware())
 	auth.POST("/login", a.Auth.HandleLogin, authRateLimiter.Middleware())
-	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateSession)
+	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateJWT)
 
 	// Auth routes (require authentication)
-	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateSession)
+	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateJWT)
 	auth.POST("/refresh", a.Auth.RefreshToken, authRateLimiter.Middleware())
 
 	// Password management (public) with strict rate limiting
@@ -47,7 +47,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT, passwordRateLimiter.Middleware())
 
 	// Protected API routes with audit logging
-	apiGroup := e.Group("/api", m.ValidateSession, m.RequireCollege)
+	apiGroup := e.Group("/api", m.ValidateJWT, m.RequireCollege)
 
 	// Dashboard
 	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)
@@ -511,6 +511,12 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	parent.GET("/children/:studentID/grades", a.Parent.GetChildGrades)
 	parent.GET("/children/:studentID/assignments", a.Parent.GetChildAssignments)
 	parent.POST("/contact", a.Parent.ContactParent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+
+	// Parent-Student Link Management (admin only)
+	parentRelationships := apiGroup.Group("/parent/relationships", m.RequireRole(middleware.RoleAdmin))
+	parentRelationships.GET("", a.Parent.ListParentRelationships)
+	parentRelationships.POST("", a.Parent.CreateParentRelationship)
+	parentRelationships.DELETE("/:id", a.Parent.DeleteParentRelationship)
 
 	// Self-Service Routes
 	selfService := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)

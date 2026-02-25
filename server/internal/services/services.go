@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 
+	"eduhub/server/internal/cache"
 	"eduhub/server/internal/config"
 	"eduhub/server/internal/repository"
 	"eduhub/server/internal/services/analytics"
@@ -92,14 +93,14 @@ func NewServices(cfg *config.Config) *Services {
 	kratosService := auth.NewKratosService()
 	ketoService := auth.NewKetoService()
 
-	// Initialize JWT manager
-	jwtManager := jwt.NewJWTManager(
+	// Initialize JWT manager with secret key validation
+	jwtManager, err := jwt.NewJWTManager(
 		cfg.AuthConfig.JWTSecret,
 		24*time.Hour, // Token valid for 24 hours
 	)
-
-	// Create auth service with JWT manager
-	authService := auth.NewAuthService(kratosService, ketoService, jwtManager)
+	if err != nil {
+		log.Fatalf("failed to initialize JWT manager: %v", err)
+	}
 
 	// Create individual repository instances using modular approach
 	studentRepo := repository.NewStudentRepository(cfg.DB)
@@ -116,6 +117,17 @@ func NewServices(cfg *config.Config) *Services {
 	quizAttemptRepo := repository.NewQuizAttemptRepository(cfg.DB)
 	calendarRepo := repository.NewCalendarRepository(cfg.DB)
 	departmentRepo := repository.NewDepartmentRepository(cfg.DB)
+
+	// Create auth service with local user/profile provisioning dependencies
+	authService := auth.NewAuthServiceWithDependencies(
+		kratosService,
+		ketoService,
+		jwtManager,
+		collegeRepo,
+		userRepo,
+		profileRepo,
+		collegeRepo,
+	)
 
 	var minioClient *storageclient.MinioClient
 	storageBucket := "eduhub"
@@ -162,7 +174,18 @@ func NewServices(cfg *config.Config) *Services {
 		gradeRepo,
 	)
 	// systemService := system.NewSystemService(cfg.DB)
-	attendanceService := attendance.NewAttendanceService(attendanceRepo, studentRepo, enrollmentRepo)
+	var attendanceService attendance.AttendanceService
+	if cfg.RedisConfig != nil && cfg.RedisConfig.Enabled {
+		redisCache, err := cache.NewRedisCache(cfg.RedisConfig.ToRedisCacheConfig())
+		if err != nil {
+			log.Printf("failed to initialize Redis cache for QR attendance: %v (falling back to no cache)", err)
+			attendanceService = attendance.NewAttendanceService(attendanceRepo, studentRepo, enrollmentRepo)
+		} else {
+			attendanceService = attendance.NewAttendanceServiceWithCache(attendanceRepo, studentRepo, enrollmentRepo, redisCache)
+		}
+	} else {
+		attendanceService = attendance.NewAttendanceService(attendanceRepo, studentRepo, enrollmentRepo)
+	}
 	enrollmentService := enrollment.NewEnrollmentService(enrollmentRepo)
 	collegeService := college.NewCollegeService(collegeRepo)
 	courseService := course.NewCourseService(courseRepo, collegeRepo, userRepo)
@@ -232,13 +255,19 @@ func NewServices(cfg *config.Config) *Services {
 	reportService := report.NewReportService(studentRepo, gradeRepo, attendanceRepo, enrollmentRepo, courseRepo)
 	webhookService := webhook.NewWebhookService(webhookRepo)
 	auditService := audit.NewAuditService(auditRepo)
-	emailService := email.NewEmailService(
-		cfg.EmailConfig.Host,
-		cfg.EmailConfig.Port,
-		cfg.EmailConfig.Username,
-		cfg.EmailConfig.Password,
-		cfg.EmailConfig.FromAddress,
-	)
+	var emailService email.EmailService
+	if cfg.EmailConfig != nil {
+		emailService = email.NewEmailService(
+			cfg.EmailConfig.Host,
+			cfg.EmailConfig.Port,
+			cfg.EmailConfig.Username,
+			cfg.EmailConfig.Password,
+			cfg.EmailConfig.FromAddress,
+		)
+	} else {
+		// Email not configured: create service with empty config so SendEmail returns clear error
+		emailService = email.NewEmailService("", "", "", "", "")
+	}
 	roleService := role.NewRoleService(roleRepo)
 	feeService := fee.NewFeeService(feeRepo, cfg.AppConfig.RazorpayKey, cfg.AppConfig.RazorpaySecret, cfg.AppConfig.RazorpayWebhookSecret)
 	timetableService := timetable.NewTimetableService(timetableRepo, studentRepo)

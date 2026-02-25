@@ -262,8 +262,8 @@ func (c *collegeRepository) GetCollegeStats(ctx context.Context, collegeID int) 
 	}
 
 	var totalFee, paidFee float64
-	c.DB.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount), 0) FROM fees WHERE college_id = $1`, collegeID).Scan(&totalFee)
-	c.DB.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(amount_paid), 0) FROM fee_payments fp JOIN fees f ON fp.fee_id = f.id WHERE f.college_id = $1`, collegeID).Scan(&paidFee)
+	c.DB.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(fa.amount), 0) FROM fee_assignments fa WHERE fa.status != 'paid'`, collegeID).Scan(&totalFee)
+	c.DB.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(fp.amount), 0) FROM fee_payments fp JOIN fee_assignments fa ON fp.fee_assignment_id = fa.id WHERE fp.payment_status = 'completed'`, collegeID).Scan(&paidFee)
 	stats.PendingFees = totalFee - paidFee
 
 	return stats, nil

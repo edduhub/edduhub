@@ -30,7 +30,7 @@ import (
 
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header
-// @name Authorization // Or X-Session-Token depending on your auth mechanism
+// @name Authorization
 
 func main() {
 	// Load .env file FIRST

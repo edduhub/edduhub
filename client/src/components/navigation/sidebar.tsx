@@ -26,6 +26,16 @@ import {
   Activity,
   FolderOpen,
   TrendingUp,
+  User,
+  DollarSign,
+  Briefcase,
+  FileQuestion,
+  MessageSquare,
+  HelpCircle,
+  Wrench,
+  Home,
+  Bell,
+  Link2,
 } from "lucide-react";
 
 type NavItem = {
@@ -37,6 +47,8 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/student-dashboard", label: "Student Dashboard", icon: GraduationCap, roles: ["student"] },
+  { href: "/profile", label: "Profile", icon: User },
   { href: "/courses", label: "Courses", icon: Notebook },
   { href: "/assignments", label: "Assignments", icon: FileText, roles: ["student", "faculty"] },
   { href: "/quizzes", label: "Quizzes", icon: BookOpen },
@@ -44,9 +56,17 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/grades", label: "Grades", icon: Award },
   { href: "/announcements", label: "Announcements", icon: BellRing },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/timetable", label: "Timetable", icon: CalendarDays },
   { href: "/students", label: "Students", icon: Users, roles: ["faculty", "admin"] },
   { href: "/departments", label: "Departments", icon: Building2, roles: ["admin"] },
   { href: "/files", label: "Files", icon: FolderOpen },
+  { href: "/fees", label: "Fees", icon: DollarSign },
+  { href: "/placements", label: "Placements", icon: Briefcase },
+  { href: "/exams", label: "Exams", icon: FileQuestion },
+  { href: "/forum", label: "Forum", icon: MessageSquare },
+  { href: "/self-service", label: "Self-Service", icon: HelpCircle, roles: ["student"] },
+  { href: "/faculty-tools", label: "Faculty Tools", icon: Wrench, roles: ["faculty", "admin"] },
+  { href: "/parent-portal", label: "Parent Portal", icon: Home, roles: ["parent"] },
   { href: "/analytics", label: "Analytics", icon: BarChart3, roles: ["faculty", "admin"] },
   { href: "/advanced-analytics", label: "Advanced Analytics", icon: TrendingUp, roles: ["faculty", "admin"] },
   { href: "/batch-operations", label: "Batch Operations", icon: Upload, roles: ["admin"] },
@@ -54,6 +74,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/audit-logs", label: "Audit Logs", icon: Shield, roles: ["admin"] },
   { href: "/system-status", label: "System Status", icon: Activity, roles: ["admin"] },
   { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },
+  { href: "/parent-links", label: "Parent Links", icon: Link2, roles: ["admin"] },
+  { href: "/roles", label: "Roles", icon: Shield, roles: ["admin"] },
+  { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

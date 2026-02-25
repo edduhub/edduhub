@@ -89,7 +89,7 @@ tasks:
   docker:dev:
     desc: Start development environment with Docker Compose
     cmds:
-      - docker-compose up --build
+      - docker-compose -f docker-compose.dev.yml up --build
 
   fmt:
     desc: Format code using gofumpt and goimports
@@ -178,16 +178,16 @@ tasks:
     cmds:
       - |
         echo "Starting database services..."
-        docker-compose up -d postgres redis minio keto kratos-db kratos
+        docker-compose -f docker-compose.dev.yml up -d postgres redis minio keto kratos-db kratos
         echo "Waiting for services to be healthy..."
         sleep 5
-        docker-compose exec -T postgres pg_isready -U keto || echo "⚠ PostgreSQL not ready yet"
+        docker-compose -f docker-compose.dev.yml exec -T postgres pg_isready -U keto || echo "⚠ PostgreSQL not ready yet"
         echo "✓ Database services started"
 
   db:stop:
     desc: Stop database services
     cmds:
-      - docker-compose down
+      - docker-compose -f docker-compose.dev.yml down
 
   db:migrate:
     desc: Run all database migrations
@@ -266,8 +266,8 @@ tasks:
         
         echo ""
         echo "Database:"
-        docker-compose exec -T postgres pg_isready -U keto || echo "❌ Database not responding"
+        docker-compose -f docker-compose.dev.yml exec -T postgres pg_isready -U keto || echo "❌ Database not responding"
         
         echo ""
         echo "Redis:"
-        docker-compose exec -T redis redis-cli ping || echo "❌ Redis not responding"
+        docker-compose -f docker-compose.dev.yml exec -T redis redis-cli ping || echo "❌ Redis not responding"

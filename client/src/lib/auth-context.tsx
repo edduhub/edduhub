@@ -71,8 +71,7 @@ function unwrapData(payload: unknown): unknown {
 
 function extractToken(payload: unknown): string {
   const data = asRecord(payload);
-  if (!data) return '';
-  return firstString(data.token, data.session_token) || '';
+  return (data && firstString(data.token)) || '';
 }
 
 function extractExpiresAt(payload: unknown): string {
@@ -181,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const parsed = asRecord(JSON.parse(storedAuth));
           const parsedUser = normalizeUser(parsed?.user || null);
           const parsedExpiresAt = firstString(parsed?.expiresAt, parsed?.expires_at);
-          const parsedToken = firstString(parsed?.token, parsed?.session_token) || '';
+          const parsedToken = firstString(parsed?.token) || '';
 
           if (parsedUser && parsedExpiresAt) {
             storedSession = {
@@ -410,12 +409,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          const updatedSession = {
-            ...session,
+          const currentSession = session || { token: '', user: mappedUser, expiresAt: '' };
+          const updatedSession: AuthSession = {
+            ...currentSession,
             token: refreshedToken,
             user: mappedUser,
             expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS).toISOString(),
-          } as AuthSession;
+          };
           saveSession(updatedSession);
         }
       } else if (response.status === 401) {

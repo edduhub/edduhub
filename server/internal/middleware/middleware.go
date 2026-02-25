@@ -10,11 +10,18 @@ type Middleware struct {
 }
 
 func NewMiddleware(services *services.Services) *Middleware {
+	if services == nil {
+		return &Middleware{
+			Auth: &AuthMiddleware{},
+		}
+	}
+
 	authSvc := services.Auth
 
 	studentService := services.StudentService
 	collegeService := services.CollegeService
+	userService := services.UserService
 	return &Middleware{
-		Auth: NewAuthMiddleware(authSvc, studentService, collegeService),
+		Auth: NewAuthMiddleware(authSvc, studentService, collegeService, userService),
 	}
 }

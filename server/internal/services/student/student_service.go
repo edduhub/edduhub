@@ -3,6 +3,7 @@ package student
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
@@ -76,11 +77,15 @@ func (s *studentService) GetStudentDetailedProfile(ctx context.Context, collegeI
 	// Use errgroup for concurrent fetching of related data
 	g, gCtx := errgroup.WithContext(ctx)
 
-	// Fetch profile
+	// Fetch profile using Kratos ID
 	g.Go(func() error {
-		profile, err := s.profileRepo.GetProfileByUserID(gCtx, student.KratosIdentityID)
-		if err != nil && err.Error() != fmt.Sprintf("GetProfileByUserID: profile for user ID %s not found", student.KratosIdentityID) {
-			return fmt.Errorf("failed to get profile: %w", err)
+		profile, err := s.profileRepo.GetProfileByKratosID(gCtx, student.KratosIdentityID)
+		if err != nil {
+			if !strings.Contains(strings.ToLower(err.Error()), "not found") {
+				return fmt.Errorf("failed to get profile: %w", err)
+			}
+			detailedProfile.Profile = nil
+			return nil
 		}
 		detailedProfile.Profile = profile
 		return nil

@@ -210,11 +210,29 @@ export const endpoints = {
   // Auth
   auth: {
     login: '/auth/login',
-    register: '/auth/register',
+    register: '/auth/register/complete',
     logout: '/auth/logout',
     refresh: '/auth/refresh',
     profile: '/api/profile',
     changePassword: '/auth/change-password',
+    verifyEmail: (flow: string, token: string) => `/auth/verify-email?flow=${encodeURIComponent(flow)}&token=${encodeURIComponent(token)}`,
+    initiateVerifyEmail: '/auth/verify-email/initiate',
+  },
+
+  // College
+  college: {
+    get: '/api/college',
+    update: '/api/college',
+    stats: '/api/college/stats',
+  },
+
+  // Profile
+  profile: {
+    get: '/api/profile',
+    update: '/api/profile',
+    uploadImage: '/api/profile/upload-image',
+    history: '/api/profile/history',
+    getById: (profileId: number) => `/api/profile/${profileId}`,
   },
 
   // Students
@@ -251,7 +269,38 @@ export const endpoints = {
     submit: (courseId: number, id: number) => `/api/courses/${courseId}/assignments/${id}/submit`,
     grade: (courseId: number, submissionId: number) =>
       `/api/courses/${courseId}/assignments/submissions/${submissionId}/grade`,
+    submissions: (courseId: number, assignmentId: number) =>
+      `/api/courses/${courseId}/assignments/${assignmentId}/submissions`,
+    bulkGrade: (courseId: number, assignmentId: number) =>
+      `/api/courses/${courseId}/assignments/${assignmentId}/submissions/bulk-grade`,
+    stats: (courseId: number, assignmentId: number) =>
+      `/api/courses/${courseId}/assignments/${assignmentId}/stats`,
   },
+
+  // Course Materials & Modules
+  courseMaterials: {
+    modules: (courseId: number) => `/api/courses/${courseId}/modules`,
+    module: (moduleId: number) => `/api/modules/${moduleId}`,
+    materials: (courseId: number) => `/api/courses/${courseId}/materials`,
+    material: (materialId: number) => `/api/materials/${materialId}`,
+    publish: (materialId: number) => `/api/materials/${materialId}/publish`,
+    unpublish: (materialId: number) => `/api/materials/${materialId}/unpublish`,
+    access: (materialId: number) => `/api/materials/${materialId}/access`,
+    stats: (materialId: number) => `/api/materials/${materialId}/stats`,
+  },
+
+  // Lectures
+  lectures: {
+    list: (courseId: number) => `/api/courses/${courseId}/lectures`,
+    get: (courseId: number, lectureId: number) => `/api/courses/${courseId}/lectures/${lectureId}`,
+    create: (courseId: number) => `/api/courses/${courseId}/lectures`,
+    update: (courseId: number, lectureId: number) => `/api/courses/${courseId}/lectures/${lectureId}`,
+    delete: (courseId: number, lectureId: number) => `/api/courses/${courseId}/lectures/${lectureId}`,
+  },
+
+  // Student progress
+  studentProgress: (courseId: number, studentId: number) =>
+    `/api/courses/${courseId}/students/${studentId}/progress`,
 
   // Attendance
   attendance: {
@@ -358,7 +407,69 @@ export const endpoints = {
     updateStatus: (id: number) => `/api/users/${id}/status`,
   },
 
-  // File Upload
+  // Batch operations
+  batch: {
+    importStudents: '/api/batch/students/import',
+    exportStudents: '/api/batch/students/export',
+    importGrades: '/api/batch/grades/import',
+    exportGrades: '/api/batch/grades/export',
+    bulkEnroll: '/api/batch/enroll',
+  },
+
+  // Audit
+  audit: {
+    logs: '/api/audit/logs',
+    stats: '/api/audit/stats',
+    userActivity: (userId: number) => `/api/audit/users/${userId}/activity`,
+    entityHistory: (entityType: string, entityId: number) =>
+      `/api/audit/entities/${entityType}/${entityId}/history`,
+  },
+
+  // File management (versioned)
+  fileManagement: {
+    upload: '/api/file-management/upload',
+    list: '/api/file-management',
+    get: (fileId: number) => `/api/file-management/${fileId}`,
+    update: (fileId: number) => `/api/file-management/${fileId}`,
+    delete: (fileId: number) => `/api/file-management/${fileId}`,
+    versions: (fileId: number) => `/api/file-management/${fileId}/versions`,
+    uploadVersion: (fileId: number) => `/api/file-management/${fileId}/versions`,
+    setCurrentVersion: (fileId: number, versionId: number) =>
+      `/api/file-management/${fileId}/versions/${versionId}/current`,
+    download: (fileId: number) => `/api/file-management/${fileId}/download`,
+    search: '/api/file-management/search',
+    tags: '/api/file-management/tags',
+  },
+
+  // Folders
+  folders: {
+    create: '/api/folders',
+    list: '/api/folders',
+    get: (folderId: number) => `/api/folders/${folderId}`,
+    update: (folderId: number) => `/api/folders/${folderId}`,
+    delete: (folderId: number) => `/api/folders/${folderId}`,
+  },
+
+  // Webhooks
+  webhooks: {
+    list: '/api/webhooks',
+    create: '/api/webhooks',
+    get: (webhookId: number) => `/api/webhooks/${webhookId}`,
+    update: (webhookId: number) => `/api/webhooks/${webhookId}`,
+    delete: (webhookId: number) => `/api/webhooks/${webhookId}`,
+    test: (webhookId: number) => `/api/webhooks/${webhookId}/test`,
+  },
+
+  // Parent (children views)
+  parent: {
+    children: '/api/parent/children',
+    childDashboard: (studentId: number) => `/api/parent/children/${studentId}/dashboard`,
+    childAttendance: (studentId: number) => `/api/parent/children/${studentId}/attendance`,
+    childGrades: (studentId: number) => `/api/parent/children/${studentId}/grades`,
+    childAssignments: (studentId: number) => `/api/parent/children/${studentId}/assignments`,
+  },
+
+  // File Upload (legacy)
   files: {
     upload: '/api/files/upload',
     delete: (key: string) => `/api/files/${key}`,
@@ -473,6 +584,7 @@ export const endpoints = {
     requests: '/api/self-service/requests',
     request: (requestId: number) => `/api/self-service/requests/${requestId}`,
     types: '/api/self-service/types',
+    updateRequest: (requestId: number) => `/api/self-service/requests/${requestId}`,
   },
 
   // Faculty Tools
@@ -493,6 +605,13 @@ export const endpoints = {
     replies: (threadId: number) => `/api/forum/threads/${threadId}/replies`,
     createThread: '/api/forum/threads',
     createReply: (threadId: number) => `/api/forum/threads/${threadId}/replies`,
+  },
+
+  // Parent-Student Relationships (admin only)
+  parentRelationships: {
+    list: '/api/parent/relationships',
+    create: '/api/parent/relationships',
+    delete: (id: number) => `/api/parent/relationships/${id}`,
   },
 };
 

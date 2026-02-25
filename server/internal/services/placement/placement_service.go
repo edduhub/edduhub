@@ -3,7 +3,6 @@ package placement
 import (
 	"context"
 	"errors"
-	"time"
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
@@ -29,17 +28,18 @@ type PlacementService interface {
 
 // PlacementStats represents overall placement statistics
 type PlacementStats struct {
-	TotalPlacements   int     `json:"total_placements"`
-	TotalStudents     int     `json:"total_students"`
-	AveragePackage    float64 `json:"average_package"`
-	HighestPackage    float64 `json:"highest_package"`
-	LowestPackage     float64 `json:"lowest_package"`
-	PlacementRate     float64 `json:"placement_rate"`
-	OfferedCount      int     `json:"offered_count"`
-	AcceptedCount     int     `json:"accepted_count"`
-	RejectedCount     int     `json:"rejected_count"`
-	OnHoldCount       int     `json:"on_hold_count"`
-	UniqueCompanies   int     `json:"unique_companies"`
+	TotalPlacements int     `json:"total_placements"`
+	TotalStudents   int     `json:"total_students"`
+	AveragePackage  float64 `json:"average_package"`
+	HighestPackage  float64 `json:"highest_package"`
+	LowestPackage   float64 `json:"lowest_package"`
+	PlacementRate   float64 `json:"placement_rate"`
+	OpenCount       int     `json:"open_count"`
+	ClosedCount     int     `json:"closed_count"`
+	InProgressCount int     `json:"in_progress_count"`
+	CompletedCount  int     `json:"completed_count"`
+	CancelledCount  int     `json:"cancelled_count"`
+	UniqueCompanies int     `json:"unique_companies"`
 }
 
 // CompanyStats represents statistics for a specific company
@@ -71,10 +71,6 @@ func NewPlacementService(
 // ===========================
 
 func (s *placementService) CreatePlacement(ctx context.Context, placement *models.Placement) error {
-	// Validation
-	if placement.StudentID == 0 {
-		return errors.New("student ID is required")
-	}
 	if placement.CollegeID == 0 {
 		return errors.New("college ID is required")
 	}
@@ -84,33 +80,23 @@ func (s *placementService) CreatePlacement(ctx context.Context, placement *model
 	if placement.JobTitle == "" {
 		return errors.New("job title is required")
 	}
-	if placement.Package < 0 {
-		return errors.New("package must be non-negative")
-	}
-	if placement.PlacementDate.IsZero() {
-		placement.PlacementDate = time.Now()
-	}
-
-	// Set default status if not provided
 	if placement.Status == "" {
-		placement.Status = "offered"
+		placement.Status = models.PlacementStatusOpen
 	}
 
-	// Validate status
 	validStatuses := map[string]bool{
-		"offered":  true,
-		"accepted": true,
-		"rejected": true,
-		"on-hold":  true,
+		models.PlacementStatusOpen:       true,
+		models.PlacementStatusClosed:     true,
+		models.PlacementStatusInProgress: true,
+		models.PlacementStatusCompleted:  true,
+		models.PlacementStatusCancelled:  true,
 	}
 	if !validStatuses[placement.Status] {
-		return errors.New("invalid status. must be one of: offered, accepted, rejected, on-hold")
+		return errors.New("invalid status. must be one of: open, closed, in_progress, completed, cancelled")
 	}
 
-	// Verify student exists
-	_, err := s.studentRepo.GetStudentByID(ctx, placement.CollegeID, placement.StudentID)
-	if err != nil {
-		return errors.New("student not found")
+	if placement.SalaryCurrency == "" {
+		placement.SalaryCurrency = "USD"
 	}
 
 	return s.repo.CreatePlacement(ctx, placement)
@@ -141,19 +127,17 @@ func (s *placementService) UpdatePlacement(ctx context.Context, placement *model
 	if placement.JobTitle == "" {
 		return errors.New("job title is required")
 	}
-	if placement.Package < 0 {
-		return errors.New("package must be non-negative")
-	}
 
 	// Validate status
 	validStatuses := map[string]bool{
-		"offered":  true,
-		"accepted": true,
-		"rejected": true,
-		"on-hold":  true,
+		models.PlacementStatusOpen:       true,
+		models.PlacementStatusClosed:     true,
+		models.PlacementStatusInProgress: true,
+		models.PlacementStatusCompleted:  true,
+		models.PlacementStatusCancelled:  true,
 	}
 	if !validStatuses[placement.Status] {
-		return errors.New("invalid status. must be one of: offered, accepted, rejected, on-hold")
+		return errors.New("invalid status. must be one of: open, closed, in_progress, completed, cancelled")
 	}
 
 	return s.repo.UpdatePlacement(ctx, placement)
@@ -212,7 +196,6 @@ func (s *placementService) GetPlacementStats(ctx context.Context, collegeID int)
 		return nil, errors.New("college ID is required")
 	}
 
-	// Get all placements (with a high limit to get all records)
 	placements, err := s.repo.FindPlacementsByCollege(ctx, collegeID, 10000, 0)
 	if err != nil {
 		return nil, err
@@ -220,50 +203,55 @@ func (s *placementService) GetPlacementStats(ctx context.Context, collegeID int)
 
 	stats := &PlacementStats{
 		TotalPlacements: len(placements),
-		LowestPackage:   999999999, // Initialize with high value
+		LowestPackage:   999999999,
 	}
 
 	if len(placements) == 0 {
 		return stats, nil
 	}
 
-	uniqueStudents := make(map[int]bool)
 	uniqueCompanies := make(map[string]bool)
 	var totalPackage float64
+	var packageCount int
 
 	for _, placement := range placements {
-		uniqueStudents[placement.StudentID] = true
 		uniqueCompanies[placement.CompanyName] = true
-		totalPackage += placement.Package
 
-		// Track highest and lowest packages
-		if placement.Package > stats.HighestPackage {
-			stats.HighestPackage = placement.Package
-		}
-		if placement.Package < stats.LowestPackage {
-			stats.LowestPackage = placement.Package
+		// Calculate average package from salary range
+		if placement.SalaryRangeMax != nil && *placement.SalaryRangeMax > 0 {
+			avgPkg := *placement.SalaryRangeMax
+			if placement.SalaryRangeMin != nil && *placement.SalaryRangeMin > 0 {
+				avgPkg = (*placement.SalaryRangeMin + *placement.SalaryRangeMax) / 2
+			}
+			totalPackage += avgPkg
+			packageCount++
+
+			if avgPkg > stats.HighestPackage {
+				stats.HighestPackage = avgPkg
+			}
+			if avgPkg < stats.LowestPackage {
+				stats.LowestPackage = avgPkg
+			}
 		}
 
 		// Count by status
 		switch placement.Status {
-		case "offered":
-			stats.OfferedCount++
-		case "accepted":
-			stats.AcceptedCount++
-		case "rejected":
-			stats.RejectedCount++
-		case "on-hold":
-			stats.OnHoldCount++
+		case models.PlacementStatusOpen:
+			stats.OpenCount++
+		case models.PlacementStatusClosed:
+			stats.ClosedCount++
+		case models.PlacementStatusInProgress:
+			stats.InProgressCount++
+		case models.PlacementStatusCompleted:
+			stats.CompletedCount++
+		case models.PlacementStatusCancelled:
+			stats.CancelledCount++
 		}
 	}
 
-	stats.TotalStudents = len(uniqueStudents)
 	stats.UniqueCompanies = len(uniqueCompanies)
-	stats.AveragePackage = totalPackage / float64(stats.TotalPlacements)
-
-	// Calculate placement rate (accepted placements / total students * 100)
-	if stats.TotalStudents > 0 {
-		stats.PlacementRate = float64(stats.AcceptedCount) / float64(stats.TotalStudents) * 100
+	if packageCount > 0 {
+		stats.AveragePackage = totalPackage / float64(packageCount)
 	}
 
 	if stats.LowestPackage == 999999999 {
@@ -278,46 +266,55 @@ func (s *placementService) GetCompanyStats(ctx context.Context, collegeID int) (
 		return nil, errors.New("college ID is required")
 	}
 
-	// Get all placements
 	placements, err := s.repo.FindPlacementsByCollege(ctx, collegeID, 10000, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	// Group placements by company and calculate stats in one pass
 	companyMap := make(map[string]*CompanyStats)
 	companyTotals := make(map[string]float64)
+	companyCounts := make(map[string]int)
 
 	for _, placement := range placements {
 		stats, exists := companyMap[placement.CompanyName]
 		if !exists {
+			var initialPkg float64 = 0
+			if placement.SalaryRangeMax != nil {
+				initialPkg = *placement.SalaryRangeMax
+			}
 			stats = &CompanyStats{
 				CompanyName:    placement.CompanyName,
-				LowestPackage:  placement.Package,
-				HighestPackage: placement.Package,
+				LowestPackage:  initialPkg,
+				HighestPackage: initialPkg,
 			}
 			companyMap[placement.CompanyName] = stats
 		}
 
 		stats.TotalPlacements++
-		companyTotals[placement.CompanyName] += placement.Package
 
-		if placement.Package > stats.HighestPackage {
-			stats.HighestPackage = placement.Package
-		}
-		if placement.Package < stats.LowestPackage {
-			stats.LowestPackage = placement.Package
+		if placement.SalaryRangeMax != nil && *placement.SalaryRangeMax > 0 {
+			avgPkg := *placement.SalaryRangeMax
+			if placement.SalaryRangeMin != nil && *placement.SalaryRangeMin > 0 {
+				avgPkg = (*placement.SalaryRangeMin + *placement.SalaryRangeMax) / 2
+			}
+			companyTotals[placement.CompanyName] += avgPkg
+			companyCounts[placement.CompanyName]++
+
+			if avgPkg > stats.HighestPackage {
+				stats.HighestPackage = avgPkg
+			}
+			if avgPkg < stats.LowestPackage {
+				stats.LowestPackage = avgPkg
+			}
 		}
 	}
 
-	// Calculate averages
 	for companyName, stats := range companyMap {
-		if stats.TotalPlacements > 0 {
-			stats.AveragePackage = companyTotals[companyName] / float64(stats.TotalPlacements)
+		if companyCounts[companyName] > 0 {
+			stats.AveragePackage = companyTotals[companyName] / float64(companyCounts[companyName])
 		}
 	}
 
-	// Convert map to slice
 	result := make([]*CompanyStats, 0, len(companyMap))
 	for _, stats := range companyMap {
 		result = append(result, stats)

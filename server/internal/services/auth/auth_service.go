@@ -3,14 +3,17 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
+	"eduhub/server/internal/models"
 	"eduhub/server/pkg/jwt"
 )
 
 type AuthService interface {
 	Login(ctx context.Context, email, password string) (string, *Identity, error)
 	InitiateRegistrationFlow(ctx context.Context) (map[string]any, error)
-	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error)
+	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (string, *Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
 	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
 	ValidateCollegeAccess(ctx context.Context, collegeID int) (interface{}, error)
@@ -38,15 +41,33 @@ type authService struct {
 	AuthZ          *ketoService
 	JWTManager     JWTManager
 	CollegeChecker CollegeChecker
+	UserStore      UserStore
+	ProfileStore   ProfileStore
+	CollegeStore   CollegeStore
 }
 
 type JWTManager interface {
-	Generate(kratosID, email, role, collegeID, firstName, lastName string) (string, error)
+	Generate(userID int, kratosID, email, role, collegeID, firstName, lastName string) (string, error)
 	Verify(token string) (*jwt.JWTClaims, error)
 }
 
 type CollegeChecker interface {
 	GetCollegeByID(ctx context.Context, id int) (interface{}, error)
+}
+
+type UserStore interface {
+	GetUserByKratosID(ctx context.Context, kratosID string) (*models.User, error)
+	CreateUser(ctx context.Context, user *models.User) error
+	UpdateUser(ctx context.Context, user *models.User) error
+}
+
+type ProfileStore interface {
+	GetProfileByUserID(ctx context.Context, userID int) (*models.Profile, error)
+	CreateProfile(ctx context.Context, profile *models.Profile) error
+}
+
+type CollegeStore interface {
+	GetCollegeByExternalID(ctx context.Context, externalID string) (*models.College, error)
 }
 
 func NewAuthService(kratos *kratosService, keto *ketoService, jwtManager JWTManager) AuthService {
@@ -66,6 +87,30 @@ func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, jwtMana
 	}
 }
 
+// NewAuthServiceWithDependencies creates an auth service with all dependencies for user/profile provisioning
+func NewAuthServiceWithDependencies(kratos *kratosService, keto *ketoService, jwtManager JWTManager, collegeRepo interface{}, userRepo interface{}, profileRepo interface{}, collegeChecker interface{}) AuthService {
+	service := &authService{
+		Auth:       kratos,
+		AuthZ:      keto,
+		JWTManager: jwtManager,
+	}
+
+	if cc, ok := collegeChecker.(CollegeChecker); ok {
+		service.CollegeChecker = cc
+	}
+	if us, ok := userRepo.(UserStore); ok {
+		service.UserStore = us
+	}
+	if ps, ok := profileRepo.(ProfileStore); ok {
+		service.ProfileStore = ps
+	}
+	if cs, ok := collegeRepo.(CollegeStore); ok {
+		service.CollegeStore = cs
+	}
+
+	return service
+}
+
 func (a *authService) Login(ctx context.Context, email, password string) (string, *Identity, error) {
 	// Authenticate with Kratos
 	identity, err := a.Auth.Login(ctx, email, password)
@@ -73,8 +118,14 @@ func (a *authService) Login(ctx context.Context, email, password string) (string
 		return "", nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
+	userID, err := a.resolveAndProvisionLocalIdentity(ctx, identity)
+	if err != nil {
+		return "", nil, err
+	}
+
 	// Generate JWT token
 	token, err := a.JWTManager.Generate(
+		userID,
 		identity.ID,
 		identity.Traits.Email,
 		identity.Traits.Role,
@@ -104,15 +155,39 @@ func (a *authService) InitiateRegistrationFlow(ctx context.Context) (map[string]
 	return a.Auth.InitiateRegistrationFlow(ctx)
 }
 
-func (a *authService) CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error) {
-	return a.Auth.CompleteRegistration(ctx, flowID, req)
+func (a *authService) CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (string, *Identity, error) {
+	identity, err := a.Auth.CompleteRegistration(ctx, flowID, req)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to complete registration: %w", err)
+	}
+
+	userID, err := a.resolveAndProvisionLocalIdentity(ctx, identity)
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Generate JWT token
+	token, err := a.JWTManager.Generate(
+		userID,
+		identity.ID,
+		identity.Traits.Email,
+		identity.Traits.Role,
+		identity.Traits.College.ID,
+		identity.Traits.Name.First,
+		identity.Traits.Name.Last,
+	)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	return token, identity, nil
 }
 
 func (a *authService) ValidateSession(ctx context.Context, sessionToken string) (*Identity, error) {
 	return a.Auth.ValidateSession(ctx, sessionToken)
 }
 
-func (a *authService) ValidateJWT(_ context.Context, jwtToken string) (*Identity, error) {
+func (a *authService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
 	claims, err := a.JWTManager.Verify(jwtToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid JWT token: %w", err)
@@ -126,6 +201,11 @@ func (a *authService) ValidateJWT(_ context.Context, jwtToken string) (*Identity
 	identity.Traits.College.ID = claims.CollegeID
 	identity.Traits.Name.First = claims.FirstName
 	identity.Traits.Name.Last = claims.LastName
+	identity.UserID = claims.UserID
+
+	if _, err := a.resolveAndProvisionLocalIdentity(ctx, identity); err != nil {
+		return nil, err
+	}
 
 	return identity, nil
 }
@@ -209,8 +289,26 @@ func (a *authService) RefreshToken(ctx context.Context, token string) (string, e
 		return "", fmt.Errorf("invalid token: %w", err)
 	}
 
+	userID := claims.UserID
+	if userID == 0 {
+		identity := &Identity{
+			ID: claims.KratosID,
+		}
+		identity.Traits.Email = claims.Email
+		identity.Traits.Role = claims.Role
+		identity.Traits.College.ID = claims.CollegeID
+		identity.Traits.Name.First = claims.FirstName
+		identity.Traits.Name.Last = claims.LastName
+
+		userID, err = a.resolveAndProvisionLocalIdentity(ctx, identity)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	// Generate a new token with the same claims but new expiration
 	newToken, err := a.JWTManager.Generate(
+		userID,
 		claims.KratosID,
 		claims.Email,
 		claims.Role,
@@ -223,4 +321,165 @@ func (a *authService) RefreshToken(ctx context.Context, token string) (string, e
 	}
 
 	return newToken, nil
+}
+
+func (a *authService) resolveAndProvisionLocalIdentity(ctx context.Context, identity *Identity) (int, error) {
+	if identity == nil {
+		return 0, fmt.Errorf("identity is nil")
+	}
+
+	if identity.UserID > 0 {
+		return identity.UserID, nil
+	}
+
+	if a.UserStore == nil {
+		return 0, nil
+	}
+
+	user, err := a.ensureLocalUser(ctx, identity)
+	if err != nil {
+		return 0, err
+	}
+
+	identity.UserID = user.ID
+	if err := a.ensureLocalProfile(ctx, user, identity); err != nil {
+		return 0, err
+	}
+	return user.ID, nil
+}
+
+func (a *authService) ensureLocalUser(ctx context.Context, identity *Identity) (*models.User, error) {
+	if identity == nil {
+		return nil, fmt.Errorf("identity is nil")
+	}
+	if a.UserStore == nil {
+		return nil, fmt.Errorf("user store is not configured")
+	}
+
+	existing, err := a.UserStore.GetUserByKratosID(ctx, identity.ID)
+	if err == nil {
+		updated := false
+
+		fullName := strings.TrimSpace(identity.Traits.Name.First + " " + identity.Traits.Name.Last)
+		if fullName != "" && existing.Name != fullName {
+			existing.Name = fullName
+			updated = true
+		}
+		if identity.Traits.Email != "" && existing.Email != identity.Traits.Email {
+			existing.Email = identity.Traits.Email
+			updated = true
+		}
+		if identity.Traits.Role != "" && existing.Role != identity.Traits.Role {
+			existing.Role = identity.Traits.Role
+			updated = true
+		}
+		if !existing.IsActive {
+			existing.IsActive = true
+			updated = true
+		}
+
+		if updated {
+			if err := a.UserStore.UpdateUser(ctx, existing); err != nil {
+				return nil, fmt.Errorf("failed to update local user: %w", err)
+			}
+		}
+
+		return existing, nil
+	}
+
+	if !isNotFoundErr(err) {
+		return nil, fmt.Errorf("failed to fetch local user: %w", err)
+	}
+
+	fullName := strings.TrimSpace(identity.Traits.Name.First + " " + identity.Traits.Name.Last)
+	if fullName == "" {
+		fullName = identity.Traits.Email
+	}
+	if fullName == "" {
+		fullName = identity.ID
+	}
+
+	user := &models.User{
+		Name:             fullName,
+		Role:             identity.Traits.Role,
+		Email:            identity.Traits.Email,
+		KratosIdentityID: identity.ID,
+		IsActive:         true,
+	}
+
+	if err := a.UserStore.CreateUser(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create local user: %w", err)
+	}
+
+	return user, nil
+}
+
+func (a *authService) ensureLocalProfile(ctx context.Context, user *models.User, identity *Identity) error {
+	if a.ProfileStore == nil {
+		return nil
+	}
+	if user == nil || user.ID == 0 {
+		return fmt.Errorf("invalid user for profile provisioning")
+	}
+	if identity == nil {
+		return fmt.Errorf("identity is nil")
+	}
+
+	_, err := a.ProfileStore.GetProfileByUserID(ctx, user.ID)
+	if err == nil {
+		return nil
+	}
+	if !isNotFoundErr(err) {
+		return fmt.Errorf("failed to fetch local profile: %w", err)
+	}
+
+	collegeID, err := a.resolveCollegeID(ctx, identity.Traits.College.ID)
+	if err != nil {
+		return err
+	}
+
+	profile := &models.Profile{
+		UserID:      user.ID,
+		CollegeID:   collegeID,
+		FirstName:   identity.Traits.Name.First,
+		LastName:    identity.Traits.Name.Last,
+		Preferences: models.JSONMap{},
+		SocialLinks: models.JSONMap{},
+	}
+
+	if err := a.ProfileStore.CreateProfile(ctx, profile); err != nil {
+		return fmt.Errorf("failed to create local profile: %w", err)
+	}
+
+	return nil
+}
+
+func (a *authService) resolveCollegeID(ctx context.Context, externalCollegeID string) (int, error) {
+	if externalCollegeID == "" {
+		return 0, nil
+	}
+
+	if a.CollegeStore != nil {
+		college, err := a.CollegeStore.GetCollegeByExternalID(ctx, externalCollegeID)
+		if err == nil {
+			return college.ID, nil
+		}
+		if !isNotFoundErr(err) {
+			return 0, fmt.Errorf("failed to resolve college from external id %q: %w", externalCollegeID, err)
+		}
+	}
+
+	collegeID, err := strconv.Atoi(externalCollegeID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to resolve college from external id %q", externalCollegeID)
+	}
+	return collegeID, nil
+}
+
+func isNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "no rows")
 }

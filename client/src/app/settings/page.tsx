@@ -42,6 +42,8 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isInitiatingVerification, setIsInitiatingVerification] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState({
@@ -143,6 +145,21 @@ export default function SettingsPage() {
     }
   };
 
+  const handleInitiateVerification = async () => {
+    try {
+      setIsInitiatingVerification(true);
+      setError(null);
+      setVerificationMessage(null);
+      await api.post(endpoints.auth.initiateVerifyEmail, {}, true);
+      setVerificationMessage("Verification email sent. Check your inbox and click the link to verify.");
+    } catch (err) {
+      logger.error("Failed to initiate email verification", err as Error);
+      setError(err instanceof Error ? err.message : "Failed to send verification email");
+    } finally {
+      setIsInitiatingVerification(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -168,6 +185,11 @@ export default function SettingsPage() {
       {passwordMessage && (
         <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-700">
           {passwordMessage}
+        </div>
+      )}
+      {verificationMessage && (
+        <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-700">
+          {verificationMessage}
         </div>
       )}
 
@@ -291,6 +313,21 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <Label>Change Password</Label>
               <Button variant="outline" onClick={() => setIsPasswordDialogOpen(true)}>Update Password</Button>
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label>Email Verification</Label>
+              <p className="text-sm text-muted-foreground">
+                Verify your email address to ensure account security
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleInitiateVerification}
+                disabled={isInitiatingVerification}
+              >
+                {isInitiatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Send Verification Email
+              </Button>
             </div>
           </CardContent>
         </Card>

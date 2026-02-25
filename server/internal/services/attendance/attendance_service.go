@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"eduhub/server/internal/cache"
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
 )
@@ -31,6 +32,7 @@ type attendanceService struct {
 	repo           repository.AttendanceRepository
 	studentRepo    repository.StudentRepository
 	enrollmentRepo repository.EnrollmentRepository
+	cache          cache.Cache // optional, nil when Redis disabled
 }
 
 func NewAttendanceService(repo repository.AttendanceRepository, studentRepo repository.StudentRepository, enrollmentRepo repository.EnrollmentRepository) AttendanceService {
@@ -38,6 +40,17 @@ func NewAttendanceService(repo repository.AttendanceRepository, studentRepo repo
 		repo:           repo,
 		studentRepo:    studentRepo,
 		enrollmentRepo: enrollmentRepo,
+		cache:          nil,
+	}
+}
+
+// NewAttendanceServiceWithCache creates an attendance service with Redis cache for QR token validation
+func NewAttendanceServiceWithCache(repo repository.AttendanceRepository, studentRepo repository.StudentRepository, enrollmentRepo repository.EnrollmentRepository, c cache.Cache) AttendanceService {
+	return &attendanceService{
+		repo:           repo,
+		studentRepo:    studentRepo,
+		enrollmentRepo: enrollmentRepo,
+		cache:          c,
 	}
 }
 

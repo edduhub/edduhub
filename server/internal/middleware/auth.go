@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -8,6 +9,7 @@ import (
 	"eduhub/server/internal/services/auth"
 	"eduhub/server/internal/services/college"
 	"eduhub/server/internal/services/student"
+	"eduhub/server/internal/services/user"
 
 	"github.com/labstack/echo/v4"
 )
@@ -33,51 +35,47 @@ type AuthMiddleware struct {
 	AuthService    auth.AuthService
 	StudentService student.StudentService
 	CollegeService college.CollegeService
+	UserService    user.UserService
 }
 
 // NewAuthMiddleware now accepts an auth.AuthService instance,
 // ensuring that the middleware has access to both authentication
 // (session validation) and authorization (permission checking) logic.
-func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService, collegeService college.CollegeService) *AuthMiddleware {
+func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService, collegeService college.CollegeService, userService user.UserService) *AuthMiddleware {
 	return &AuthMiddleware{
 		AuthService:    authSvc,
 		StudentService: studentService,
 		CollegeService: collegeService,
+		UserService:    userService,
 	}
 }
 
-// ValidateSession checks if the session token provided in the request
-// is valid. The AuthService.ValidateSession function should use Ory Kratos
-// to validate the session.
-func (m *AuthMiddleware) ValidateSession(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		sessionToken := c.Request().Header.Get("X-Session-Token")
-		if sessionToken != "" {
-			identity, err := m.AuthService.ValidateSession(c.Request().Context(), sessionToken)
-			if err == nil && identity != nil {
-				c.Set(identityContextKey, identity)
-				return next(c)
-			}
-		}
-
-		// Fallback: accept Bearer JWT for backward compatibility during migration
-		authHeader := c.Request().Header.Get("Authorization")
-		const bearerPrefix = "Bearer "
-		if len(authHeader) > len(bearerPrefix) && authHeader[:len(bearerPrefix)] == bearerPrefix {
-			jwtToken := authHeader[len(bearerPrefix):]
-			if jwtToken != "" {
-				identity, err := m.AuthService.ValidateJWT(c.Request().Context(), jwtToken)
-				if err == nil && identity != nil {
-					c.Set(identityContextKey, identity)
-					return next(c)
-				}
-			}
-		}
-
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "No valid session or token provided",
-		})
+func (m *AuthMiddleware) setIdentityContext(c echo.Context, identity *auth.Identity) error {
+	if identity == nil {
+		return fmt.Errorf("identity is nil")
 	}
+
+	c.Set(identityContextKey, identity)
+
+	if m.UserService == nil {
+		if identity.UserID > 0 {
+			c.Set("user_id", identity.UserID)
+			return nil
+		}
+		return fmt.Errorf("user service is not configured")
+	}
+
+	userRecord, err := m.UserService.GetUserByKratosID(c.Request().Context(), identity.ID)
+	if err != nil {
+		return err
+	}
+	if !userRecord.IsActive {
+		return fmt.Errorf("user account is inactive")
+	}
+
+	identity.UserID = userRecord.ID
+	c.Set("user_id", userRecord.ID)
+	return nil
 }
 
 // ValidateJWT checks if the JWT token provided in the Authorization header
@@ -113,8 +111,12 @@ func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
 			})
 		}
 
-		// Store identity in context for later use by other middleware handlers.
-		c.Set(identityContextKey, identity)
+		if err := m.setIdentityContext(c, identity); err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "Unable to resolve authenticated user",
+			})
+		}
+
 		return next(c)
 	}
 }
@@ -233,42 +235,6 @@ func (m *AuthMiddleware) RequirePermission(subject, resource, action string) ech
 }
 
 // VerifyStudentOwnership ensures a student can only access their own resources
-// func (m *AuthMiddleware) VerifyStudentOwnership(next echo.HandlerFunc) echo.HandlerFunc {
-// 	return func(c echo.Context) error {
-// 		identity, ok := c.Get(identityContextKey).(*auth.Identity)
-// 		if !ok || identity == nil {
-// 			return helpers.Error(c, "Unauthorized", http.StatusUnauthorized)
-// 		}
-// 		requestedStudentIDStr :=c.Param("studentID")
-// 		if requestedStudentIDStr ==  " "{
-// 			return helpers.Error(c,"Bad request",400)
-// 		}
-// 		requestedStudentID,err :=strconv.AToi(requestedStudentIDStr)
-
-// 		// Get the authenticated student's ID from context
-// 		authenticatedStudentID := c.Get(studentIDContextKey)
-// 		if authenticatedStudentID == nil {
-// 			return helpers.Error(c, "Student context not found", http.StatusUnauthorized)
-// 		}
-
-// 		// Get the requested student ID from params/query
-// 		requestedStudentID, err := helpers.ExtractStudentID(c)
-// 		if err != nil {
-// 			return helpers.Error(c, "Invalid student ID", http.StatusBadRequest)
-// 		}
-
-// 		// Verify if the authenticated student is accessing their own resource
-// 		if requestedStudentID != authenticatedStudentID.(int) {
-// 			// Check if the user has admin/faculty role that allows them to override
-// 			allowed, err := m.AuthService.CheckPermission(c.Request().Context(), identity, strconv.Itoa(requestedStudentID), MarkAction, AttendanceResource)
-// 			if err != nil || !allowed {
-// 				return helpers.Error(c, "Access denied", http.StatusForbidden)
-// 			}
-// 		}
-
-//			return next(c)
-//		}
-//	}
 func (m *AuthMiddleware) VerifyStudentOwnership() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -309,25 +275,9 @@ func (m *AuthMiddleware) VerifyStudentOwnership() echo.MiddlewareFunc {
 				return next(c)
 
 			} else if userRole == RoleAdmin || userRole == RoleFaculty {
-				// If Admin or Faculty, allow access based on role.
-				// Further checks (e.g., is faculty teaching this student's course?)
-				// should be handled by Keto permission checks if needed, either here
-				// or in the handler/service.
-				// For now, we allow based on role.
-
-				// Example Keto Check (Optional here, could be separate middleware or in handler):
-				// subject := identity.ID // User's Kratos ID
-				// resource := fmt.Sprintf("%s:%s", StudentResource, requestedStudentIDStr) // e.g., "student_data:123"
-				// action := ViewAction // e.g., "view"
-				// allowed, ketoErr := m.AuthService.CheckPermission(c.Request().Context(), identity, subject, resource, action)
-				// if ketoErr != nil {
-				//   return helpers.Error(c, "Error checking admin/faculty permission", http.StatusInternalServerError)
-				// }
-				// if !allowed {
-				//   return helpers.Error(c, "Forbidden - You do not have permission to view this student's data", http.StatusForbidden)
-				// }
-
-				return next(c) // Allow admin/faculty
+				// Admin and faculty are allowed based on role. For finer-grained
+				// checks, use Keto permission checks in the handler or dedicated middleware.
+				return next(c)
 			}
 
 			// If role is none of the above (or empty), deny access.

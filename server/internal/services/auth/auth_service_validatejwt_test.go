@@ -16,7 +16,7 @@ type stubJWTManager struct {
 	verifyErr error
 }
 
-func (s *stubJWTManager) Generate(kratosID, email, role, collegeID, firstName, lastName string) (string, error) {
+func (s *stubJWTManager) Generate(userID int, kratosID, email, role, collegeID, firstName, lastName string) (string, error) {
 	return "", nil
 }
 
@@ -30,6 +30,7 @@ func (s *stubJWTManager) Verify(token string) (*jwtpkg.JWTClaims, error) {
 func TestAuthServiceValidateJWTBuildsIdentityFromClaims(t *testing.T) {
 	manager := &stubJWTManager{
 		claims: &jwtpkg.JWTClaims{
+			UserID:    99,
 			KratosID:  "kratos-123",
 			Email:     "student@example.edu",
 			Role:      "student",
@@ -48,6 +49,7 @@ func TestAuthServiceValidateJWTBuildsIdentityFromClaims(t *testing.T) {
 	require.NotNil(t, identity)
 
 	assert.Equal(t, "kratos-123", identity.ID)
+	assert.Equal(t, 99, identity.UserID)
 	assert.Equal(t, "student@example.edu", identity.Traits.Email)
 	assert.Equal(t, "student", identity.Traits.Role)
 	assert.Equal(t, "42", identity.Traits.College.ID)

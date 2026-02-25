@@ -24,14 +24,6 @@ type MockAuthService struct {
 	mock.Mock
 }
 
-func (m *MockAuthService) ValidateSession(ctx context.Context, sessionToken string) (*auth.Identity, error) {
-	args := m.Called(ctx, sessionToken)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*auth.Identity), args.Error(1)
-}
-
 func (m *MockAuthService) ValidateJWT(ctx context.Context, token string) (*auth.Identity, error) {
 	args := m.Called(ctx, token)
 	if args.Get(0) == nil {
@@ -67,63 +59,64 @@ func TestNewAuthMiddleware(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
 
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 
 	assert.NotNil(t, middleware)
 	assert.Equal(t, mockAuthSvc, middleware.AuthService)
 	assert.Equal(t, mockStudentSvc, middleware.StudentService)
 }
 
-func TestAuthMiddleware_ValidateSession(t *testing.T) {
+func TestAuthMiddleware_ValidateJWT(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
-	validToken := "valid-token"
-	invalidToken := "invalid-token"
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
+	validToken := "valid-jwt-token"
+	invalidToken := "invalid-jwt-token"
 	identity := &auth.Identity{ID: "test-id"}
 
-	// Valid session
-	mockAuthSvc.On("ValidateSession", mock.Anything, validToken).Return(identity, nil)
+	// Valid JWT
+	mockAuthSvc.On("ValidateJWT", mock.Anything, validToken).Return(identity, nil)
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Session-Token", validToken)
+	req.Header.Set("Authorization", "Bearer "+validToken)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	next := func(c echo.Context) error {
 		assert.Equal(t, identity, c.Get(identityContextKey))
 		return nil
 	}
-	err := middleware.ValidateSession(next)(c)
+	err := middleware.ValidateJWT(next)(c)
 	assert.NoError(t, err)
 	mockAuthSvc.AssertExpectations(t)
 
-	// No session token, fallback to JWT
-	mockAuthSvc.On("ValidateJWT", mock.Anything, validToken).Return(identity, nil)
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+validToken)
-	rec = httptest.NewRecorder()
-	c = e.NewContext(req, rec)
-	err = middleware.ValidateSession(next)(c)
-	assert.NoError(t, err)
-	mockAuthSvc.AssertExpectations(t)
-
-	// No valid session or token
+	// No authorization header
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	err = middleware.ValidateSession(next)(c)
+	err = middleware.ValidateJWT(next)(c)
 	assert.Error(t, err)
 	httpErr, ok := err.(*echo.HTTPError)
 	assert.True(t, ok)
 	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
 
-	// Invalid session token
-	mockAuthSvc.On("ValidateSession", mock.Anything, invalidToken).Return(nil, errors.New("invalid session"))
+	// Invalid auth header format
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Session-Token", invalidToken)
+	req.Header.Set("Authorization", "Basic invalid")
 	rec = httptest.NewRecorder()
 	c = e.NewContext(req, rec)
-	err = middleware.ValidateSession(next)(c)
+	err = middleware.ValidateJWT(next)(c)
+	assert.Error(t, err)
+	httpErr, ok = err.(*echo.HTTPError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+
+	// Invalid JWT token
+	mockAuthSvc.On("ValidateJWT", mock.Anything, invalidToken).Return(nil, errors.New("invalid jwt"))
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+invalidToken)
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+	err = middleware.ValidateJWT(next)(c)
 	assert.Error(t, err)
 	httpErr, ok = err.(*echo.HTTPError)
 	assert.True(t, ok)
@@ -133,7 +126,7 @@ func TestAuthMiddleware_ValidateSession(t *testing.T) {
 func TestAuthMiddleware_RequireCollege(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 	collegeID := 123
 	identity := &auth.Identity{Traits: auth.Traits{College: auth.College{ID: collegeID}}}
 
@@ -164,7 +157,7 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 	kratosID := "student-kratos-id"
 	studentID := 1
 	student := &models.Student{StudentID: studentID, KratosID: kratosID, IsActive: true}
@@ -235,7 +228,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 func TestAuthMiddleware_RequireRole(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 	identityAdmin := &auth.Identity{ID: "admin-id", Traits: auth.Traits{Role: "admin"}}
 	identityStudent := &auth.Identity{ID: "student-id", Traits: auth.Traits{Role: "student"}}
 	identityFaculty := &auth.Identity{ID: "faculty-id", Traits: auth.Traits{Role: "faculty"}}
@@ -303,7 +296,7 @@ func TestAuthMiddleware_RequireRole(t *testing.T) {
 func TestAuthMiddleware_RequirePermission(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 	identity := &auth.Identity{ID: "test-id"}
 	resource := "grades"
 	action := "read"
@@ -366,7 +359,7 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	mockAuthSvc := new(MockAuthService)
 	mockStudentSvc := new(MockStudentService)
-	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc)
+	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 	studentID := 123
 	otherStudentID := 456
 	studentIdentity := &auth.Identity{ID: "student-id", Traits: auth.Traits{Role: RoleStudent}}

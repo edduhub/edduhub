@@ -38,9 +38,9 @@ func AuditMiddleware(auditService AuditService) echo.MiddlewareFunc {
 
 			// Create audit log entry
 			auditLog := &models.AuditLog{
-				CollegeID: collegeID,
-				UserID:    userID,
-				Action:    getActionFromMethod(c.Request().Method),
+				CollegeID:  collegeID,
+				UserID:     userID,
+				Action:     getActionFromMethod(c.Request().Method),
 				EntityType: getEntityTypeFromPath(c.Request().URL.Path),
 				EntityID:   getEntityIDFromPath(c.Request().URL.Path),
 				IPAddress:  ipAddress,
@@ -264,6 +264,11 @@ func parseIntSafe(s string) (int, error) {
 
 // extractUserID extracts user ID from context (simplified version)
 func extractUserID(c echo.Context) (int, error) {
+	if userID := c.Get("user_id"); userID != nil {
+		if id, ok := userID.(int); ok {
+			return id, nil
+		}
+	}
 	if userID := c.Get("userID"); userID != nil {
 		if id, ok := userID.(int); ok {
 			return id, nil
@@ -274,6 +279,11 @@ func extractUserID(c echo.Context) (int, error) {
 
 // extractCollegeID extracts college ID from context (simplified version)
 func extractCollegeID(c echo.Context) (int, error) {
+	if collegeID := c.Get("college_id"); collegeID != nil {
+		if id, ok := collegeID.(int); ok {
+			return id, nil
+		}
+	}
 	if collegeID := c.Get("collegeID"); collegeID != nil {
 		if id, ok := collegeID.(int); ok {
 			return id, nil

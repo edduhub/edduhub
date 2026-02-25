@@ -1,16 +1,25 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/navigation/sidebar";
 import { Topbar } from "@/components/navigation/topbar";
 import { useAuth } from "@/lib/auth-context";
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   
   // Check if we're on an auth page
   const isAuthPage = pathname?.startsWith('/auth');
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !isAuthPage) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, isLoading, isAuthPage, router]);
 
   // Show content directly for auth pages
   if (isAuthPage) {
@@ -26,9 +35,9 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If not authenticated and not on auth page, show children (will redirect via protected route)
+  // Redirect to login for unauthenticated non-auth routes.
   if (!isAuthenticated) {
-    return <>{children}</>;
+    return null;
   }
 
   // Show full layout for authenticated users

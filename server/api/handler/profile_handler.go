@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -122,16 +123,23 @@ func (h *ProfileHandler) UploadProfileImage(c echo.Context) error {
 	ipAddress := c.RealIP()
 	userAgent := c.Request().UserAgent()
 
+	changedFields := models.JSONMap{
+		"field": "profile_image",
+	}
+	oldValues := models.JSONMap{
+		"profile_image": currentProfile.ProfileImage,
+	}
+	newValues := models.JSONMap{
+		"profile_image": fileURL,
+	}
+
 	profileHistory := &models.ProfileHistory{
-		ProfileID: currentProfile.ID,
-		UserID:    userID,
-		Action:    "UPLOAD_IMAGE",
-		Field:     "profile_image",
-		OldValue:  currentProfile.ProfileImage,
-		NewValue:  fileURL,
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
-		CreatedAt: time.Now(),
+		ProfileID:     currentProfile.ID,
+		UserID:        userID,
+		ChangedFields: changedFields,
+		OldValues:     &oldValues,
+		NewValues:     &newValues,
+		ChangedAt:     time.Now(),
 	}
 
 	if err := h.profileService.CreateProfileHistory(c.Request().Context(), profileHistory); err != nil {
@@ -209,83 +217,93 @@ func (h *ProfileHandler) GetProfileHistory(c echo.Context) error {
 
 func (h *ProfileHandler) logProfileChanges(ctx context.Context, currentProfile *models.Profile, req *models.UpdateProfileRequest, userID, collegeID int, ipAddress, userAgent string) {
 	now := time.Now()
+	changedBy := userID
 
 	if req.Bio != nil && *req.Bio != currentProfile.Bio {
+		changedFields := models.JSONMap{"field": "bio"}
+		oldValues := models.JSONMap{"bio": currentProfile.Bio}
+		newValues := models.JSONMap{"bio": *req.Bio}
 		history := &models.ProfileHistory{
-			ProfileID: currentProfile.ID,
-			UserID:    userID,
-			Action:    "UPDATE",
-			Field:     "bio",
-			OldValue:  currentProfile.Bio,
-			NewValue:  *req.Bio,
-			IPAddress: ipAddress,
-			UserAgent: userAgent,
-			CreatedAt: now,
+			ProfileID:     currentProfile.ID,
+			UserID:        userID,
+			ChangedFields: changedFields,
+			OldValues:     &oldValues,
+			NewValues:     &newValues,
+			ChangedBy:     &changedBy,
+			ChangedAt:     now,
 		}
 		if err := h.profileService.CreateProfileHistory(ctx, history); err != nil {
-			// Log error but continue
+			log.Printf("ERROR: Failed to log bio change to profile history: %v", err)
 		}
 	}
 
 	if req.PhoneNumber != nil && *req.PhoneNumber != currentProfile.PhoneNumber {
+		changedFields := models.JSONMap{"field": "phone_number"}
+		oldValues := models.JSONMap{"phone_number": currentProfile.PhoneNumber}
+		newValues := models.JSONMap{"phone_number": *req.PhoneNumber}
 		history := &models.ProfileHistory{
-			ProfileID: currentProfile.ID,
-			UserID:    userID,
-			Action:    "UPDATE",
-			Field:     "phone_number",
-			OldValue:  currentProfile.PhoneNumber,
-			NewValue:  *req.PhoneNumber,
-			IPAddress: ipAddress,
-			UserAgent: userAgent,
-			CreatedAt: now,
+			ProfileID:     currentProfile.ID,
+			UserID:        userID,
+			ChangedFields: changedFields,
+			OldValues:     &oldValues,
+			NewValues:     &newValues,
+			ChangedBy:     &changedBy,
+			ChangedAt:     now,
 		}
 		if err := h.profileService.CreateProfileHistory(ctx, history); err != nil {
-			// Log error but continue
+			log.Printf("ERROR: Failed to log phone number change to profile history: %v", err)
 		}
 	}
 
 	if req.Address != nil && *req.Address != currentProfile.Address {
+		changedFields := models.JSONMap{"field": "address"}
+		oldValues := models.JSONMap{"address": currentProfile.Address}
+		newValues := models.JSONMap{"address": *req.Address}
 		history := &models.ProfileHistory{
-			ProfileID: currentProfile.ID,
-			UserID:    userID,
-			Action:    "UPDATE",
-			Field:     "address",
-			OldValue:  currentProfile.Address,
-			NewValue:  *req.Address,
-			IPAddress: ipAddress,
-			UserAgent: userAgent,
-			CreatedAt: now,
+			ProfileID:     currentProfile.ID,
+			UserID:        userID,
+			ChangedFields: changedFields,
+			OldValues:     &oldValues,
+			NewValues:     &newValues,
+			ChangedBy:     &changedBy,
+			ChangedAt:     now,
 		}
 		if err := h.profileService.CreateProfileHistory(ctx, history); err != nil {
-			// Log error but continue
+			log.Printf("ERROR: Failed to log address change to profile history: %v", err)
 		}
 	}
 
-	if req.DateOfBirth != nil && (!currentProfile.DateOfBirth.IsZero() && !req.DateOfBirth.Equal(currentProfile.DateOfBirth)) {
+	if req.DateOfBirth != nil && (!currentProfile.DateOfBirth.IsZero() && !req.DateOfBirth.Equal(*currentProfile.DateOfBirth)) {
+		changedFields := models.JSONMap{"field": "date_of_birth"}
+		var oldStr, newStr string
+		if !currentProfile.DateOfBirth.IsZero() {
+			oldStr = currentProfile.DateOfBirth.Format("2006-01-02")
+		}
+		newStr = req.DateOfBirth.Format("2006-01-02")
+		oldValues := models.JSONMap{"date_of_birth": oldStr}
+		newValues := models.JSONMap{"date_of_birth": newStr}
 		history := &models.ProfileHistory{
-			ProfileID: currentProfile.ID,
-			UserID:    userID,
-			Action:    "UPDATE",
-			Field:     "date_of_birth",
-			OldValue:  currentProfile.DateOfBirth.Format("2006-01-02"),
-			NewValue:  req.DateOfBirth.Format("2006-01-02"),
-			IPAddress: ipAddress,
-			UserAgent: userAgent,
-			CreatedAt: now,
+			ProfileID:     currentProfile.ID,
+			UserID:        userID,
+			ChangedFields: changedFields,
+			OldValues:     &oldValues,
+			NewValues:     &newValues,
+			ChangedBy:     &changedBy,
+			ChangedAt:     now,
 		}
 		if err := h.profileService.CreateProfileHistory(ctx, history); err != nil {
-			// Log error but continue
+			log.Printf("ERROR: Failed to log date of birth change to profile history: %v", err)
 		}
 	}
 }
 
 func getUpdatedFields(req *models.UpdateProfileRequest) []string {
 	var fields []string
-	if req.UserID != nil {
-		fields = append(fields, "user_id")
+	if req.FirstName != nil {
+		fields = append(fields, "first_name")
 	}
-	if req.CollegeID != nil {
-		fields = append(fields, "college_id")
+	if req.LastName != nil {
+		fields = append(fields, "last_name")
 	}
 	if req.Bio != nil {
 		fields = append(fields, "bio")

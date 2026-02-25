@@ -54,13 +54,13 @@ func (a *AttendanceHandler) GenerateQRCode(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, err, 400)
 	}
-	
+
 	// Decode base64 to bytes and return as image
 	qrBytes, err := base64.StdEncoding.DecodeString(qrCodeBase64)
 	if err != nil {
 		return helpers.Error(c, "failed to decode QR code", 500)
 	}
-	
+
 	c.Response().Header().Set("Content-Type", "image/png")
 	c.Response().Header().Set("Content-Disposition", "inline; filename=qrcode.png")
 	return c.Blob(200, "image/png", qrBytes)
@@ -136,7 +136,7 @@ func (a *AttendanceHandler) GetAttendanceByCourse(c echo.Context) error {
 
 	attendance, err := a.attendanceService.GetAttendanceByCourse(ctx, collegeID, courseID, 100, 0)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err)
+		return helpers.Error(c, "unable to get attendance", http.StatusInternalServerError)
 	}
 	return helpers.Success(c, attendance, http.StatusOK)
 }
@@ -225,7 +225,10 @@ func (a *AttendanceHandler) FreezeAttendance(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "Invalid student ID", 400)
 	}
-	ok, _ := a.attendanceService.FreezeAttendance(ctx, collegeID, studentID)
+	ok, err := a.attendanceService.FreezeAttendance(ctx, collegeID, studentID)
+	if err != nil {
+		return helpers.Error(c, "unable to freeze attendance", 500)
+	}
 	if !ok {
 		return helpers.Error(c, "unable to freeze attendance", 500)
 	}
@@ -249,7 +252,7 @@ func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
 	if err != nil {
 		return helpers.Error(c, "unable to get attendance by student", http.StatusInternalServerError)
 	}
-	
+
 	// Enrich with course names
 	response := make([]map[string]interface{}, 0, len(attendance))
 	for _, record := range attendance {
@@ -258,7 +261,7 @@ func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
 		if err == nil && course != nil {
 			courseName = course.Name
 		}
-		
+
 		response = append(response, map[string]interface{}{
 			"id":         record.ID,
 			"courseId":   record.CourseID,
@@ -267,7 +270,7 @@ func (a *AttendanceHandler) GetMyAttendance(c echo.Context) error {
 			"status":     record.Status,
 		})
 	}
-	
+
 	return helpers.Success(c, response, http.StatusOK)
 }
 

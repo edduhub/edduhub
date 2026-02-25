@@ -173,10 +173,7 @@ func (r *feeRepository) AssignFeeToStudent(ctx context.Context, assignment *mode
 }
 
 func (r *feeRepository) GetFeeAssignment(ctx context.Context, assignmentID int) (*models.FeeAssignment, error) {
-	sql := `SELECT fa.*, fs.name, fs.fee_type, fs.currency
-			FROM fee_assignments fa
-			JOIN fee_structures fs ON fa.fee_structure_id = fs.id
-			WHERE fa.id = $1`
+	sql := `SELECT fa.* FROM fee_assignments fa WHERE fa.id = $1`
 
 	assignment := &models.FeeAssignment{}
 	err := pgxscan.Get(ctx, r.DB.Pool, assignment, sql, assignmentID)
@@ -186,13 +183,18 @@ func (r *feeRepository) GetFeeAssignment(ctx context.Context, assignmentID int) 
 		}
 		return nil, fmt.Errorf("GetFeeAssignment: %w", err)
 	}
+
+	// Fetch the fee structure separately
+	feeStructure, err := r.GetFeeStructure(ctx, assignment.FeeStructureID, 0)
+	if err == nil && feeStructure != nil {
+		assignment.FeeStructure = feeStructure
+	}
+
 	return assignment, nil
 }
 
 func (r *feeRepository) GetStudentFeeAssignments(ctx context.Context, studentID int) ([]*models.FeeAssignment, error) {
-	sql := `SELECT fa.*, fs.name, fs.fee_type, fs.currency, fs.description
-			FROM fee_assignments fa
-			JOIN fee_structures fs ON fa.fee_structure_id = fs.id
+	sql := `SELECT fa.* FROM fee_assignments fa
 			WHERE fa.student_id = $1
 			ORDER BY fa.due_date ASC, fa.status ASC`
 
@@ -202,8 +204,19 @@ func (r *feeRepository) GetStudentFeeAssignments(ctx context.Context, studentID 
 		return nil, fmt.Errorf("GetStudentFeeAssignments: %w", err)
 	}
 
-	// Calculate paid and remaining amounts for each assignment
+	// Fetch fee structures for each assignment
+	feeStructureCache := make(map[int]*models.FeeStructure)
 	for _, assignment := range assignments {
+		if fs, exists := feeStructureCache[assignment.FeeStructureID]; exists {
+			assignment.FeeStructure = fs
+		} else {
+			fs, err := r.GetFeeStructure(ctx, assignment.FeeStructureID, 0)
+			if err == nil && fs != nil {
+				feeStructureCache[assignment.FeeStructureID] = fs
+				assignment.FeeStructure = fs
+			}
+		}
+
 		paidAmount, err := r.GetTotalPaidAmount(ctx, assignment.ID)
 		if err != nil {
 			return nil, err

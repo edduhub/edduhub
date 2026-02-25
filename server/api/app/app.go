@@ -66,6 +66,7 @@ func (a *App) Start() error {
 
 	a.e.Use(echomid.Recover())
 	a.e.Use(middleware.ErrorHandlerMiddleware())
+	a.e.Use(middleware.NewErrorSanitizationMiddleware().Middleware)
 	a.e.Use(middleware.RecoverMiddleware())
 	a.e.Use(middleware.SecurityHeaders())
 	a.e.Use(middleware.ValidatorMiddleware())

@@ -22,8 +22,16 @@ func (m *MockProfileRepository) CreateProfile(ctx context.Context, profile *mode
 	return args.Error(0)
 }
 
-func (m *MockProfileRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
+func (m *MockProfileRepository) GetProfileByUserID(ctx context.Context, userID int) (*models.Profile, error) {
 	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Profile), args.Error(1)
+}
+
+func (m *MockProfileRepository) GetProfileByKratosID(ctx context.Context, kratosID string) (*models.Profile, error) {
+	args := m.Called(ctx, kratosID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -43,7 +51,7 @@ func (m *MockProfileRepository) UpdateProfile(ctx context.Context, profile *mode
 	return args.Error(0)
 }
 
-func (m *MockProfileRepository) UpdateProfilePartial(ctx context.Context, profileID string, req *models.UpdateProfileRequest) error {
+func (m *MockProfileRepository) UpdateProfilePartial(ctx context.Context, profileID int, req *models.UpdateProfileRequest) error {
 	args := m.Called(ctx, profileID, req)
 	return args.Error(0)
 }
@@ -80,21 +88,22 @@ func TestGetProfileByUserID(t *testing.T) {
 	service := NewProfileService(mockRepo)
 
 	t.Run("success", func(t *testing.T) {
+		now := time.Now()
 		expectedProfile := &models.Profile{
 			ID:          1,
-			UserID:      "user-123",
-			CollegeID:   "college-1",
+			UserID:      123,
+			CollegeID:   1,
 			Bio:         "Test bio",
 			PhoneNumber: "1234567890",
 			Address:     "Test address",
-			DateOfBirth: time.Now(),
+			DateOfBirth: &now,
 			JoinedAt:    time.Now(),
 			LastActive:  time.Now(),
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		}
 
-		mockRepo.On("GetProfileByUserID", ctx, "123").Return(expectedProfile, nil)
+		mockRepo.On("GetProfileByUserID", ctx, 123).Return(expectedProfile, nil)
 
 		result, err := service.GetProfileByUserID(ctx, 123)
 
@@ -104,7 +113,7 @@ func TestGetProfileByUserID(t *testing.T) {
 	})
 
 	t.Run("profile not found", func(t *testing.T) {
-		mockRepo.On("GetProfileByUserID", ctx, "999").Return(nil, errors.New("profile not found"))
+		mockRepo.On("GetProfileByUserID", ctx, 999).Return(nil, errors.New("profile not found"))
 
 		result, err := service.GetProfileByUserID(ctx, 999)
 
@@ -115,6 +124,26 @@ func TestGetProfileByUserID(t *testing.T) {
 	})
 }
 
+func TestGetProfileByKratosID(t *testing.T) {
+	ctx := context.Background()
+	mockRepo := new(MockProfileRepository)
+	service := NewProfileService(mockRepo)
+
+	expectedProfile := &models.Profile{
+		ID:        1,
+		UserID:    123,
+		CollegeID: 1,
+	}
+
+	mockRepo.On("GetProfileByKratosID", ctx, "kratos-123").Return(expectedProfile, nil)
+
+	result, err := service.GetProfileByKratosID(ctx, "kratos-123")
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedProfile, result)
+	mockRepo.AssertExpectations(t)
+}
+
 func TestGetProfileByID(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := new(MockProfileRepository)
@@ -123,8 +152,8 @@ func TestGetProfileByID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		expectedProfile := &models.Profile{
 			ID:        1,
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 			Bio:       "Test bio",
 		}
 
@@ -156,8 +185,8 @@ func TestUpdateProfile(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		existingProfile := &models.Profile{
 			ID:        1,
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 			Bio:       "Old bio",
 		}
 
@@ -166,8 +195,8 @@ func TestUpdateProfile(t *testing.T) {
 			Bio: &bio,
 		}
 
-		mockRepo.On("GetProfileByUserID", ctx, "123").Return(existingProfile, nil)
-		mockRepo.On("UpdateProfilePartial", ctx, "1", req).Return(nil)
+		mockRepo.On("GetProfileByUserID", ctx, 123).Return(existingProfile, nil)
+		mockRepo.On("UpdateProfilePartial", ctx, 1, req).Return(nil)
 
 		err := service.UpdateProfile(ctx, 123, req)
 
@@ -180,7 +209,7 @@ func TestUpdateProfile(t *testing.T) {
 			Bio: func() *string { s := "test"; return &s }(),
 		}
 
-		mockRepo.On("GetProfileByUserID", ctx, "999").Return(nil, errors.New("not found"))
+		mockRepo.On("GetProfileByUserID", ctx, 999).Return(nil, errors.New("not found"))
 
 		err := service.UpdateProfile(ctx, 999, req)
 
@@ -192,8 +221,8 @@ func TestUpdateProfile(t *testing.T) {
 	t.Run("with multiple fields", func(t *testing.T) {
 		existingProfile := &models.Profile{
 			ID:        1,
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 		}
 
 		bio := "Updated bio"
@@ -206,8 +235,8 @@ func TestUpdateProfile(t *testing.T) {
 			Address:     &address,
 		}
 
-		mockRepo.On("GetProfileByUserID", ctx, "123").Return(existingProfile, nil)
-		mockRepo.On("UpdateProfilePartial", ctx, "1", req).Return(nil)
+		mockRepo.On("GetProfileByUserID", ctx, 123).Return(existingProfile, nil)
+		mockRepo.On("UpdateProfilePartial", ctx, 1, req).Return(nil)
 
 		err := service.UpdateProfile(ctx, 123, req)
 
@@ -223,8 +252,8 @@ func TestCreateProfile(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		profile := &models.Profile{
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 			Bio:       "Test bio",
 		}
 
@@ -238,8 +267,8 @@ func TestCreateProfile(t *testing.T) {
 
 	t.Run("failure", func(t *testing.T) {
 		profile := &models.Profile{
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 		}
 
 		mockRepo.On("CreateProfile", ctx, profile).Return(errors.New("database error"))
@@ -259,26 +288,27 @@ func TestGetProfileHistory(t *testing.T) {
 
 	t.Run("success with history", func(t *testing.T) {
 		mockRepo.ExpectedCalls = nil
+		bioField := "bio"
+		oldVal := "old"
+		newVal := "new"
 		expectedHistory := []*models.ProfileHistory{
 			{
-				ID:        1,
-				ProfileID: 1,
-				UserID:    123,
-				Action:    "UPDATE",
-				Field:     "bio",
-				OldValue:  "old",
-				NewValue:  "new",
-				CreatedAt: time.Now(),
+				ID:            1,
+				ProfileID:     1,
+				UserID:        123,
+				ChangedFields: models.JSONMap{"field": "bio"},
+				OldValues:     &models.JSONMap{"bio": oldVal},
+				NewValues:     &models.JSONMap{"bio": newVal},
+				ChangedAt:     time.Now(),
 			},
 			{
-				ID:        2,
-				ProfileID: 1,
-				UserID:    123,
-				Action:    "UPDATE",
-				Field:     "phone",
-				OldValue:  "old",
-				NewValue:  "new",
-				CreatedAt: time.Now(),
+				ID:            2,
+				ProfileID:     1,
+				UserID:        123,
+				ChangedFields: models.JSONMap{"field": "phone"},
+				OldValues:     &models.JSONMap{"phone": oldVal},
+				NewValues:     &models.JSONMap{"phone": newVal},
+				ChangedAt:     time.Now(),
 			},
 		}
 
@@ -288,7 +318,7 @@ func TestGetProfileHistory(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Len(t, result, 2)
-		assert.Equal(t, "bio", result[0].Field)
+		assert.Equal(t, bioField, result[0].ChangedFields["field"])
 		mockRepo.AssertExpectations(t)
 	})
 
@@ -321,14 +351,15 @@ func TestCreateProfileHistory(t *testing.T) {
 	service := NewProfileService(mockRepo)
 
 	t.Run("success", func(t *testing.T) {
+		oldVal := "old"
+		newVal := "new"
 		history := &models.ProfileHistory{
-			ProfileID: 1,
-			UserID:    123,
-			Action:    "UPDATE",
-			Field:     "bio",
-			OldValue:  "old",
-			NewValue:  "new",
-			CreatedAt: time.Now(),
+			ProfileID:     1,
+			UserID:        123,
+			ChangedFields: models.JSONMap{"field": "bio", "action": "UPDATE"},
+			OldValues:     &models.JSONMap{"bio": oldVal},
+			NewValues:     &models.JSONMap{"bio": newVal},
+			ChangedAt:     time.Now(),
 		}
 
 		mockRepo.On("CreateProfileHistory", ctx, history).Return(nil)
@@ -341,9 +372,9 @@ func TestCreateProfileHistory(t *testing.T) {
 
 	t.Run("failure", func(t *testing.T) {
 		history := &models.ProfileHistory{
-			ProfileID: 1,
-			UserID:    123,
-			Action:    "UPDATE",
+			ProfileID:     1,
+			UserID:        123,
+			ChangedFields: models.JSONMap{"field": "bio"},
 		}
 
 		mockRepo.On("CreateProfileHistory", ctx, history).Return(errors.New("database error"))
@@ -364,11 +395,11 @@ func TestGetProfileByUserID_EdgeCases(t *testing.T) {
 	t.Run("zero user ID", func(t *testing.T) {
 		expectedProfile := &models.Profile{
 			ID:        1,
-			UserID:    "user-0",
-			CollegeID: "college-1",
+			UserID:    0,
+			CollegeID: 1,
 		}
 
-		mockRepo.On("GetProfileByUserID", ctx, "0").Return(expectedProfile, nil)
+		mockRepo.On("GetProfileByUserID", ctx, 0).Return(expectedProfile, nil)
 
 		result, err := service.GetProfileByUserID(ctx, 0)
 
@@ -386,12 +417,12 @@ func TestUpdateProfile_EdgeCases(t *testing.T) {
 	t.Run("nil request", func(t *testing.T) {
 		existingProfile := &models.Profile{
 			ID:        1,
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 		}
 
-		mockRepo.On("GetProfileByUserID", ctx, "123").Return(existingProfile, nil)
-		mockRepo.On("UpdateProfilePartial", ctx, "1", (*models.UpdateProfileRequest)(nil)).Return(nil)
+		mockRepo.On("GetProfileByUserID", ctx, 123).Return(existingProfile, nil)
+		mockRepo.On("UpdateProfilePartial", ctx, 1, (*models.UpdateProfileRequest)(nil)).Return(nil)
 
 		err := service.UpdateProfile(ctx, 123, nil)
 
@@ -404,14 +435,14 @@ func TestUpdateProfile_EdgeCases(t *testing.T) {
 	t.Run("empty update request", func(t *testing.T) {
 		existingProfile := &models.Profile{
 			ID:        1,
-			UserID:    "user-123",
-			CollegeID: "college-1",
+			UserID:    123,
+			CollegeID: 1,
 		}
 
 		req := &models.UpdateProfileRequest{}
 
-		mockRepo.On("GetProfileByUserID", ctx, "123").Return(existingProfile, nil)
-		mockRepo.On("UpdateProfilePartial", ctx, "1", req).Return(nil)
+		mockRepo.On("GetProfileByUserID", ctx, 123).Return(existingProfile, nil)
+		mockRepo.On("UpdateProfilePartial", ctx, 1, req).Return(nil)
 
 		err := service.UpdateProfile(ctx, 123, req)
 

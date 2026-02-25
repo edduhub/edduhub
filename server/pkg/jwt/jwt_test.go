@@ -8,9 +8,12 @@ import (
 )
 
 func TestGenerateAndVerifyToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", time.Hour)
+	manager, err := NewJWTManager("test-secret-key-that-is-at-least-32-chars", time.Hour)
+	if err != nil {
+		t.Fatalf("NewJWTManager returned error: %v", err)
+	}
 
-	token, err := manager.Generate("kratos-123", "student@example.com", "student", "1", "Jane", "Doe")
+	token, err := manager.Generate(7, "kratos-123", "student@example.com", "student", "1", "Jane", "Doe")
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
 	}
@@ -20,6 +23,9 @@ func TestGenerateAndVerifyToken(t *testing.T) {
 		t.Fatalf("Verify returned error: %v", err)
 	}
 
+	if claims.UserID != 7 {
+		t.Fatalf("expected user id 7, got %d", claims.UserID)
+	}
 	if claims.KratosID != "kratos-123" {
 		t.Fatalf("expected kratos id kratos-123, got %s", claims.KratosID)
 	}
@@ -32,8 +38,11 @@ func TestGenerateAndVerifyToken(t *testing.T) {
 }
 
 func TestVerifyExpiredToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", -1*time.Minute)
-	token, err := manager.Generate("kratos-123", "student@example.com", "student", "1", "Jane", "Doe")
+	manager, err := NewJWTManager("test-secret-key-that-is-at-least-32-chars", -1*time.Minute)
+	if err != nil {
+		t.Fatalf("NewJWTManager returned error: %v", err)
+	}
+	token, err := manager.Generate(7, "kratos-123", "student@example.com", "student", "1", "Jane", "Doe")
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
 	}
@@ -49,10 +58,16 @@ func TestVerifyExpiredToken(t *testing.T) {
 }
 
 func TestVerifyInvalidSignature(t *testing.T) {
-	issuer := NewJWTManager("secret-a", time.Hour)
-	validator := NewJWTManager("secret-b", time.Hour)
+	issuer, err := NewJWTManager("this-is-a-very-long-secret-key-for-issuer", time.Hour)
+	if err != nil {
+		t.Fatalf("NewJWTManager returned error: %v", err)
+	}
+	validator, err := NewJWTManager("this-is-a-very-long-secret-key-for-validator", time.Hour)
+	if err != nil {
+		t.Fatalf("NewJWTManager returned error: %v", err)
+	}
 
-	token, err := issuer.Generate("kratos-123", "student@example.com", "student", "1", "Jane", "Doe")
+	token, err := issuer.Generate(7, "kratos-123", "student@example.com", "student", "1", "Jane", "Doe")
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
 	}
@@ -64,9 +79,12 @@ func TestVerifyInvalidSignature(t *testing.T) {
 }
 
 func TestVerifyMalformedToken(t *testing.T) {
-	manager := NewJWTManager("test-secret", time.Hour)
+	manager, err := NewJWTManager("test-secret-key-that-is-at-least-32-chars", time.Hour)
+	if err != nil {
+		t.Fatalf("NewJWTManager returned error: %v", err)
+	}
 
-	_, err := manager.Verify("not-a-jwt-token")
+	_, err = manager.Verify("not-a-jwt-token")
 	if err == nil {
 		t.Fatalf("expected malformed token verification to fail")
 	}

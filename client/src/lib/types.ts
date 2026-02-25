@@ -1109,11 +1109,10 @@ export function getDashboardPathForRole(role: UserRole): string {
     case 'student':
       return '/student-dashboard';
     case 'faculty':
-      return '/faculty-dashboard';
     case 'admin':
-      return '/admin-dashboard';
     case 'super_admin':
-      return '/super-admin';
+      // Faculty, admin, and super_admin all use the main dashboard (/)
+      return '/';
     case 'parent':
       return '/parent-portal';
     default:

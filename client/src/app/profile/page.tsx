@@ -53,7 +53,7 @@ const formatDateForInput = (value?: string) => {
 };
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -211,6 +211,7 @@ export default function ProfilePage() {
         {
           method: "POST",
           credentials: "include",
+          headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
           body: formData,
         }
       );

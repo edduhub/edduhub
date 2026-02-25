@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 // subject (who wants to do something)
@@ -29,7 +30,7 @@ func NewKetoService() *ketoService {
 	return &ketoService{
 		readURL:  os.Getenv("KETO_READ_URL"),
 		writeURL: os.Getenv("KETO_WRITE_URL"),
-		client:   &http.Client{},
+		client:   &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

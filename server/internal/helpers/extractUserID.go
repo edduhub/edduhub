@@ -3,6 +3,7 @@ package helpers
 import (
 	"fmt"
 
+	"eduhub/server/internal/services/auth"
 	"github.com/labstack/echo/v4"
 )
 
@@ -18,6 +19,11 @@ func ExtractUserID(c echo.Context) (int, error) {
 			return 0, fmt.Errorf("user ID is not an integer")
 		}
 		return id, nil
+	}
+
+	// Fallback: check identity context for JWT-derived user ID
+	if identity, ok := c.Get("identity").(*auth.Identity); ok && identity != nil && identity.UserID > 0 {
+		return identity.UserID, nil
 	}
 
 	// Fallback: check for student_id

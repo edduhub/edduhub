@@ -49,10 +49,17 @@ func (a *attendanceService) GenerateQRCode(ctx context.Context, collegeID int, c
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal QR data: %w", err)
 	}
-	
-	// Store token in cache for validation (would need Redis integration)
-	// For now, we'll include it in the QR data
-	
+
+	// Store token in Redis for one-time use validation when cache is available
+	if a.cache != nil {
+		cacheKey := fmt.Sprintf("qr:token:%s", token)
+		cacheVal := fmt.Sprintf("%d:%d:%d", collegeID, courseID, lectureID)
+		ttl := 15 * time.Minute
+		if err := a.cache.Set(ctx, cacheKey, cacheVal, ttl); err != nil {
+			// Log but continue - QR still works without cache (fallback to timestamp validation)
+		}
+	}
+
 	qrBytes, err := qrcode.Encode(string(jsonData), qrcode.Medium, 256)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate QR code: %w", err)
@@ -94,6 +101,22 @@ func (a *attendanceService) ProcessQRCode(ctx context.Context, collegeID int, st
 	// Check if QR code is too old (anti-screenshot protection)
 	if time.Since(qrData.TimeStamp) > 20*time.Minute {
 		return errors.New("qr code is no longer valid")
+	}
+
+	// When Redis cache is enabled, validate and consume one-time token
+	if a.cache != nil {
+		cacheKey := fmt.Sprintf("qr:token:%s", qrData.Token)
+		var stored string
+		if err := a.cache.Get(ctx, cacheKey, &stored); err != nil {
+			return errors.New("qr code already used or invalid")
+		}
+		expected := fmt.Sprintf("%d:%d:%d", collegeID, qrData.CourseID, qrData.LectureID)
+		if stored != expected {
+			return errors.New("qr code invalid")
+		}
+		if err := a.cache.Delete(ctx, cacheKey); err != nil {
+			// Token consumed on next attempt will fail
+		}
 	}
 
 	// Location-based verification if enabled

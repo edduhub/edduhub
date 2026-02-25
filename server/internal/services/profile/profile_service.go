@@ -2,7 +2,6 @@ package profile
 
 import (
 	"context"
-	"strconv"
 
 	"eduhub/server/internal/models"
 	"eduhub/server/internal/repository"
@@ -29,11 +28,11 @@ func NewProfileService(profileRepo repository.ProfileRepository) ProfileService 
 }
 
 func (s *profileService) GetProfileByUserID(ctx context.Context, userID int) (*models.Profile, error) {
-	return s.profileRepo.GetProfileByUserID(ctx, strconv.Itoa(userID))
+	return s.profileRepo.GetProfileByUserID(ctx, userID)
 }
 
 func (s *profileService) GetProfileByKratosID(ctx context.Context, kratosID string) (*models.Profile, error) {
-	return s.profileRepo.GetProfileByUserID(ctx, kratosID)
+	return s.profileRepo.GetProfileByKratosID(ctx, kratosID)
 }
 
 func (s *profileService) GetProfileByID(ctx context.Context, profileID int) (*models.Profile, error) {
@@ -41,13 +40,12 @@ func (s *profileService) GetProfileByID(ctx context.Context, profileID int) (*mo
 }
 
 func (s *profileService) UpdateProfile(ctx context.Context, userID int, req *models.UpdateProfileRequest) error {
-	// Get existing profile first
-	profile, err := s.profileRepo.GetProfileByUserID(ctx, strconv.Itoa(userID))
+	profile, err := s.profileRepo.GetProfileByUserID(ctx, userID)
 	if err != nil {
 		return err
 	}
 
-	return s.profileRepo.UpdateProfilePartial(ctx, strconv.Itoa(profile.ID), req)
+	return s.profileRepo.UpdateProfilePartial(ctx, profile.ID, req)
 }
 
 func (s *profileService) CreateProfile(ctx context.Context, profile *models.Profile) error {
