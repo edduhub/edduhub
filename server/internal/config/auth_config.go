@@ -6,12 +6,18 @@ import (
 )
 
 type AuthConfig struct {
-	PublicURL string
-	AdminURL  string
-	Domain    string
-	Port      string
-	JWTSecret string
-	College   CollegeConfig
+	PublicURL         string
+	AdminURL          string
+	Domain            string
+	Port              string
+	JWTSecret         string
+	College           CollegeConfig
+	HydraPublicURL    string
+	HydraAdminURL     string
+	HydraClientID     string
+	HydraClientSecret string
+	KetoReadURL       string
+	KetoWriteURL      string
 }
 
 type CollegeConfig struct {
@@ -31,11 +37,17 @@ func LoadAuthConfig() (*AuthConfig, error) {
 	}
 
 	config := &AuthConfig{
-		PublicURL: os.Getenv("KRATOS_PUBLIC_URL"),
-		AdminURL:  os.Getenv("KRATOS_ADMIN_URL"),
-		Domain:    os.Getenv("KRATOS_DOMAIN"),
-		Port:      os.Getenv("PORT"),
-		JWTSecret: jwtSecret,
+		PublicURL:         os.Getenv("KRATOS_PUBLIC_URL"),
+		AdminURL:          os.Getenv("KRATOS_ADMIN_URL"),
+		Domain:            os.Getenv("KRATOS_DOMAIN"),
+		Port:              os.Getenv("PORT"),
+		JWTSecret:         jwtSecret,
+		HydraPublicURL:    os.Getenv("HYDRA_PUBLIC_URL"),
+		HydraAdminURL:     os.Getenv("HYDRA_ADMIN_URL"),
+		HydraClientID:     os.Getenv("HYDRA_CLIENT_ID"),
+		HydraClientSecret: os.Getenv("HYDRA_CLIENT_SECRET"),
+		KetoReadURL:       os.Getenv("KETO_READ_URL"),
+		KetoWriteURL:      os.Getenv("KETO_WRITE_URL"),
 		College: CollegeConfig{
 			RequireVerification: true,
 			AllowedRoles:        []string{"admin", "faculty", "student"},

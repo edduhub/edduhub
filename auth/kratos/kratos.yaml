@@ -1,6 +1,6 @@
-version: v0.13.0
+version: v1.3.0
 
-dsn: memory
+dsn: postgres://kratos:secret@postgres:5432/kratos?sslmode=disable
 
 serve:
   public:
@@ -20,14 +20,15 @@ selfservice:
   methods:
     password:
       enabled: true
-    totp:
       config:
-        issuer: Kratos
+        min_password_length: 8
+        identifier_similarity_check_enabled: true
+
+    totp:
       enabled: true
-    lookup_secret:
-      enabled: true
-    link:
-      enabled: true
+      config:
+        issuer: Edduhub
+
     code:
       enabled: true
 
@@ -67,21 +68,19 @@ selfservice:
         password:
           hooks:
             - hook: session
-            - hook: show_verification_ui
 
 session:
+  lifespan: 720h  # 30 days
+  earliest_possible_extend: 1h
   cookie:
     same_site: Lax
+    persistent: true
 
 log:
-  level: debug
-  format: text
-  # SECURITY: Set to false in production to prevent sensitive data exposure in logs
+  level: info
+  format: json
   leak_sensitive_values: false
 
-# SECURITY WARNING: These are development defaults only!
-# For production, set KRATOS_COOKIE_SECRET and KRATOS_CIPHER_SECRET environment variables
-# with cryptographically secure random values (32+ characters recommended)
 secrets:
   cookie:
     - ${KRATOS_COOKIE_SECRET:-development-cookie-secret-change-in-prod}
@@ -94,7 +93,7 @@ ciphers:
 hashers:
   algorithm: bcrypt
   bcrypt:
-    cost: 8
+    cost: 10  # Increased from 8 for better security
 
 identity:
   default_schema_id: default
@@ -105,4 +104,3 @@ identity:
 courier:
   smtp:
     connection_uri: smtps://test:test@mailslurper:1025/?skip_ssl_verify=true
-

@@ -1,15 +1,12 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/services/auth"
-	"eduhub/server/internal/services/college"
 	"eduhub/server/internal/services/student"
-	"eduhub/server/internal/services/user"
 
 	"github.com/labstack/echo/v4"
 )
@@ -29,58 +26,24 @@ const (
 	MarkAction         = "mark"
 )
 
-// AuthMiddleware uses AuthService to perform authentication (via Kratos)
-// and authorization (via Ory Keto) checks.
+// AuthMiddleware handles authentication using Ory Hydra tokens
+// and authorization using Ory Keto
 type AuthMiddleware struct {
 	AuthService    auth.AuthService
 	StudentService student.StudentService
-	CollegeService college.CollegeService
-	UserService    user.UserService
 }
 
-// NewAuthMiddleware now accepts an auth.AuthService instance,
-// ensuring that the middleware has access to both authentication
-// (session validation) and authorization (permission checking) logic.
-func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService, collegeService college.CollegeService, userService user.UserService) *AuthMiddleware {
+// NewAuthMiddleware creates a new AuthMiddleware
+func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService) *AuthMiddleware {
 	return &AuthMiddleware{
 		AuthService:    authSvc,
 		StudentService: studentService,
-		CollegeService: collegeService,
-		UserService:    userService,
 	}
 }
 
-func (m *AuthMiddleware) setIdentityContext(c echo.Context, identity *auth.Identity) error {
-	if identity == nil {
-		return fmt.Errorf("identity is nil")
-	}
-
-	c.Set(identityContextKey, identity)
-
-	if m.UserService == nil {
-		if identity.UserID > 0 {
-			c.Set("user_id", identity.UserID)
-			return nil
-		}
-		return fmt.Errorf("user service is not configured")
-	}
-
-	userRecord, err := m.UserService.GetUserByKratosID(c.Request().Context(), identity.ID)
-	if err != nil {
-		return err
-	}
-	if !userRecord.IsActive {
-		return fmt.Errorf("user account is inactive")
-	}
-
-	identity.UserID = userRecord.ID
-	c.Set("user_id", userRecord.ID)
-	return nil
-}
-
-// ValidateJWT checks if the JWT token provided in the Authorization header
-// is valid. This replaces session-based validation with JWT token validation.
-func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
+// ValidateToken validates the OAuth2 access token from the Authorization header
+// and sets the identity in the context
+func (m *AuthMiddleware) ValidateToken(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		authHeader := c.Request().Header.Get("Authorization")
 		if authHeader == "" {
@@ -97,33 +60,34 @@ func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
 			})
 		}
 
-		jwtToken := authHeader[len(bearerPrefix):]
-		if jwtToken == "" {
+		accessToken := authHeader[len(bearerPrefix):]
+		if accessToken == "" {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Empty JWT token",
+				"error": "Empty access token",
 			})
 		}
 
-		identity, err := m.AuthService.ValidateJWT(c.Request().Context(), jwtToken)
+		// Validate the token using Hydra introspection
+		identity, err := m.AuthService.ValidateToken(c.Request().Context(), accessToken)
 		if err != nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Invalid JWT token: " + err.Error(),
+				"error": "Invalid access token: " + err.Error(),
 			})
 		}
 
-		if err := m.setIdentityContext(c, identity); err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Unable to resolve authenticated user",
-			})
+		// Set identity in context
+		c.Set(identityContextKey, identity)
+
+		// Set user ID if available
+		if identity.UserID > 0 {
+			c.Set("user_id", identity.UserID)
 		}
 
 		return next(c)
 	}
 }
 
-// RequireCollege ensures that the authenticated user belongs to the specified college.
-// It extracts the collegeID from the identity and looks up the integer ID from the database.
-// Under a multitenant setup, this helps isolate college-specific resources.
+// RequireCollege ensures that the authenticated user belongs to the specified college
 func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		identity, ok := c.Get("identity").(*auth.Identity)
@@ -133,28 +97,29 @@ func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc 
 			})
 		}
 
-		// Get the external college ID from identity (e.g., "COL456")
+		// Get the external college ID from identity
 		externalCollegeID := identity.Traits.College.ID
+		if externalCollegeID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "No college associated with identity",
+			})
+		}
 
-		// Look up the college by external ID to get the integer ID
-		college, err := m.CollegeService.GetCollegeByExternalID(c.Request().Context(), externalCollegeID)
+		// Try to parse as integer directly
+		collegeIDInt, err := strconv.Atoi(externalCollegeID)
 		if err != nil {
-			// If not found by external ID, try to parse as integer directly
-			collegeIDInt, parseErr := strconv.Atoi(externalCollegeID)
-			if parseErr != nil {
-				return c.JSON(http.StatusBadRequest, map[string]string{
-					"error": "Invalid college ID",
-				})
-			}
-			c.Set("college_id", collegeIDInt)
+			// If not a direct integer, it might be an external ID
+			// For now, just set the value as-is
+			c.Set(collegeIDContextKey, externalCollegeID)
 		} else {
-			c.Set("college_id", college.ID)
+			c.Set(collegeIDContextKey, collegeIDInt)
 		}
 
 		return next(c)
 	}
 }
 
+// LoadStudentProfile loads the student profile for student users
 func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		identity, ok := c.Get(identityContextKey).(*auth.Identity)
@@ -162,7 +127,7 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 			return helpers.Error(c, "Unauthorized", 403)
 		}
 
-		// Only load student profile for student role - faculty/admin should get student IDs from URL params
+		// Only load student profile for student role
 		if identity.Traits.Role == RoleStudent {
 			ctx := c.Request().Context()
 			kratosID := identity.ID
@@ -178,7 +143,7 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 				return helpers.Error(c, "Student account inactive", 401)
 			}
 
-			// Set the student ID in context for ExtractStudentID helper
+			// Set the student ID in context
 			c.Set(studentIDContextKey, student.StudentID)
 		}
 
@@ -186,6 +151,7 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 	}
 }
 
+// RequireRole checks if the authenticated user has one of the specified roles
 func (m *AuthMiddleware) RequireRole(roles ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -209,7 +175,9 @@ func (m *AuthMiddleware) RequireRole(roles ...string) echo.MiddlewareFunc {
 	}
 }
 
-func (m *AuthMiddleware) RequirePermission(subject, resource, action string) echo.MiddlewareFunc {
+// RequirePermission checks if the authenticated user has the specified permission
+// using Ory Keto
+func (m *AuthMiddleware) RequirePermission(resource, action string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			identity, ok := c.Get("identity").(*auth.Identity)
@@ -218,17 +186,20 @@ func (m *AuthMiddleware) RequirePermission(subject, resource, action string) ech
 					"error": "Unauthorized",
 				})
 			}
+
 			allowed, err := m.AuthService.CheckPermission(c.Request().Context(), identity, action, resource)
 			if err != nil {
 				return c.JSON(http.StatusInternalServerError, map[string]string{
 					"error": "Error checking permissions",
 				})
 			}
+
 			if !allowed {
 				return c.JSON(http.StatusForbidden, map[string]string{
 					"error": "Insufficient permissions",
 				})
 			}
+
 			return next(c)
 		}
 	}
@@ -253,11 +224,11 @@ func (m *AuthMiddleware) VerifyStudentOwnership() echo.MiddlewareFunc {
 				return helpers.Error(c, "Bad Request - Invalid studentID path parameter", http.StatusBadRequest)
 			}
 
-			// --- Check based on Role ---
+			// Check based on Role
 			userRole := identity.Traits.Role
 
 			if userRole == RoleStudent {
-				// If the user is a student, they MUST be accessing their own record.
+				// Student must access their own record
 				authenticatedStudentIDRaw := c.Get(studentIDContextKey)
 				if authenticatedStudentIDRaw == nil {
 					return helpers.Error(c, "Unauthorized - Student identity not loaded", http.StatusUnauthorized)
@@ -271,17 +242,35 @@ func (m *AuthMiddleware) VerifyStudentOwnership() echo.MiddlewareFunc {
 				if requestedStudentID != authenticatedStudentID {
 					return helpers.Error(c, "Forbidden - Students can only access their own data", http.StatusForbidden)
 				}
-				// Student is accessing their own data - Allow
 				return next(c)
 
 			} else if userRole == RoleAdmin || userRole == RoleFaculty {
-				// Admin and faculty are allowed based on role. For finer-grained
-				// checks, use Keto permission checks in the handler or dedicated middleware.
+				// Admin and faculty are allowed based on role
 				return next(c)
 			}
 
-			// If role is none of the above (or empty), deny access.
 			return helpers.Error(c, "Forbidden - Invalid role for accessing student data", http.StatusForbidden)
 		}
 	}
+}
+
+// Helper function to get identity from context
+func GetIdentity(c echo.Context) (*auth.Identity, bool) {
+	identity, ok := c.Get(identityContextKey).(*auth.Identity)
+	return identity, ok
+}
+
+// Helper function to get student ID from context
+func GetStudentID(c echo.Context) (int, bool) {
+	studentID, ok := c.Get(studentIDContextKey).(int)
+	return studentID, ok
+}
+
+// Helper function to get college ID from context
+func GetCollegeID(c echo.Context) (any, bool) {
+	collegeID := c.Get(collegeIDContextKey)
+	if collegeID == nil {
+		return nil, false
+	}
+	return collegeID, true
 }

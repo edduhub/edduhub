@@ -1,7 +1,7 @@
 
 services:
   test-db:
-    image: postgres:17
+    image: postgres:18
     container_name: edduhub-test-db
     environment:
       POSTGRES_USER: user

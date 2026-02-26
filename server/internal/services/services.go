@@ -2,7 +2,6 @@ package services
 
 import (
 	"log"
-	"time"
 
 	"eduhub/server/internal/cache"
 	"eduhub/server/internal/config"
@@ -42,7 +41,6 @@ import (
 	"eduhub/server/internal/services/user"
 	"eduhub/server/internal/services/webhook"
 	storageclient "eduhub/server/internal/storage"
-	"eduhub/server/pkg/jwt"
 
 	minio "github.com/minio/minio-go/v7"
 )
@@ -92,15 +90,7 @@ type Services struct {
 func NewServices(cfg *config.Config) *Services {
 	kratosService := auth.NewKratosService()
 	ketoService := auth.NewKetoService()
-
-	// Initialize JWT manager with secret key validation
-	jwtManager, err := jwt.NewJWTManager(
-		cfg.AuthConfig.JWTSecret,
-		24*time.Hour, // Token valid for 24 hours
-	)
-	if err != nil {
-		log.Fatalf("failed to initialize JWT manager: %v", err)
-	}
+	hydraService := auth.NewHydraService()
 
 	// Create individual repository instances using modular approach
 	studentRepo := repository.NewStudentRepository(cfg.DB)
@@ -113,17 +103,15 @@ func NewServices(cfg *config.Config) *Services {
 	userRepo := repository.NewUserRepository(cfg.DB)
 	lectureRepo := repository.NewLectureRepository(cfg.DB)
 	quizRepo := repository.NewQuizRepository(cfg.DB)
-	// Create quizAttemptRepo early for quiz service
 	quizAttemptRepo := repository.NewQuizAttemptRepository(cfg.DB)
 	calendarRepo := repository.NewCalendarRepository(cfg.DB)
 	departmentRepo := repository.NewDepartmentRepository(cfg.DB)
 
-	// Create auth service with local user/profile provisioning dependencies
+	// Create auth service with Hydra, Kratos, and Keto
 	authService := auth.NewAuthServiceWithDependencies(
+		hydraService,
 		kratosService,
 		ketoService,
-		jwtManager,
-		collegeRepo,
 		userRepo,
 		profileRepo,
 		collegeRepo,

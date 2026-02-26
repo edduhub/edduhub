@@ -28,11 +28,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth := e.Group("/auth")
 	auth.GET("/register", a.Auth.InitiateRegistration, authRateLimiter.Middleware())
 	auth.POST("/register/complete", a.Auth.HandleRegistration, authRateLimiter.Middleware())
-	auth.POST("/login", a.Auth.HandleLogin, authRateLimiter.Middleware())
-	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateJWT)
+	auth.GET("/login/initiate", a.Auth.InitiateLogin, authRateLimiter.Middleware()) // OAuth2 flow start
+	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateToken)
 
-	// Auth routes (require authentication)
-	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateJWT)
+	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateToken)
 	auth.POST("/refresh", a.Auth.RefreshToken, authRateLimiter.Middleware())
 
 	// Password management (public) with strict rate limiting
@@ -40,14 +39,11 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.POST("/password-reset/complete", a.Auth.CompletePasswordReset, passwordRateLimiter.Middleware())
 
 	// Email verification (public)
-	auth.GET("/verify-email", a.Auth.VerifyEmail)
-	auth.POST("/verify-email/initiate", a.Auth.InitiateEmailVerification, m.ValidateJWT)
+	auth.POST("/verify-email/initiate", a.Auth.InitiateEmailVerification, m.ValidateToken)
 
-	// Password change (authenticated) with rate limiting
-	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateJWT, passwordRateLimiter.Middleware())
+	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateToken, passwordRateLimiter.Middleware())
 
-	// Protected API routes with audit logging
-	apiGroup := e.Group("/api", m.ValidateJWT, m.RequireCollege)
+	apiGroup := e.Group("/api", m.ValidateToken, m.RequireCollege)
 
 	// Dashboard
 	apiGroup.GET("/dashboard", a.Dashboard.GetDashboard)

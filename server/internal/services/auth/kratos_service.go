@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	PUBLIC_URL = "KRATOS_PUBLIC_URL"
-	ADMIN_URL  = "KRATOS_ADMIN_URL"
+	PublicURL = "KRATOS_PUBLIC_URL"
+	AdminURL  = "KRATOS_ADMIN_URL"
 )
 
 const defaultHTTPTimeout = 30 * time.Second
@@ -23,121 +23,53 @@ type kratosService struct {
 	HTTPClient *http.Client
 }
 
-type Identity struct {
-	ID     string `json:"id"`
-	UserID int    `json:"user_id,omitempty"`
-	Traits struct {
-		Email string `json:"email"`
-		Name  struct {
-			First string `json:"first"`
-			Last  string `json:"last"`
-		} `json:"name"`
-		College struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"college"`
-		Role   string `json:"role"`
-		RollNo string `json:"rollNo"`
-	} `json:"traits"`
-}
-
-type RegistrationRequest struct {
-	Method   string `json:"method"`
-	Password string `json:"password"`
-	Traits   struct {
-		Email string `json:"email"`
-		Name  struct {
-			First string `json:"first"`
-			Last  string `json:"last"`
-		} `json:"name"`
-		College struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"college"`
-		Role   string `json:"role"`
-		RollNo string `json:"rollNo"`
-	} `json:"traits"`
-}
-
 func NewKratosService() *kratosService {
 	return &kratosService{
-		PublicURL: os.Getenv(PUBLIC_URL),
-		AdminURL:  os.Getenv(ADMIN_URL),
+		PublicURL: os.Getenv(PublicURL),
+		AdminURL:  os.Getenv(AdminURL),
 		HTTPClient: &http.Client{
 			Timeout: defaultHTTPTimeout,
 		},
 	}
 }
 
-// Login authenticates a user with email and password
-func (k *kratosService) Login(ctx context.Context, email, password string) (*Identity, error) {
-	// Initiate login flow
-	url := fmt.Sprintf("%s/self-service/login/api", k.PublicURL)
+// GetIdentity retrieves an identity by ID from Kratos admin API
+func (k *kratosService) GetIdentity(ctx context.Context, identityID string) (*Identity, error) {
+	if identityID == "" {
+		return nil, fmt.Errorf("identity ID is required")
+	}
+
+	url := fmt.Sprintf("%s/identities/%s", k.AdminURL, identityID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create login flow request: %w", err)
+		return nil, fmt.Errorf("failed to create identity request: %w", err)
 	}
-	req.Header.Set("Accept", "application/json")
 
 	resp, err := k.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initiate login flow: %w", err)
+		return nil, fmt.Errorf("failed to get identity: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var flow map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
-		return nil, fmt.Errorf("failed to decode login flow: %w", err)
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("identity not found")
 	}
 
-	flowID, ok := flow["id"].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid flow ID in response")
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get identity: %d", resp.StatusCode)
 	}
 
-	// Submit credentials
-	loginData := map[string]any{
-		"method":     "password",
-		"password":   password,
-		"identifier": email,
-	}
-	data, err := json.Marshal(loginData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal login data: %w", err)
+	var identity Identity
+	if err := json.NewDecoder(resp.Body).Decode(&identity); err != nil {
+		return nil, fmt.Errorf("failed to decode identity response: %w", err)
 	}
 
-	submitURL := fmt.Sprintf("%s/self-service/login?flow=%s", k.PublicURL, flowID)
-	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create login submit request: %w", err)
-	}
-	submitReq.Header.Set("Content-Type", "application/json")
-
-	submitResp, err := k.HTTPClient.Do(submitReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to submit login: %w", err)
-	}
-	defer submitResp.Body.Close()
-
-	if submitResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("login failed with status: %s", http.StatusText(submitResp.StatusCode))
-	}
-
-	var result struct {
-		Session struct {
-			Identity Identity `json:"identity"`
-		} `json:"session"`
-	}
-	if err := json.NewDecoder(submitResp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode login response: %w", err)
-	}
-
-	return &result.Session.Identity, nil
+	return &identity, nil
 }
 
-// InitiateRegistrationFlow starts the registration process by calling Ory Kratos.
+// InitiateRegistrationFlow starts the registration process
 func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[string]any, error) {
-	url := fmt.Sprintf("%s/self-service/registration/api", k.PublicURL)
+	url := fmt.Sprintf("%s/self-service/registration/flows", k.PublicURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration request: %w", err)
@@ -158,103 +90,53 @@ func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[strin
 	return result, nil
 }
 
-// CompleteRegistration submits the registration data to complete registration.
+// CompleteRegistration submits the registration data
 func (k *kratosService) CompleteRegistration(ctx context.Context, flowID string, regReq RegistrationRequest) (*Identity, error) {
 	data, err := json.Marshal(regReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal registration data: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/self-service/registration?flow=%s", k.PublicURL, flowID)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
+	url := fmt.Sprintf("%s/self-service/registration/flows?id=%s", k.PublicURL, flowID)
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration completion request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
 
-	resp, err := k.HTTPClient.Do(req)
+	resp, err := k.HTTPClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to complete registration: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registration failed with status: %s", http.StatusText(resp.StatusCode))
+		var errResp struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, fmt.Errorf("registration failed: %s - %s", errResp.Error, errResp.ErrorDescription)
 	}
 
 	var result struct {
-		Session struct {
-			Identity Identity `json:"identity"`
-		} `json:"session"`
 		Identity Identity `json:"identity"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode registration response: %w", err)
 	}
 
-	if result.Session.Identity.ID != "" {
-		return &result.Session.Identity, nil
-	}
-	if result.Identity.ID != "" {
-		return &result.Identity, nil
-	}
-	return nil, fmt.Errorf("registration response missing identity")
-}
-
-// ValidateJWT validates a JWT token by calling Kratos' JWT introspection endpoint.
-func (k *kratosService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
-	url := fmt.Sprintf("%s/sessions/whoami", k.PublicURL)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create JWT validation request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+jwtToken)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := k.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate JWT: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid JWT token: %s", http.StatusText(resp.StatusCode))
-	}
-
-	var result struct {
-		Identity Identity `json:"identity"`
-		Active   bool     `json:"active"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode JWT validation response: %w", err)
-	}
-
-	if !result.Active {
-		return nil, fmt.Errorf("JWT token is not active")
+	if result.Identity.ID == "" {
+		return nil, fmt.Errorf("registration response missing identity")
 	}
 
 	return &result.Identity, nil
 }
 
-// CheckCollegeAccess verifies that the student's college ID matches the provided ID.
-func (k *kratosService) CheckCollegeAccess(identity *Identity, collegeID string) bool {
-	return identity.Traits.College.ID == collegeID
-}
-
-// HasRole verifies if the identity holds the specified role.
-func (k *kratosService) HasRole(identity *Identity, role string) bool {
-	return identity.Traits.Role == role
-}
-
-// GetPublicURL returns the public URL for the Kratos instance.
-func (k *kratosService) GetPublicURL() string {
-	return k.PublicURL
-}
-
 // InitiatePasswordReset starts the password reset flow
 func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string) error {
-	url := fmt.Sprintf("%s/self-service/recovery/api", k.PublicURL)
+	url := fmt.Sprintf("%s/self-service/recovery/flows", k.PublicURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create password reset request: %w", err)
@@ -286,7 +168,7 @@ func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string)
 		return fmt.Errorf("failed to marshal reset data: %w", err)
 	}
 
-	submitURL := fmt.Sprintf("%s/self-service/recovery?flow=%s", k.PublicURL, flowID)
+	submitURL := fmt.Sprintf("%s/self-service/recovery/flows?id=%s", k.PublicURL, flowID)
 	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("failed to create reset submit request: %w", err)
@@ -300,7 +182,7 @@ func (k *kratosService) InitiatePasswordReset(ctx context.Context, email string)
 	defer submitResp.Body.Close()
 
 	if submitResp.StatusCode != http.StatusOK && submitResp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("password reset failed with status: %s", http.StatusText(submitResp.StatusCode))
+		return fmt.Errorf("password reset failed with status: %d", submitResp.StatusCode)
 	}
 
 	return nil
@@ -317,7 +199,7 @@ func (k *kratosService) CompletePasswordReset(ctx context.Context, flowID string
 		return fmt.Errorf("failed to marshal reset completion data: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/self-service/settings?flow=%s", k.PublicURL, flowID)
+	url := fmt.Sprintf("%s/self-service/recovery/flows?flow=%s", k.PublicURL, flowID)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("failed to create reset completion request: %w", err)
@@ -331,7 +213,7 @@ func (k *kratosService) CompletePasswordReset(ctx context.Context, flowID string
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("password reset completion failed with status: %s", http.StatusText(resp.StatusCode))
+		return fmt.Errorf("password reset completion failed with status: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -348,7 +230,7 @@ func (k *kratosService) VerifyEmail(ctx context.Context, flowID string, token st
 		return fmt.Errorf("failed to marshal verification data: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/self-service/verification?flow=%s", k.PublicURL, flowID)
+	url := fmt.Sprintf("%s/self-service/verification/flows?flow=%s", k.PublicURL, flowID)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("failed to create verification request: %w", err)
@@ -362,7 +244,7 @@ func (k *kratosService) VerifyEmail(ctx context.Context, flowID string, token st
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("email verification failed with status: %s", http.StatusText(resp.StatusCode))
+		return fmt.Errorf("email verification failed with status: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -370,7 +252,7 @@ func (k *kratosService) VerifyEmail(ctx context.Context, flowID string, token st
 
 // InitiateEmailVerification starts email verification flow
 func (k *kratosService) InitiateEmailVerification(ctx context.Context, identityID string) (map[string]any, error) {
-	url := fmt.Sprintf("%s/self-service/verification/api", k.PublicURL)
+	url := fmt.Sprintf("%s/self-service/verification/flows", k.PublicURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create verification request: %w", err)
@@ -379,7 +261,7 @@ func (k *kratosService) InitiateEmailVerification(ctx context.Context, identityI
 
 	resp, err := k.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initiate email verification: %w", err)
+		return nil, fmt.Errorf("failed to initiate verification: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -393,7 +275,7 @@ func (k *kratosService) InitiateEmailVerification(ctx context.Context, identityI
 
 // ChangePassword changes the password for a logged-in user
 func (k *kratosService) ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error {
-	url := fmt.Sprintf("%s/self-service/settings/api", k.PublicURL)
+	url := fmt.Sprintf("%s/self-service/settings/flows", k.PublicURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create settings flow request: %w", err)
@@ -425,7 +307,7 @@ func (k *kratosService) ChangePassword(ctx context.Context, identityID string, o
 		return fmt.Errorf("failed to marshal password change data: %w", err)
 	}
 
-	submitURL := fmt.Sprintf("%s/self-service/settings?flow=%s", k.PublicURL, flowID)
+	submitURL := fmt.Sprintf("%s/self-service/settings/flows?flow=%s", k.PublicURL, flowID)
 	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
 	if err != nil {
 		return fmt.Errorf("failed to create password change request: %w", err)
@@ -439,20 +321,72 @@ func (k *kratosService) ChangePassword(ctx context.Context, identityID string, o
 	defer submitResp.Body.Close()
 
 	if submitResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("password change failed with status: %s", http.StatusText(submitResp.StatusCode))
+		return fmt.Errorf("password change failed with status: %d", submitResp.StatusCode)
 	}
 
 	return nil
 }
 
+// ValidateSession validates a Kratos session token (legacy - not used with Hydra)
 func (k *kratosService) ValidateSession(ctx context.Context, sessionToken string) (*Identity, error) {
-	return nil, fmt.Errorf("not implemented - use JWT")
+	url := fmt.Sprintf("%s/sessions/whoami", k.PublicURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session validation request: %w", err)
+	}
+	// Kratos sessions use X-Session-Token header, not Bearer token
+	req.Header.Set("X-Session-Token", sessionToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate session: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("invalid session: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Identity Identity `json:"identity"`
+		Active   bool     `json:"active"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode session response: %w", err)
+	}
+
+	if !result.Active {
+		return nil, fmt.Errorf("session is not active")
+	}
+
+	return &result.Identity, nil
 }
 
+// Logout invalidates a Kratos session (legacy - not used with Hydra)
 func (k *kratosService) Logout(ctx context.Context, sessionToken string) error {
-	return fmt.Errorf("not implemented - use token revocation")
+	url := fmt.Sprintf("%s/sessions", k.AdminURL)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create logout request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to logout: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return nil
 }
 
+// RefreshSession refreshes a session (legacy - not used with Hydra)
 func (k *kratosService) RefreshSession(ctx context.Context, sessionToken string) (string, error) {
-	return "", fmt.Errorf("not implemented - use RefreshToken")
+	return "", fmt.Errorf("use Hydra for token refresh instead")
+}
+
+// GetPublicURL returns the public URL for the Kratos instance
+func (k *kratosService) GetPublicURL() string {
+	return k.PublicURL
 }

@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"eduhub/server/internal/helpers"
 	"eduhub/server/internal/services/auth"
@@ -80,8 +78,8 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 		return helpers.Error(c, "invalid flow response", http.StatusInternalServerError)
 	}
 
-	// Complete registration and generate token
-	token, identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
+	// Complete registration
+	identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
 	if err != nil {
 		return helpers.Error(c, "unable to complete registration: "+err.Error(), http.StatusBadRequest)
 	}
@@ -91,8 +89,9 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 		userIDValue = identity.UserID
 	}
 
+	// After registration, user needs to go through OAuth2 flow to get tokens
+	// Return user info - frontend should redirect to login to get OAuth2 tokens
 	return helpers.Success(c, map[string]any{
-		"token": token,
 		"user": map[string]any{
 			"id":          userIDValue,
 			"kratosId":    identity.ID,
@@ -103,38 +102,69 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 			"collegeId":   identity.Traits.College.ID,
 			"collegeName": identity.Traits.College.Name,
 		},
-		"expiresAt": fmt.Sprintf("%v", c.Request().Context().Value("token_expiry")),
+		"message": "registration successful. please login to get access token",
 	}, http.StatusCreated)
 }
 
-// HandleLogin processes login
+// InitiateLogin starts the OAuth2 authorization code flow
+// Returns the Hydra authorization URL to redirect the user to
+func (h *AuthHandler) InitiateLogin(c echo.Context) error {
+	var req struct {
+		RedirectURI string `json:"redirectUri"`
+	}
+
+	if err := c.Bind(&req); err != nil {
+		// Use default redirect URI if not provided
+		req.RedirectURI = ""
+	}
+
+	// Get the OAuth2 authorization URL from Hydra
+	authURL, state, err := h.authService.InitiateLogin(c.Request().Context(), req.RedirectURI)
+	if err != nil {
+		return helpers.Error(c, "failed to initiate login: "+err.Error(), http.StatusInternalServerError)
+	}
+
+	return helpers.Success(c, map[string]string{
+		"authorizationUrl": authURL,
+		"state":            state,
+	}, http.StatusOK)
+}
+
+// HandleLogin processes login callback from Hydra
+// This handles the OAuth2 authorization code flow callback
 func (h *AuthHandler) HandleLogin(c echo.Context) error {
 	var req struct {
-		Email    string `json:"email" validate:"required,email"`
-		Password string `json:"password" validate:"required"`
+		Code        string `json:"code"`
+		RedirectURI string `json:"redirectUri"`
+		State       string `json:"state"`
 	}
 
 	if err := c.Bind(&req); err != nil {
 		return helpers.Error(c, "invalid request body", http.StatusBadRequest)
 	}
 
-	// Authenticate and generate JWT
-	token, identity, err := h.authService.Login(c.Request().Context(), req.Email, req.Password)
+	if req.Code == "" {
+		return helpers.Error(c, "authorization code is required", http.StatusBadRequest)
+	}
+
+	// Complete the OAuth2 flow - exchange code for tokens
+	oauthToken, identity, err := h.authService.CompleteLogin(c.Request().Context(), req.Code, req.RedirectURI, req.State)
 	if err != nil {
 		return helpers.Error(c, "authentication failed: "+err.Error(), http.StatusUnauthorized)
 	}
-
-	// Calculate expiration time (24 hours from now as per JWT manager)
-	expiresAt := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 
 	userIDValue := any(identity.ID)
 	if identity.UserID > 0 {
 		userIDValue = identity.UserID
 	}
 
-	// Return token and user info
+	// Return OAuth2 tokens and user info
 	return helpers.Success(c, map[string]any{
-		"token": token,
+		"accessToken":  oauthToken.AccessToken,
+		"refreshToken": oauthToken.RefreshToken,
+		"tokenType":    oauthToken.TokenType,
+		"expiresIn":    oauthToken.ExpiresIn,
+		"idToken":      oauthToken.IDToken,
 		"user": map[string]any{
 			"id":          userIDValue,
 			"kratosId":    identity.ID,
@@ -145,13 +175,12 @@ func (h *AuthHandler) HandleLogin(c echo.Context) error {
 			"collegeId":   identity.Traits.College.ID,
 			"collegeName": identity.Traits.College.Name,
 		},
-		"expiresAt": expiresAt,
 	}, http.StatusOK)
 }
 
-// HandleCallback processes the login callback
+// HandleCallback processes the login callback (alias for HandleLogin for compatibility)
 func (h *AuthHandler) HandleCallback(c echo.Context) error {
-	// Extract identity from the context, which should be set by JWT middleware
+	// Extract identity from the context, which should be set by ValidateToken middleware
 	identityRaw := c.Get("identity")
 	if identityRaw == nil {
 		return helpers.Error(c, "authorization required", http.StatusUnauthorized)
@@ -165,39 +194,47 @@ func (h *AuthHandler) HandleCallback(c echo.Context) error {
 	return helpers.Success(c, identity, http.StatusOK)
 }
 
-// HandleLogout logs out the current user
+// HandleLogout logs out the current user by revoking the OAuth2 token
 func (h *AuthHandler) HandleLogout(c echo.Context) error {
-
-	// JWT mode: no server-side session invalidation is required.
-	jwtToken := extractBearerToken(c)
-	if jwtToken == "" {
-		return helpers.Error(c, "no session token or bearer token provided", http.StatusBadRequest)
+	accessToken := extractBearerToken(c)
+	if accessToken == "" {
+		return helpers.Error(c, "no access token provided", http.StatusBadRequest)
 	}
 
-	_, err := h.authService.ValidateJWT(c.Request().Context(), jwtToken)
+	// Revoke the OAuth2 token via Hydra
+	err := h.authService.RevokeAccessToken(c.Request().Context(), accessToken)
 	if err != nil {
-		return helpers.Error(c, "failed to validate token: "+err.Error(), http.StatusUnauthorized)
+		return helpers.Error(c, "failed to revoke token: "+err.Error(), http.StatusInternalServerError)
 	}
 
 	return helpers.Success(c, map[string]string{"message": "logout successful"}, http.StatusOK)
 }
 
-// RefreshToken refreshes the JWT Token
+// RefreshToken refreshes the OAuth2 access token using refresh token
 func (h *AuthHandler) RefreshToken(c echo.Context) error {
-
-	jwtToken := extractBearerToken(c)
-	if jwtToken == "" {
-		return helpers.Error(c, "no session token or bearer token provided", http.StatusBadRequest)
+	var req struct {
+		RefreshToken string `json:"refreshToken"`
 	}
 
-	newToken, err := h.authService.RefreshToken(c.Request().Context(), jwtToken)
+	if err := c.Bind(&req); err != nil {
+		return helpers.Error(c, "invalid request body", http.StatusBadRequest)
+	}
+
+	if req.RefreshToken == "" {
+		return helpers.Error(c, "refresh token is required", http.StatusBadRequest)
+	}
+
+	// Refresh the OAuth2 token
+	oauthToken, err := h.authService.RefreshAccessToken(c.Request().Context(), req.RefreshToken)
 	if err != nil {
 		return helpers.Error(c, "failed to refresh token: "+err.Error(), http.StatusUnauthorized)
 	}
 
-	return helpers.Success(c, map[string]string{
-		"token":   newToken,
-		"message": "token refreshed successfully",
+	return helpers.Success(c, map[string]any{
+		"accessToken":  oauthToken.AccessToken,
+		"refreshToken": oauthToken.RefreshToken,
+		"tokenType":    oauthToken.TokenType,
+		"expiresIn":    oauthToken.ExpiresIn,
 	}, http.StatusOK)
 }
 

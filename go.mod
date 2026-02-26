@@ -29,9 +29,14 @@ require (
 )
 
 require (
+	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
+	github.com/ory/hydra-client-go v1.11.8 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/oauth2 v0.0.0-20210323180902-22b0adad7558 // indirect
+	google.golang.org/appengine v1.6.6 // indirect
+	google.golang.org/protobuf v1.25.0 // indirect
 )
 
 require (

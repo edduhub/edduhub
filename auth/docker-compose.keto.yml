@@ -1,36 +1,21 @@
-version: '3.7'
+version: '3.8'
 
 services:
-  keto-write:
-    image: oryd/keto:v0.11.1
+  keto:
+    image: oryd/keto:v0.14.0
     ports:
-      - "4466:4466"
-    command: serve -c /etc/config/keto.yml --write-api
+      - "4466:4466"  # Write API / Combined API
+      - "4467:4467"  # Read API
+    command: serve -c /home/ory/keto.yml
     environment:
-      - DSN=postgres://keto:secret@postgres:5432/keto?sslmode=disable
+      - LOG_LEVEL=info
     volumes:
       - type: bind
         source: ./keto/keto.yml
-        target: /etc/config/keto.yml
+        target: /home/ory/keto.yml
     restart: on-failure
     depends_on:
       - postgres
-
-  keto-read:
-    image: oryd/keto:v0.11.1
-    ports:
-      - "4467:4467"
-    command: serve -c /etc/config/keto.yml --read-api
-    environment:
-      - DSN=postgres://keto:secret@postgres:5432/keto?sslmode=disable
-    volumes:
-      - type: bind
-        source: ./keto/keto.yml
-        target: /etc/config/keto.yml
-    restart: on-failure
-    depends_on:
-      - postgres
-      - keto-write
 
   postgres:
     image: postgres:14
