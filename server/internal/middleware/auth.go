@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"eduhub/server/internal/helpers"
+	"eduhub/server/internal/models"
 	"eduhub/server/internal/services/auth"
-	"eduhub/server/internal/services/student"
 
 	"github.com/labstack/echo/v4"
 )
@@ -26,59 +28,75 @@ const (
 	MarkAction         = "mark"
 )
 
-// AuthMiddleware handles authentication using Ory Hydra tokens
-// and authorization using Ory Keto
-type AuthMiddleware struct {
-	AuthService    auth.AuthService
-	StudentService student.StudentService
+// TokenValidator is the minimal interface that AuthMiddleware requires from the
+// auth service. It is satisfied by auth.AuthService but is kept small so that
+// test mocks need only implement the three methods that the middleware actually calls.
+type TokenValidator interface {
+	// ValidateJWT validates a locally-signed JWT and returns the Identity.
+	ValidateJWT(ctx context.Context, token string) (*auth.Identity, error)
+	// ValidateToken validates a Hydra / OAuth2 access token and returns the Identity.
+	ValidateToken(ctx context.Context, accessToken string) (*auth.Identity, error)
+	// HasRole returns true when the identity carries the given role.
+	HasRole(identity *auth.Identity, role string) bool
+	// CheckPermission calls Keto to verify a subject–action–resource tuple.
+	CheckPermission(ctx context.Context, identity *auth.Identity, action, resource string) (bool, error)
 }
 
-// NewAuthMiddleware creates a new AuthMiddleware
-func NewAuthMiddleware(authSvc auth.AuthService, studentService student.StudentService) *AuthMiddleware {
+// StudentLoader is the minimal interface required to load a student profile.
+// Satisfied by student.StudentService.
+type StudentLoader interface {
+	FindByKratosID(ctx context.Context, kratosID string) (*models.Student, error)
+}
+
+// AuthMiddleware handles authentication (Hydra/JWT), multi-tenant college isolation,
+// role-based access control (Keto), and student profile loading.
+type AuthMiddleware struct {
+	// AuthService provides token validation, role checks, and Keto permission checks.
+	AuthService TokenValidator
+	// StudentService provides student profile look-ups.
+	StudentService StudentLoader
+	// hydraService is the optional Hydra client used by ValidateToken.
+	hydraService auth.HydraService
+	// jwtManager is the optional local JWT manager used by ValidateJWT.
+	jwtManager auth.JWTManager
+}
+
+// NewAuthMiddleware creates a new AuthMiddleware.
+//
+// hydra and jwtMgr are optional; pass nil when not needed (e.g. in tests).
+func NewAuthMiddleware(authSvc TokenValidator, studentSvc StudentLoader, hydra auth.HydraService, jwtMgr auth.JWTManager) *AuthMiddleware {
 	return &AuthMiddleware{
 		AuthService:    authSvc,
-		StudentService: studentService,
+		StudentService: studentSvc,
+		hydraService:   hydra,
+		jwtManager:     jwtMgr,
 	}
 }
 
-// ValidateToken validates the OAuth2 access token from the Authorization header
-// and sets the identity in the context
+// extractBearer strips the "Bearer " prefix from an Authorization header value.
+func extractBearer(header string) string {
+	const prefix = "Bearer "
+	if len(header) > len(prefix) && strings.EqualFold(header[:len(prefix)], prefix) {
+		return strings.TrimSpace(header[len(prefix):])
+	}
+	return ""
+}
+
+// ValidateToken validates the Hydra OAuth2 access token from the Authorization header
+// and sets the identity in the context. This is the primary middleware for all API routes.
 func (m *AuthMiddleware) ValidateToken(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		authHeader := c.Request().Header.Get("Authorization")
-		if authHeader == "" {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "No authorization header provided",
-			})
+		token := extractBearer(c.Request().Header.Get("Authorization"))
+		if token == "" {
+			return echo.NewHTTPError(http.StatusUnauthorized, "missing or invalid Authorization header")
 		}
 
-		// Extract token from Bearer header
-		const bearerPrefix = "Bearer "
-		if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Invalid authorization header format. Expected: Bearer <token>",
-			})
-		}
-
-		accessToken := authHeader[len(bearerPrefix):]
-		if accessToken == "" {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Empty access token",
-			})
-		}
-
-		// Validate the token using Hydra introspection
-		identity, err := m.AuthService.ValidateToken(c.Request().Context(), accessToken)
+		identity, err := m.AuthService.ValidateToken(c.Request().Context(), token)
 		if err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Invalid access token: " + err.Error(),
-			})
+			return echo.NewHTTPError(http.StatusUnauthorized, "invalid access token: "+err.Error())
 		}
 
-		// Set identity in context
 		c.Set(identityContextKey, identity)
-
-		// Set user ID if available
 		if identity.UserID > 0 {
 			c.Set("user_id", identity.UserID)
 		}
@@ -87,29 +105,49 @@ func (m *AuthMiddleware) ValidateToken(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// RequireCollege ensures that the authenticated user belongs to the specified college
+// ValidateJWT validates a locally-signed JWT Bearer token.
+// Use this middleware for routes that bypass Hydra introspection.
+func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		token := extractBearer(c.Request().Header.Get("Authorization"))
+		if token == "" {
+			return echo.NewHTTPError(http.StatusUnauthorized, "missing or invalid Authorization header")
+		}
+
+		identity, err := m.AuthService.ValidateJWT(c.Request().Context(), token)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, "invalid JWT token: "+err.Error())
+		}
+
+		c.Set(identityContextKey, identity)
+		if identity.UserID > 0 {
+			c.Set("user_id", identity.UserID)
+		}
+
+		return next(c)
+	}
+}
+
+// RequireCollege ensures that the authenticated user's college is set in the context.
+// It parses the College.ID string from the identity and stores the integer value under
+// the "college_id" context key so downstream handlers can use it for tenant isolation.
 func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		identity, ok := c.Get("identity").(*auth.Identity)
 		if !ok {
-			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "Unauthorized",
-			})
+			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}
 
 		// Get the external college ID from identity
 		externalCollegeID := identity.Traits.College.ID
 		if externalCollegeID == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"error": "No college associated with identity",
-			})
+			return echo.NewHTTPError(http.StatusBadRequest, "no college associated with identity")
 		}
 
 		// Try to parse as integer directly
 		collegeIDInt, err := strconv.Atoi(externalCollegeID)
 		if err != nil {
-			// If not a direct integer, it might be an external ID
-			// For now, just set the value as-is
+			// Not a numeric ID – store as-is (e.g. Kratos external UUID)
 			c.Set(collegeIDContextKey, externalCollegeID)
 		} else {
 			c.Set(collegeIDContextKey, collegeIDInt)
@@ -124,7 +162,7 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 	return func(c echo.Context) error {
 		identity, ok := c.Get(identityContextKey).(*auth.Identity)
 		if !ok || identity == nil {
-			return helpers.Error(c, "Unauthorized", 403)
+			return echo.NewHTTPError(http.StatusForbidden, "unauthorized")
 		}
 
 		// Only load student profile for student role
@@ -134,13 +172,13 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 
 			student, err := m.StudentService.FindByKratosID(ctx, kratosID)
 			if err != nil {
-				return helpers.Error(c, "Student lookup failed", 500)
+				return echo.NewHTTPError(http.StatusInternalServerError, "student lookup failed")
 			}
 			if student == nil {
-				return helpers.Error(c, "Student not registered", 401)
+				return echo.NewHTTPError(http.StatusUnauthorized, "student not registered")
 			}
 			if !student.IsActive {
-				return helpers.Error(c, "Student account inactive", 401)
+				return echo.NewHTTPError(http.StatusUnauthorized, "student account inactive")
 			}
 
 			// Set the student ID in context
@@ -151,15 +189,14 @@ func (m *AuthMiddleware) LoadStudentProfile(next echo.HandlerFunc) echo.HandlerF
 	}
 }
 
-// RequireRole checks if the authenticated user has one of the specified roles
+// RequireRole checks if the authenticated user has one of the specified roles.
+// Uses Kratos role claim from the Identity – no Keto call needed for role checks.
 func (m *AuthMiddleware) RequireRole(roles ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			identity, ok := c.Get("identity").(*auth.Identity)
 			if !ok {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "Unauthorized",
-				})
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			}
 
 			for _, role := range roles {
@@ -168,36 +205,28 @@ func (m *AuthMiddleware) RequireRole(roles ...string) echo.MiddlewareFunc {
 				}
 			}
 
-			return c.JSON(http.StatusForbidden, map[string]string{
-				"error": "Insufficient permissions",
-			})
+			return c.JSON(http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
 		}
 	}
 }
 
 // RequirePermission checks if the authenticated user has the specified permission
-// using Ory Keto
-func (m *AuthMiddleware) RequirePermission(resource, action string) echo.MiddlewareFunc {
+// using Ory Keto's relationship-based access control.
+func (m *AuthMiddleware) RequirePermission(subject, resource, action string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			identity, ok := c.Get("identity").(*auth.Identity)
 			if !ok {
-				return c.JSON(http.StatusUnauthorized, map[string]string{
-					"error": "Unauthorized",
-				})
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			}
 
 			allowed, err := m.AuthService.CheckPermission(c.Request().Context(), identity, action, resource)
 			if err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{
-					"error": "Error checking permissions",
-				})
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "error checking permissions"})
 			}
 
 			if !allowed {
-				return c.JSON(http.StatusForbidden, map[string]string{
-					"error": "Insufficient permissions",
-				})
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
 			}
 
 			return next(c)

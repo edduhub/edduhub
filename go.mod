@@ -16,6 +16,7 @@ require (
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/minio/minio-go/v7 v7.0.98
+	github.com/ory/hydra-client-go v1.11.8
 	github.com/pashagolub/pgxmock/v4 v4.9.0
 	github.com/razorpay/razorpay-go v1.4.0
 	github.com/redis/go-redis/v9 v9.17.3
@@ -31,7 +32,6 @@ require (
 require (
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
-	github.com/ory/hydra-client-go v1.11.8 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20210323180902-22b0adad7558 // indirect

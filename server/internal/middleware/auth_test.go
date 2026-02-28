@@ -18,12 +18,21 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockAuthService is a mock implementation of the AuthService interface.
+// MockAuthService is a mock implementation of the TokenValidator interface.
 type MockAuthService struct {
 	mock.Mock
 }
 
 func (m *MockAuthService) ValidateJWT(ctx context.Context, token string) (*auth.Identity, error) {
+	args := m.Called(ctx, token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*auth.Identity), args.Error(1)
+}
+
+// ValidateToken is a stub that satisfies TokenValidator; not exercised by these tests.
+func (m *MockAuthService) ValidateToken(ctx context.Context, token string) (*auth.Identity, error) {
 	args := m.Called(ctx, token)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -127,7 +136,7 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 	mockStudentSvc := new(MockStudentService)
 	middleware := NewAuthMiddleware(mockAuthSvc, mockStudentSvc, nil, nil)
 	collegeID := 123
-	identity := &auth.Identity{Traits: auth.Traits{College: auth.College{ID: collegeID}}}
+	identity := &auth.Identity{Traits: auth.Traits{College: auth.College{ID: strconv.Itoa(collegeID)}}}
 
 	// Identity in context
 	e := echo.New()
