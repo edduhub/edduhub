@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,32 +13,55 @@ import (
 )
 
 type AuthService interface {
-	Login(ctx context.Context, email, password string) (string, *Identity, error)
+	// --- Kratos: identity registration & self-service ---
 	InitiateRegistrationFlow(ctx context.Context) (map[string]any, error)
 	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (string, *Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
-	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
-	ValidateCollegeAccess(ctx context.Context, collegeID int) (any, error)
-	CheckCollegeAccess(identity *Identity, collegeID string) bool
-	HasRole(identity *Identity, role string) bool
-	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
-	AssignRole(ctx context.Context, identityID string, role string) error
-	RemoveRole(ctx context.Context, identityID string, role string) error
-	AddPermission(ctx context.Context, identityID, action, resource string) error
-	RemovePermission(ctx context.Context, identityID, action, resource string) error
-	GetPublicURL() string
-	ExtractStudentID(identity *Identity) (int, error)
-	Logout(ctx context.Context, sessionToken string) error
-	RefreshSession(ctx context.Context, sessionToken string) (string, error)
 	InitiatePasswordReset(ctx context.Context, email string) error
 	CompletePasswordReset(ctx context.Context, flowID string, newPassword string) error
 	VerifyEmail(ctx context.Context, flowID string, token string) error
 	InitiateEmailVerification(ctx context.Context, identityID string) (map[string]any, error)
 	ChangePassword(ctx context.Context, identityID string, oldPassword string, newPassword string) error
+	GetPublicURL() string
+	Logout(ctx context.Context, sessionToken string) error
+	RefreshSession(ctx context.Context, sessionToken string) (string, error)
+
+	// --- Hydra: OAuth2 / OIDC ---
+	// InitiateLogin returns the Hydra authorization URL and a random state value.
+	InitiateLogin(ctx context.Context, redirectURI string) (authURL string, state string, err error)
+	// CompleteLogin exchanges an authorization code for OAuth2 tokens and resolves the Identity.
+	CompleteLogin(ctx context.Context, code, redirectURI, state string) (*OAuth2Token, *Identity, error)
+	// ValidateToken validates a Hydra access token and returns the associated Identity.
+	ValidateToken(ctx context.Context, accessToken string) (*Identity, error)
+	// RevokeAccessToken revokes a Hydra access or refresh token.
+	RevokeAccessToken(ctx context.Context, accessToken string) error
+	// RefreshAccessToken exchanges a refresh token for a new token pair.
+	RefreshAccessToken(ctx context.Context, refreshToken string) (*OAuth2Token, error)
+
+	// --- Local JWT (optional fast-path) ---
+	// ValidateJWT validates a locally-signed JWT without calling Hydra.
+	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
+	// RefreshToken rotates a local JWT token.
 	RefreshToken(ctx context.Context, token string) (string, error)
+	// Login performs a direct Kratos password login and issues a local JWT.
+	Login(ctx context.Context, email, password string) (string, *Identity, error)
+
+	// --- Keto: fine-grained access control ---
+	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
+	AssignRole(ctx context.Context, identityID string, role string) error
+	RemoveRole(ctx context.Context, identityID string, role string) error
+	AddPermission(ctx context.Context, identityID, action, resource string) error
+	RemovePermission(ctx context.Context, identityID, action, resource string) error
+
+	// --- Helpers ---
+	ValidateCollegeAccess(ctx context.Context, collegeID int) (any, error)
+	CheckCollegeAccess(identity *Identity, collegeID string) bool
+	HasRole(identity *Identity, role string) bool
+	ExtractStudentID(identity *Identity) (int, error)
 }
 
 type authService struct {
+	Hydra          *hydraService
 	Auth           *kratosService
 	AuthZ          *ketoService
 	JWTManager     JWTManager
@@ -87,17 +112,21 @@ func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, jwtMana
 	}
 }
 
-// NewAuthServiceWithDependencies creates an auth service with all dependencies for user/profile provisioning
-func NewAuthServiceWithDependencies(kratos *kratosService, keto *ketoService, jwtManager JWTManager, collegeRepo any, userRepo any, profileRepo any, collegeChecker any) AuthService {
+// NewAuthServiceWithDependencies creates a fully-wired auth service using all three
+// Ory products:
+//   - hydra  – Ory Hydra for OAuth2 / OIDC token issuance and introspection
+//   - kratos – Ory Kratos for identity management, registration, and self-service flows
+//   - keto   – Ory Keto for fine-grained relationship-based access control
+//
+// userRepo, profileRepo, and collegeRepo are checked against the UserStore, ProfileStore,
+// CollegeStore and CollegeChecker interfaces at run-time and wired in when satisfied.
+func NewAuthServiceWithDependencies(hydra *hydraService, kratos *kratosService, keto *ketoService, userRepo any, profileRepo any, collegeRepo any) AuthService {
 	service := &authService{
-		Auth:       kratos,
-		AuthZ:      keto,
-		JWTManager: jwtManager,
+		Hydra: hydra,
+		Auth:  kratos,
+		AuthZ: keto,
 	}
 
-	if cc, ok := collegeChecker.(CollegeChecker); ok {
-		service.CollegeChecker = cc
-	}
 	if us, ok := userRepo.(UserStore); ok {
 		service.UserStore = us
 	}
@@ -107,11 +136,17 @@ func NewAuthServiceWithDependencies(kratos *kratosService, keto *ketoService, jw
 	if cs, ok := collegeRepo.(CollegeStore); ok {
 		service.CollegeStore = cs
 	}
+	if cc, ok := collegeRepo.(CollegeChecker); ok {
+		service.CollegeChecker = cc
+	}
 
 	return service
 }
 
 func (a *authService) Login(ctx context.Context, email, password string) (string, *Identity, error) {
+	if a.Auth == nil {
+		return "", nil, fmt.Errorf("kratos service not configured")
+	}
 	// Authenticate with Kratos
 	identity, err := a.Auth.Login(ctx, email, password)
 	if err != nil {
@@ -121,6 +156,11 @@ func (a *authService) Login(ctx context.Context, email, password string) (string
 	userID, err := a.resolveAndProvisionLocalIdentity(ctx, identity)
 	if err != nil {
 		return "", nil, err
+	}
+
+	if a.JWTManager == nil {
+		// No local JWT manager – return empty token; callers should use OAuth2 flow.
+		return "", identity, nil
 	}
 
 	// Generate JWT token
@@ -166,6 +206,10 @@ func (a *authService) CompleteRegistration(ctx context.Context, flowID string, r
 		return "", nil, err
 	}
 
+	if a.JWTManager == nil {
+		return "", identity, nil
+	}
+
 	// Generate JWT token
 	token, err := a.JWTManager.Generate(
 		userID,
@@ -188,6 +232,9 @@ func (a *authService) ValidateSession(ctx context.Context, sessionToken string) 
 }
 
 func (a *authService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
+	if a.JWTManager == nil {
+		return nil, fmt.Errorf("jwt manager not configured")
+	}
 	claims, err := a.JWTManager.Verify(jwtToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid JWT token: %w", err)
@@ -283,6 +330,9 @@ func (a *authService) ValidateCollegeAccess(ctx context.Context, collegeID int) 
 // RefreshToken validates and generates a new JWT token with updated expiration
 // Implements token rotation for enhanced security
 func (a *authService) RefreshToken(ctx context.Context, token string) (string, error) {
+	if a.JWTManager == nil {
+		return "", fmt.Errorf("jwt manager not configured")
+	}
 	// Validate the existing token
 	claims, err := a.JWTManager.Verify(token)
 	if err != nil {
@@ -482,4 +532,152 @@ func isNotFoundErr(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "no rows")
+}
+
+// ── Hydra OAuth2 / OIDC implementations ─────────────────────────────────────
+
+// InitiateLogin builds a Hydra authorization URL and returns it together with
+// a random state value that the client must verify on callback.
+func (a *authService) InitiateLogin(ctx context.Context, redirectURI string) (string, string, error) {
+	if a.Hydra == nil {
+		return "", "", fmt.Errorf("hydra service not configured")
+	}
+	state, err := generateState()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate state: %w", err)
+	}
+	authURL, err := a.Hydra.InitiateLogin(ctx, a.Hydra.ClientID, redirectURI, state, "")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to initiate Hydra login: %w", err)
+	}
+	return authURL, state, nil
+}
+
+// CompleteLogin exchanges an authorization code for OAuth2 tokens via Hydra,
+// resolves the Kratos identity from the UserInfo endpoint, provisions a local
+// user record when necessary, and returns the token pair plus the Identity.
+func (a *authService) CompleteLogin(ctx context.Context, code, redirectURI, state string) (*OAuth2Token, *Identity, error) {
+	if a.Hydra == nil {
+		return nil, nil, fmt.Errorf("hydra service not configured")
+	}
+
+	// Exchange the authorization code for tokens.
+	oauthToken, err := a.Hydra.ExchangeCode(ctx, code, redirectURI)
+	if err != nil {
+		return nil, nil, fmt.Errorf("code exchange failed: %w", err)
+	}
+
+	// Fetch user information from Hydra's UserInfo endpoint.
+	userInfo, err := a.Hydra.GetUserInfo(ctx, oauthToken.AccessToken)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch user info: %w", err)
+	}
+
+	identity := identityFromUserInfo(userInfo)
+
+	// Provision the local user/profile record if required.
+	if _, err := a.resolveAndProvisionLocalIdentity(ctx, identity); err != nil {
+		return nil, nil, err
+	}
+
+	return oauthToken, identity, nil
+}
+
+// ValidateToken introspects a Hydra access token and returns the Identity.
+// This is the primary token validation path for OAuth2-protected API routes.
+func (a *authService) ValidateToken(ctx context.Context, accessToken string) (*Identity, error) {
+	if a.Hydra == nil {
+		// Fall back to local JWT validation when Hydra is not configured.
+		return a.ValidateJWT(ctx, accessToken)
+	}
+
+	introspected, err := a.Hydra.ValidateAccessToken(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	// Build an Identity from the introspection result.
+	identity := &Identity{ID: introspected.Sub}
+	if ext := introspected.Ext; ext != nil {
+		if email, ok := ext["email"].(string); ok {
+			identity.Traits.Email = email
+		}
+		if role, ok := ext["role"].(string); ok {
+			identity.Traits.Role = role
+		}
+		if collegeID, ok := ext["college_id"].(string); ok {
+			identity.Traits.College.ID = collegeID
+		}
+		if firstName, ok := ext["first_name"].(string); ok {
+			identity.Traits.Name.First = firstName
+		}
+		if lastName, ok := ext["last_name"].(string); ok {
+			identity.Traits.Name.Last = lastName
+		}
+		if uid, ok := ext["user_id"].(float64); ok {
+			identity.UserID = int(uid)
+		}
+	}
+
+	if _, err := a.resolveAndProvisionLocalIdentity(ctx, identity); err != nil {
+		return nil, err
+	}
+
+	return identity, nil
+}
+
+// RevokeAccessToken revokes a Hydra access or refresh token so it can no longer be used.
+func (a *authService) RevokeAccessToken(ctx context.Context, accessToken string) error {
+	if a.Hydra == nil {
+		return fmt.Errorf("hydra service not configured")
+	}
+	return a.Hydra.RevokeToken(ctx, accessToken)
+}
+
+// RefreshAccessToken exchanges a Hydra refresh token for a new access / refresh token pair.
+func (a *authService) RefreshAccessToken(ctx context.Context, refreshToken string) (*OAuth2Token, error) {
+	if a.Hydra == nil {
+		return nil, fmt.Errorf("hydra service not configured")
+	}
+	return a.Hydra.RefreshToken(ctx, refreshToken)
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+// generateState creates a cryptographically random hex string for OAuth2 state.
+func generateState() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate random state: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// identityFromUserInfo converts a Hydra UserInfo map to an Identity.
+func identityFromUserInfo(info map[string]any) *Identity {
+	identity := &Identity{}
+
+	if sub, ok := info["sub"].(string); ok {
+		identity.ID = sub
+	}
+	if email, ok := info["email"].(string); ok {
+		identity.Traits.Email = email
+	}
+	if role, ok := info["role"].(string); ok {
+		identity.Traits.Role = role
+	}
+	if collegeID, ok := info["college_id"].(string); ok {
+		identity.Traits.College.ID = collegeID
+	}
+	if firstName, ok := info["given_name"].(string); ok {
+		identity.Traits.Name.First = firstName
+	}
+	if lastName, ok := info["family_name"].(string); ok {
+		identity.Traits.Name.Last = lastName
+	}
+	if uid, ok := info["user_id"].(float64); ok {
+		identity.UserID = int(uid)
+	}
+
+	return identity
 }

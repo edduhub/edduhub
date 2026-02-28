@@ -79,7 +79,7 @@ func (h *AuthHandler) HandleRegistration(c echo.Context) error {
 	}
 
 	// Complete registration
-	identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
+	_, identity, err := h.authService.CompleteRegistration(c.Request().Context(), flowID, kratosReq)
 	if err != nil {
 		return helpers.Error(c, "unable to complete registration: "+err.Error(), http.StatusBadRequest)
 	}

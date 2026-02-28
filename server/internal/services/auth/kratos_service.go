@@ -327,6 +327,104 @@ func (k *kratosService) ChangePassword(ctx context.Context, identityID string, o
 	return nil
 }
 
+// Login authenticates a user with Kratos using the password strategy.
+// It initiates a login flow, submits the credentials, and returns the resolved Identity.
+func (k *kratosService) Login(ctx context.Context, email, password string) (*Identity, error) {
+	// Step 1: Initiate a native-API login flow.
+	flowURL := fmt.Sprintf("%s/self-service/login/api", k.PublicURL)
+	initReq, err := http.NewRequestWithContext(ctx, "GET", flowURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create login flow request: %w", err)
+	}
+	initReq.Header.Set("Accept", "application/json")
+
+	initResp, err := k.HTTPClient.Do(initReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initiate login flow: %w", err)
+	}
+	defer initResp.Body.Close()
+
+	if initResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("login flow initiation failed with status: %d", initResp.StatusCode)
+	}
+
+	var flow struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(initResp.Body).Decode(&flow); err != nil {
+		return nil, fmt.Errorf("failed to decode login flow: %w", err)
+	}
+
+	// Step 2: Submit credentials.
+	creds := map[string]any{
+		"method":     "password",
+		"identifier": email,
+		"password":   password,
+	}
+	data, err := json.Marshal(creds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal credentials: %w", err)
+	}
+
+	submitURL := fmt.Sprintf("%s/self-service/login?flow=%s", k.PublicURL, flow.ID)
+	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create login submit request: %w", err)
+	}
+	submitReq.Header.Set("Content-Type", "application/json")
+	submitReq.Header.Set("Accept", "application/json")
+
+	submitResp, err := k.HTTPClient.Do(submitReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to submit login: %w", err)
+	}
+	defer submitResp.Body.Close()
+
+	if submitResp.StatusCode != http.StatusOK {
+		var errBody struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		// Best-effort decode; fall back to status code on parse failure.
+		if decErr := json.NewDecoder(submitResp.Body).Decode(&errBody); decErr != nil || errBody.Error.Message == "" {
+			return nil, fmt.Errorf("login failed: status %d", submitResp.StatusCode)
+		}
+		return nil, fmt.Errorf("login failed: %s", errBody.Error.Message)
+	}
+
+	var result struct {
+		Session struct {
+			Identity Identity `json:"identity"`
+		} `json:"session"`
+	}
+	if err := json.NewDecoder(submitResp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode login response: %w", err)
+	}
+
+	if result.Session.Identity.ID == "" {
+		return nil, fmt.Errorf("login response missing identity")
+	}
+
+	return &result.Session.Identity, nil
+}
+
+// CheckCollegeAccess returns true when the identity's college ID matches the expected value.
+func (k *kratosService) CheckCollegeAccess(identity *Identity, collegeID string) bool {
+	if identity == nil {
+		return false
+	}
+	return identity.Traits.College.ID == collegeID
+}
+
+// HasRole returns true when the identity carries the given role in its traits.
+func (k *kratosService) HasRole(identity *Identity, role string) bool {
+	if identity == nil {
+		return false
+	}
+	return identity.Traits.Role == role
+}
+
 // ValidateSession validates a Kratos session token (legacy - not used with Hydra)
 func (k *kratosService) ValidateSession(ctx context.Context, sessionToken string) (*Identity, error) {
 	url := fmt.Sprintf("%s/sessions/whoami", k.PublicURL)
