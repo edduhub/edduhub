@@ -158,6 +158,7 @@ export default function RegisterPage() {
                 <Input
                   id="firstName"
                   name="firstName"
+                  autoComplete="given-name"
                   placeholder="John"
                   value={formData.firstName}
                   onChange={handleChange}
@@ -173,6 +174,7 @@ export default function RegisterPage() {
                 <Input
                   id="lastName"
                   name="lastName"
+                  autoComplete="family-name"
                   placeholder="Doe"
                   value={formData.lastName}
                   onChange={handleChange}
@@ -186,13 +188,14 @@ export default function RegisterPage() {
               <label htmlFor="email" className="text-sm font-medium">
                 Email
               </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@college.edu"
-                value={formData.email}
-                onChange={handleChange}
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@college.edu"
+                  value={formData.email}
+                  onChange={handleChange}
                 required
                 disabled={isLoading}
               />
@@ -207,6 +210,7 @@ export default function RegisterPage() {
                   id="password"
                   name="password"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
@@ -223,6 +227,7 @@ export default function RegisterPage() {
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={formData.confirmPassword}
                   onChange={handleChange}
