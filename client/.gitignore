@@ -47,3 +47,4 @@ next-env.d.ts
 # IDEs
 .vscode/
 .idea/
+node_modules/
