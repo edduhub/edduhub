@@ -13,13 +13,6 @@ import (
 	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
 
-const calendarBlockTable = "calendar_events"
-
-var calendarBlockQueryFields = []string{
-	"id", "college_id", "title", "description", "event_type", "start_time", "end_time",
-	"created_at", "updated_at",
-}
-
 type CalendarRepository interface {
 	CreateCalendarBlock(ctx context.Context, block *models.CalendarBlock) error
 	GetCalendarBlockByID(ctx context.Context, blockID int, collegeID int) (*models.CalendarBlock, error)

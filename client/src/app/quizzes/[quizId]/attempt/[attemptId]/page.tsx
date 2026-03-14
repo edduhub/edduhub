@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-type QuizType = "MultipleChoice" | "TrueFalse" | "ShortAnswer";
+type QuizType = "MultipleChoice" | "TrueFalse" | "ShortAnswer" | "multiple_choice" | "true_false" | "short_answer";
 
 type AnswerOption = {
   id: number;
@@ -30,10 +30,9 @@ type Quiz = {
 };
 
 type StudentAnswer = {
-  question_id: number; // wire format compatibility if backend is snake_case tolerant
-  QuestionID?: number; // TS convenience to mirror Go struct tags when marshalled
-  SelectedOptionID?: number[] | null;
-  AnswerText?: string;
+  question_id: number;
+  selected_option_id?: number[] | null;
+  answer_text?: string;
 };
 
 type Attempt = {
@@ -43,9 +42,8 @@ type Attempt = {
   quiz?: Quiz;
   answers?: Array<{
     question_id?: number;
-    QuestionID?: number;
-    SelectedOptionID?: number[] | null;
-    AnswerText?: string;
+    selected_option_id?: number[] | null;
+    answer_text?: string;
   }>;
 };
 
@@ -78,12 +76,12 @@ export default function QuizAttemptPage({ params }: PageProps) {
         // Seed existing answers if any
         const prefilled: Record<number, { optionId?: number; text?: string }> = {};
         (data.answers || []).forEach((a) => {
-          const qid = a.QuestionID ?? a.question_id;
+          const qid = a.question_id;
           if (!qid) return;
-          if (a.SelectedOptionID && a.SelectedOptionID.length > 0) {
-            prefilled[qid] = { optionId: a.SelectedOptionID[0] };
-          } else if (a.AnswerText) {
-            prefilled[qid] = { text: a.AnswerText };
+          if (a.selected_option_id && a.selected_option_id.length > 0) {
+            prefilled[qid] = { optionId: a.selected_option_id[0] };
+          } else if (a.answer_text) {
+            prefilled[qid] = { text: a.answer_text };
           }
         });
         setAnswers(prefilled);
@@ -99,11 +97,11 @@ export default function QuizAttemptPage({ params }: PageProps) {
   const buildPayload = (): { answers: StudentAnswer[] } => {
     const payload: StudentAnswer[] = (questions || []).map((q) => {
       const a = answers[q.id] || {};
-      const base: StudentAnswer = { question_id: q.id, QuestionID: q.id };
-      if (q.type === "MultipleChoice" || q.type === "TrueFalse") {
-        return { ...base, SelectedOptionID: a.optionId ? [a.optionId] : [] };
+      const base: StudentAnswer = { question_id: q.id };
+      if (isChoiceQuestion(q.type)) {
+        return { ...base, selected_option_id: a.optionId ? [a.optionId] : [] };
       }
-      return { ...base, AnswerText: a.text || "" };
+      return { ...base, answer_text: a.text || "" };
     });
     return { answers: payload };
   };
@@ -148,7 +146,7 @@ export default function QuizAttemptPage({ params }: PageProps) {
 
   if (!attempt) return null;
 
-  const completed = attempt.status === "Completed" || attempt.status === "Graded";
+  const completed = isCompletedAttempt(attempt.status);
 
   return (
     <div className="space-y-6">
@@ -169,7 +167,7 @@ export default function QuizAttemptPage({ params }: PageProps) {
             <CardDescription>{q.points} points • {q.type}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {q.type === "MultipleChoice" || q.type === "TrueFalse" ? (
+            {isChoiceQuestion(q.type) ? (
               <RadioGroup
                 value={answers[q.id]?.optionId?.toString()}
                 onValueChange={(val) => setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], optionId: Number(val) } }))}
@@ -212,4 +210,10 @@ export default function QuizAttemptPage({ params }: PageProps) {
   );
 }
 
+function isChoiceQuestion(type: QuizType): boolean {
+  return type === "MultipleChoice" || type === "TrueFalse" || type === "multiple_choice" || type === "true_false";
+}
 
+function isCompletedAttempt(status: string): boolean {
+  return status === "Completed" || status === "Graded" || status === "submitted" || status === "graded";
+}

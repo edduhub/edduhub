@@ -53,6 +53,33 @@ func (h *SelfServiceHandler) GetMyRequests(c echo.Context) error {
 	}, http.StatusOK)
 }
 
+// GetAllRequests godoc
+// @Summary Get all self-service requests for a college
+// @Description Returns a list of self-service requests for staff users in the authenticated college
+// @Tags Self-Service
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} helpers.ErrorResponse
+// @Failure 500 {object} helpers.ErrorResponse
+// @Router /api/self-service/all-requests [get]
+func (h *SelfServiceHandler) GetAllRequests(c echo.Context) error {
+	collegeID, err := helpers.ExtractCollegeID(c)
+	if err != nil {
+		return err
+	}
+
+	requests, err := h.service.ListCollegeRequests(c.Request().Context(), collegeID)
+	if err != nil {
+		return helpers.Error(c, "Failed to fetch requests", http.StatusInternalServerError)
+	}
+
+	return helpers.Success(c, map[string]any{
+		"requests": requests,
+		"total":    len(requests),
+	}, http.StatusOK)
+}
+
 // GetRequest godoc
 // @Summary Get a specific self-service request
 // @Description Returns details of a specific request

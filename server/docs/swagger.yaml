@@ -16,7 +16,7 @@ securityDefinitions:
     type: apiKey
     name: Authorization
     in: header
-    description: JWT Bearer token
+    description: Ory session token (OAuth2 access token); if using browser sessions, token is sent via cookie.
 paths:
   /health:
     get:

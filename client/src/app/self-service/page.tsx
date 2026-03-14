@@ -40,8 +40,10 @@ type Request = {
 
 export default function StudentSelfServicePage() {
   const { user } = useAuth();
-  const { data: requests = [] } = useSelfServiceRequests();
   const isAdminOrFaculty = user?.role === 'admin' || user?.role === 'faculty' || user?.role === 'super_admin';
+  const { data: requests = [] } = useSelfServiceRequests({
+    enabled: user?.role === 'student',
+  });
 
   return (
     <div className="min-h-screen bg-muted/10">
@@ -56,7 +58,7 @@ export default function StudentSelfServicePage() {
 
         {/* Request Tabs */}
         <Tabs defaultValue="enroll" className="space-y-4">
-          <TabsList className={`grid w-full grid-cols-${isAdminOrFaculty ? 5 : 4} lg:w-auto`}>
+          <TabsList className={isAdminOrFaculty ? 'grid w-full grid-cols-5 lg:w-auto' : 'grid w-full grid-cols-4 lg:w-auto'}>
             <TabsTrigger value="enroll">
               <BookOpen className="w-4 h-4 mr-2" />
               Enrollment

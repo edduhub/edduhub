@@ -43,23 +43,63 @@ func (s *webhookService) CreateWebhook(ctx context.Context, webhook *models.Webh
 	if webhook.URL == "" {
 		return fmt.Errorf("webhook URL is required")
 	}
-	if webhook.Event == "" {
+	if webhook.Event == "" && len(webhook.EventTypes) == 0 {
 		return fmt.Errorf("webhook event is required")
 	}
 
+	if webhook.Event == "" && len(webhook.EventTypes) > 0 {
+		webhook.Event = webhook.EventTypes[0]
+	}
+	if len(webhook.EventTypes) == 0 && webhook.Event != "" {
+		webhook.EventTypes = []string{webhook.Event}
+	}
+	if webhook.Name == "" {
+		webhook.Name = webhook.Event
+		if webhook.Name == "" {
+			webhook.Name = webhook.URL
+		}
+	}
 	webhook.Active = true
 	return s.webhookRepo.CreateWebhook(ctx, webhook)
 }
 
 func (s *webhookService) ListWebhooks(ctx context.Context, collegeID int) ([]*models.Webhook, error) {
-	return s.webhookRepo.GetWebhooksByCollege(ctx, collegeID)
+	webhooks, err := s.webhookRepo.GetWebhooksByCollege(ctx, collegeID)
+	if err != nil {
+		return nil, err
+	}
+	for _, webhook := range webhooks {
+		if webhook.Event == "" && len(webhook.EventTypes) > 0 {
+			webhook.Event = webhook.EventTypes[0]
+		}
+	}
+	return webhooks, nil
 }
 
 func (s *webhookService) GetWebhook(ctx context.Context, collegeID, webhookID int) (*models.Webhook, error) {
-	return s.webhookRepo.GetWebhookByID(ctx, collegeID, webhookID)
+	webhook, err := s.webhookRepo.GetWebhookByID(ctx, collegeID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+	if webhook.Event == "" && len(webhook.EventTypes) > 0 {
+		webhook.Event = webhook.EventTypes[0]
+	}
+	return webhook, nil
 }
 
 func (s *webhookService) UpdateWebhook(ctx context.Context, webhook *models.Webhook) error {
+	if webhook.Event == "" && len(webhook.EventTypes) > 0 {
+		webhook.Event = webhook.EventTypes[0]
+	}
+	if len(webhook.EventTypes) == 0 && webhook.Event != "" {
+		webhook.EventTypes = []string{webhook.Event}
+	}
+	if webhook.Name == "" {
+		webhook.Name = webhook.Event
+		if webhook.Name == "" {
+			webhook.Name = webhook.URL
+		}
+	}
 	return s.webhookRepo.UpdateWebhook(ctx, webhook)
 }
 
@@ -80,7 +120,9 @@ func (s *webhookService) TriggerEvent(ctx context.Context, collegeID int, event 
 			continue
 		}
 
-		go s.sendWebhook(webhook, payload)
+		go func(webhook *models.Webhook) {
+			_ = s.sendWebhook(webhook, payload)
+		}(webhook)
 	}
 
 	return nil

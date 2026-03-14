@@ -37,6 +37,7 @@ type RequestTypeOption struct {
 type SelfServiceService interface {
 	ResolveUserIDByKratosID(ctx context.Context, kratosID string) (int, error)
 	ListStudentRequests(ctx context.Context, collegeID, studentID int) ([]*models.SelfServiceRequest, error)
+	ListCollegeRequests(ctx context.Context, collegeID int) ([]*models.SelfServiceRequest, error)
 	GetStudentRequest(ctx context.Context, collegeID, studentID, requestID int) (*models.SelfServiceRequest, error)
 	CreateStudentRequest(ctx context.Context, req *models.SelfServiceRequest) error
 	UpdateRequest(ctx context.Context, collegeID, requestID, responderUserID int, status, response string) (*models.SelfServiceRequest, error)
@@ -65,6 +66,13 @@ func (s *selfServiceService) ListStudentRequests(ctx context.Context, collegeID,
 		return nil, fmt.Errorf("invalid college or student id")
 	}
 	return s.repo.ListByStudent(ctx, collegeID, studentID)
+}
+
+func (s *selfServiceService) ListCollegeRequests(ctx context.Context, collegeID int) ([]*models.SelfServiceRequest, error) {
+	if collegeID <= 0 {
+		return nil, fmt.Errorf("invalid college id")
+	}
+	return s.repo.ListByCollege(ctx, collegeID)
 }
 
 func (s *selfServiceService) GetStudentRequest(ctx context.Context, collegeID, studentID, requestID int) (*models.SelfServiceRequest, error) {

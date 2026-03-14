@@ -43,8 +43,6 @@ func NewEnrollmentRepository(db *DB) EnrollmentRepository {
 	}
 }
 
-const enrollmentTable = "enrollments" // Define your table name
-
 // CreateEnrollment inserts a new enrollment record into the database.
 func (e *enrollmentRepository) CreateEnrollment(ctx context.Context, enrollment *models.Enrollment) error {
 	// Set timestamps if they are zero-valued
@@ -74,11 +72,11 @@ func (e *enrollmentRepository) CreateEnrollment(ctx context.Context, enrollment 
 
 // IsStudentEnrolled checks if a student is enrolled in a specific course within a college.
 func (e *enrollmentRepository) IsStudentEnrolled(ctx context.Context, collegeID int, studentID int, courseID int) (bool, error) {
-	sql := `SELECT 1 FROM enrollments WHERE college_id = $1 AND student_id = $2 AND course_id = $3 LIMIT 1`
+	sql := `SELECT EXISTS(SELECT 1 FROM enrollments WHERE college_id = $1 AND student_id = $2 AND course_id = $3) AS exists`
 	args := []any{collegeID, studentID, courseID}
 
 	temp := struct {
-		Exists int `db:"1"`
+		Exists bool `db:"exists"`
 	}{}
 	err := pgxscan.Get(ctx, e.DB.Pool, &temp, sql, args...)
 	if err != nil {
@@ -88,7 +86,7 @@ func (e *enrollmentRepository) IsStudentEnrolled(ctx context.Context, collegeID 
 		return false, fmt.Errorf("IsStudentEnrolled: failed to execute query: %w", err)
 	}
 
-	return true, nil // Record exists
+	return temp.Exists, nil
 }
 
 // GetEnrollmentByID retrieves a specific enrollment by its ID, scoped by collegeID.

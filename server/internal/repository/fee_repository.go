@@ -67,10 +67,15 @@ func (r *feeRepository) CreateFeeStructure(ctx context.Context, fee *models.FeeS
 }
 
 func (r *feeRepository) GetFeeStructure(ctx context.Context, feeID int, collegeID int) (*models.FeeStructure, error) {
-	sql := `SELECT * FROM fee_structures WHERE id = $1 AND college_id = $2`
+	sql := `SELECT * FROM fee_structures WHERE id = $1`
+	args := []any{feeID}
+	if collegeID > 0 {
+		sql += ` AND college_id = $2`
+		args = append(args, collegeID)
+	}
 
 	fee := &models.FeeStructure{}
-	err := pgxscan.Get(ctx, r.DB.Pool, fee, sql, feeID, collegeID)
+	err := pgxscan.Get(ctx, r.DB.Pool, fee, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("fee structure not found")
@@ -196,7 +201,7 @@ func (r *feeRepository) GetFeeAssignment(ctx context.Context, assignmentID int) 
 func (r *feeRepository) GetStudentFeeAssignments(ctx context.Context, studentID int) ([]*models.FeeAssignment, error) {
 	sql := `SELECT fa.* FROM fee_assignments fa
 			WHERE fa.student_id = $1
-			ORDER BY fa.due_date ASC, fa.status ASC`
+			ORDER BY fa.created_at DESC, fa.status ASC`
 
 	var assignments []*models.FeeAssignment
 	err := pgxscan.Select(ctx, r.DB.Pool, &assignments, sql, studentID)
@@ -310,7 +315,7 @@ func (r *feeRepository) GetStudentFeesSummary(ctx context.Context, studentID int
 				COALESCE(SUM(CASE WHEN fa.status = 'paid' THEN 1 ELSE 0 END), 0) as paid_assignments,
 				COALESCE(SUM(CASE WHEN fa.status = 'pending' OR fa.status = 'partial' THEN 1 ELSE 0 END), 0) as pending_assignments,
 				COALESCE(SUM(CASE WHEN fa.status = 'overdue' THEN 1 ELSE 0 END), 0) as overdue_assignments,
-				COALESCE(SUM(CASE WHEN fa.due_date < NOW() AND fa.status != 'paid' THEN fa.amount ELSE 0 END), 0) as overdue_amount
+				COALESCE(SUM(CASE WHEN fa.status = 'overdue' THEN fa.amount ELSE 0 END), 0) as overdue_amount
 			FROM fee_assignments fa
 			WHERE fa.student_id = $1`
 

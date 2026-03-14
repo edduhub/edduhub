@@ -32,14 +32,14 @@ const (
 // auth service. It is satisfied by auth.AuthService but is kept small so that
 // test mocks need only implement the three methods that the middleware actually calls.
 type TokenValidator interface {
-	// ValidateJWT validates a locally-signed JWT and returns the Identity.
-	ValidateJWT(ctx context.Context, token string) (*auth.Identity, error)
 	// ValidateToken validates a Hydra / OAuth2 access token and returns the Identity.
 	ValidateToken(ctx context.Context, accessToken string) (*auth.Identity, error)
 	// HasRole returns true when the identity carries the given role.
 	HasRole(identity *auth.Identity, role string) bool
 	// CheckPermission calls Keto to verify a subject–action–resource tuple.
 	CheckPermission(ctx context.Context, identity *auth.Identity, action, resource string) (bool, error)
+	ResolveCollegeID(ctx context.Context, externalID string) (int, error)
+	// ResolveCollegeID resolves an external college ID (e.g. "college123") to the DB integer ID.
 }
 
 // StudentLoader is the minimal interface required to load a student profile.
@@ -48,7 +48,7 @@ type StudentLoader interface {
 	FindByKratosID(ctx context.Context, kratosID string) (*models.Student, error)
 }
 
-// AuthMiddleware handles authentication (Hydra/JWT), multi-tenant college isolation,
+// AuthMiddleware handles authentication (Hydra session token and Ory Kratos session token),
 // role-based access control (Keto), and student profile loading.
 type AuthMiddleware struct {
 	// AuthService provides token validation, role checks, and Keto permission checks.
@@ -57,19 +57,16 @@ type AuthMiddleware struct {
 	StudentService StudentLoader
 	// hydraService is the optional Hydra client used by ValidateToken.
 	hydraService auth.HydraService
-	// jwtManager is the optional local JWT manager used by ValidateJWT.
-	jwtManager auth.JWTManager
 }
 
 // NewAuthMiddleware creates a new AuthMiddleware.
 //
-// hydra and jwtMgr are optional; pass nil when not needed (e.g. in tests).
-func NewAuthMiddleware(authSvc TokenValidator, studentSvc StudentLoader, hydra auth.HydraService, jwtMgr auth.JWTManager) *AuthMiddleware {
+// hydra is optional; pass nil when not needed (e.g. in tests).
+func NewAuthMiddleware(authSvc TokenValidator, studentSvc StudentLoader, hydra auth.HydraService) *AuthMiddleware {
 	return &AuthMiddleware{
 		AuthService:    authSvc,
 		StudentService: studentSvc,
 		hydraService:   hydra,
-		jwtManager:     jwtMgr,
 	}
 }
 
@@ -82,16 +79,56 @@ func extractBearer(header string) string {
 	return ""
 }
 
-// ValidateToken validates the Hydra OAuth2 access token from the Authorization header
-// and sets the identity in the context. This is the primary middleware for all API routes.
+func readCookieValue(c echo.Context, name string) string {
+	cookie, err := c.Cookie(name)
+	if err != nil || cookie == nil {
+		return ""
+	}
+	return strings.TrimSpace(cookie.Value)
+}
+
+// ValidateToken validates session credentials from either:
+// - Authorization: Bearer <accessToken>
+// - secure cookie: edduhub_access_token (OAuth2 access token)
+// - secure cookie: edduhub_session_token (Kratos session token)
+// and sets the identity in the context.
+// This is the primary middleware for all API routes.
 func (m *AuthMiddleware) ValidateToken(next echo.HandlerFunc) echo.HandlerFunc {
+	const (
+		accessTokenCookieName = "edduhub_access_token"
+		sessionTokenCookieName = "edduhub_session_token"
+	)
+
+	resolveSessionToken := func(c echo.Context) (token string, isHydra bool) {
+		if token = extractBearer(c.Request().Header.Get("Authorization")); token != "" {
+			return token, true
+		}
+		if token = readCookieValue(c, accessTokenCookieName); token != "" {
+			return token, true
+		}
+		if token = readCookieValue(c, sessionTokenCookieName); token != "" {
+			return token, false
+		}
+		return "", false
+	}
+
 	return func(c echo.Context) error {
-		token := extractBearer(c.Request().Header.Get("Authorization"))
+		token, isHydra := resolveSessionToken(c)
 		if token == "" {
 			return echo.NewHTTPError(http.StatusUnauthorized, "missing or invalid Authorization header")
 		}
 
-		identity, err := m.AuthService.ValidateToken(c.Request().Context(), token)
+		var identity *auth.Identity
+		var err error
+		if isHydra {
+			identity, err = m.AuthService.ValidateToken(c.Request().Context(), token)
+		} else {
+			sessionValidator, ok := m.AuthService.(interface{ ValidateSession(context.Context, string) (*auth.Identity, error) })
+			if !ok {
+				return echo.NewHTTPError(http.StatusUnauthorized, "session token validation not supported")
+			}
+			identity, err = sessionValidator.ValidateSession(c.Request().Context(), token)
+		}
 		if err != nil {
 			return echo.NewHTTPError(http.StatusUnauthorized, "invalid access token: "+err.Error())
 		}
@@ -105,32 +142,11 @@ func (m *AuthMiddleware) ValidateToken(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// ValidateJWT validates a locally-signed JWT Bearer token.
-// Use this middleware for routes that bypass Hydra introspection.
-func (m *AuthMiddleware) ValidateJWT(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		token := extractBearer(c.Request().Header.Get("Authorization"))
-		if token == "" {
-			return echo.NewHTTPError(http.StatusUnauthorized, "missing or invalid Authorization header")
-		}
 
-		identity, err := m.AuthService.ValidateJWT(c.Request().Context(), token)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusUnauthorized, "invalid JWT token: "+err.Error())
-		}
-
-		c.Set(identityContextKey, identity)
-		if identity.UserID > 0 {
-			c.Set("user_id", identity.UserID)
-		}
-
-		return next(c)
-	}
-}
 
 // RequireCollege ensures that the authenticated user's college is set in the context.
-// It parses the College.ID string from the identity and stores the integer value under
-// the "college_id" context key so downstream handlers can use it for tenant isolation.
+// It resolves the external College.ID string from the identity to the database integer ID
+// and stores it under the "college_id" context key so downstream handlers can use it for tenant isolation.
 func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		identity, ok := c.Get("identity").(*auth.Identity)
@@ -144,14 +160,17 @@ func (m *AuthMiddleware) RequireCollege(next echo.HandlerFunc) echo.HandlerFunc 
 			return echo.NewHTTPError(http.StatusBadRequest, "no college associated with identity")
 		}
 
-		// Try to parse as integer directly
-		collegeIDInt, err := strconv.Atoi(externalCollegeID)
+		// Resolve the external college ID to the database integer ID.
+		// This handles both numeric IDs ("3") and external identifiers ("college123").
+		collegeIDInt, err := m.AuthService.ResolveCollegeID(c.Request().Context(), externalCollegeID)
 		if err != nil {
-			// Not a numeric ID – store as-is (e.g. Kratos external UUID)
-			c.Set(collegeIDContextKey, externalCollegeID)
-		} else {
-			c.Set(collegeIDContextKey, collegeIDInt)
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid college: "+err.Error())
 		}
+		if collegeIDInt == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "no college associated with identity")
+		}
+
+		c.Set(collegeIDContextKey, collegeIDInt)
 
 		return next(c)
 	}

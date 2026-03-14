@@ -55,11 +55,6 @@ func NewQuizRepository(db *DB) QuizRepository {
 	return &quizRepository{DB: db}
 }
 
-// Table constants for quiz operations
-const (
-	quizTable = "quizzes"
-)
-
 // CreateQuiz creates a new quiz in the database.
 // It automatically sets CreatedAt and UpdatedAt timestamps.
 // Uses parameterized queries to prevent SQL injection.

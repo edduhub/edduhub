@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api, endpoints, fetchProfile } from "@/lib/api-client";
+import { api, buildAuthHeaders, endpoints, fetchProfile, getAPIBase } from "@/lib/api-client";
 import { Profile } from "@/lib/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ const formatDateForInput = (value?: string) => {
 };
 
 export default function ProfilePage() {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
@@ -207,11 +207,11 @@ export default function ProfilePage() {
       formData.append("image", file);
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/profile/upload-image`,
+        `${getAPIBase()}/api/profile/upload-image`,
         {
           method: "POST",
           credentials: "include",
-          headers: session?.token ? { Authorization: `Bearer ${session.token}` } : undefined,
+          headers: buildAuthHeaders(),
           body: formData,
         }
       );

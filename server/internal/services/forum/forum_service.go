@@ -57,7 +57,9 @@ func (s *forumService) GetThread(ctx context.Context, collegeID, threadID int) (
 		return nil, errors.New("thread not found")
 	}
 	// Background increment view count
-	go s.forumRepo.IncrementViewCount(context.Background(), threadID)
+	go func() {
+		_ = s.forumRepo.IncrementViewCount(context.Background(), threadID)
+	}()
 	return thread, nil
 }
 

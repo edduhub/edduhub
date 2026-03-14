@@ -80,7 +80,47 @@ services:
       - ./build/kratos.yml/kratos.yml:/etc/config/kratos.yml:ro
       - ./build/identity.schema.json/identity.schema.json:/etc/config/identity.schema.json:ro
 
+  # Ory Hydra Database
+  hydra-db:
+    image: postgres:17-alpine
+    container_name: edduhub-hydra-postgres
+    environment:
+      POSTGRES_USER: hydra
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: hydra
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hydra -d hydra"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - edduhub-hydra-data:/var/lib/postgresql/data
+
+  # Ory Hydra OAuth2 Server
+  hydra:
+    image: oryd/hydra:v1.11.8
+    container_name: edduhub-hydra
+    depends_on:
+      hydra-db:
+        condition: service_healthy
+    environment:
+      - DSN=postgres://hydra:secret@hydra-db:5432/hydra?sslmode=disable
+      - SECRETS_SYSTEM=your-32-character-secret-here123456
+      - URLS_SELF_ISSUER=http://localhost:4444
+      - URLS_CONSENT=http://localhost:3000/oauth2/consent
+      - URLS_LOGIN=http://localhost:3000/oauth2/login
+      - URLS_LOGOUT=http://localhost:3000/oauth2/logout
+      - OIDC_SUBJECT_TYPES_SUPPORTED=public
+      - OIDC_SUBJECT_TYPE_PAIRWISE=SECRET_SALT
+    entrypoint: []
+    command: ["sh", "-c", "hydra migrate sql --yes postgres://hydra:secret@hydra-db:5432/hydra?sslmode=disable && hydra serve all --dangerous-force-http"]
+    ports:
+      - "4444:4444"
+      - "4445:4445"
+    restart: unless-stopped
+
 volumes:
   edduhub-postgres-data:
   edduhub-minio-data:
   edduhub-kratos-data:
+  edduhub-hydra-data:

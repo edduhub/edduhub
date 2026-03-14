@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { canAccessPath, type AppRoutePath } from "@/lib/route-access";
 import {
   GraduationCap,
   LayoutDashboard,
@@ -39,43 +39,42 @@ import {
 } from "lucide-react";
 
 type NavItem = {
-  href: Route;
+  href: AppRoutePath;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  roles?: string[];
 };
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/student-dashboard", label: "Student Dashboard", icon: GraduationCap, roles: ["student"] },
+  { href: "/student-dashboard", label: "Student Dashboard", icon: GraduationCap },
   { href: "/profile", label: "Profile", icon: User },
   { href: "/courses", label: "Courses", icon: Notebook },
-  { href: "/assignments", label: "Assignments", icon: FileText, roles: ["student", "faculty"] },
+  { href: "/assignments", label: "Assignments", icon: FileText },
   { href: "/quizzes", label: "Quizzes", icon: BookOpen },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
   { href: "/grades", label: "Grades", icon: Award },
   { href: "/announcements", label: "Announcements", icon: BellRing },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/timetable", label: "Timetable", icon: CalendarDays },
-  { href: "/students", label: "Students", icon: Users, roles: ["faculty", "admin"] },
-  { href: "/departments", label: "Departments", icon: Building2, roles: ["admin"] },
+  { href: "/students", label: "Students", icon: Users },
+  { href: "/departments", label: "Departments", icon: Building2 },
   { href: "/files", label: "Files", icon: FolderOpen },
   { href: "/fees", label: "Fees", icon: DollarSign },
   { href: "/placements", label: "Placements", icon: Briefcase },
   { href: "/exams", label: "Exams", icon: FileQuestion },
   { href: "/forum", label: "Forum", icon: MessageSquare },
-  { href: "/self-service", label: "Self-Service", icon: HelpCircle, roles: ["student"] },
-  { href: "/faculty-tools", label: "Faculty Tools", icon: Wrench, roles: ["faculty", "admin"] },
-  { href: "/parent-portal", label: "Parent Portal", icon: Home, roles: ["parent"] },
-  { href: "/analytics", label: "Analytics", icon: BarChart3, roles: ["faculty", "admin"] },
-  { href: "/advanced-analytics", label: "Advanced Analytics", icon: TrendingUp, roles: ["faculty", "admin"] },
-  { href: "/batch-operations", label: "Batch Operations", icon: Upload, roles: ["admin"] },
-  { href: "/webhooks", label: "Webhooks", icon: Webhook, roles: ["admin"] },
-  { href: "/audit-logs", label: "Audit Logs", icon: Shield, roles: ["admin"] },
-  { href: "/system-status", label: "System Status", icon: Activity, roles: ["admin"] },
-  { href: "/users", label: "Users", icon: UserCog, roles: ["admin"] },
-  { href: "/parent-links", label: "Parent Links", icon: Link2, roles: ["admin"] },
-  { href: "/roles", label: "Roles", icon: Shield, roles: ["admin"] },
+  { href: "/self-service", label: "Self-Service", icon: HelpCircle },
+  { href: "/faculty-tools", label: "Faculty Tools", icon: Wrench },
+  { href: "/parent-portal", label: "Parent Portal", icon: Home },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/advanced-analytics", label: "Advanced Analytics", icon: TrendingUp },
+  { href: "/batch-operations", label: "Batch Operations", icon: Upload },
+  { href: "/webhooks", label: "Webhooks", icon: Webhook },
+  { href: "/audit-logs", label: "Audit Logs", icon: Shield },
+  { href: "/system-status", label: "System Status", icon: Activity },
+  { href: "/users", label: "Users", icon: UserCog },
+  { href: "/parent-links", label: "Parent Links", icon: Link2 },
+  { href: "/roles", label: "Roles", icon: Shield },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -84,9 +83,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
 
-  const filteredItems = NAV_ITEMS.filter(
-    (item) => !item.roles || (user?.role && item.roles.includes(user.role))
-  );
+  const filteredItems = NAV_ITEMS.filter((item) => canAccessPath(item.href, user?.role));
 
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-background/50 backdrop-blur-sm">

@@ -5,9 +5,9 @@ import "time"
 type QuizType string
 
 const (
-	MultipleChoice QuizType = "MultipleChoice"
-	TrueFalse      QuizType = "TrueFalse"
-	ShortAnswer    QuizType = "ShortAnswer"
+	MultipleChoice QuizType = "multiple_choice"
+	TrueFalse      QuizType = "true_false"
+	ShortAnswer    QuizType = "short_answer"
 )
 
 // Quiz represents a quiz associated with a course.
@@ -46,9 +46,9 @@ type Question struct {
 type QuizAttemptStatus string
 
 const (
-	QuizAttemptStatusInProgress QuizAttemptStatus = "InProgress"
-	QuizAttemptStatusCompleted  QuizAttemptStatus = "Completed"
-	QuizAttemptStatusGraded     QuizAttemptStatus = "Graded"
+	QuizAttemptStatusInProgress QuizAttemptStatus = "in_progress"
+	QuizAttemptStatusCompleted  QuizAttemptStatus = "submitted"
+	QuizAttemptStatusGraded     QuizAttemptStatus = "graded"
 )
 
 // AnswerOption represents a possible answer for a multiple-choice or true/false question.
@@ -76,8 +76,8 @@ type QuizAttempt struct {
 	UpdatedAt time.Time         `db:"updated_at" json:"updated_at"`
 
 	// Relations - not stored in DB
-	Student *Student `db:"-" json:"student,omitempty"`
-	Quiz    *Quiz    `db:"-" json:"quiz,omitempty"`
+	Student *Student         `db:"-" json:"student,omitempty"`
+	Quiz    *Quiz            `db:"-" json:"quiz,omitempty"`
 	Answers []*StudentAnswer `db:"-" json:"answers,omitempty"`
 }
 
@@ -86,7 +86,7 @@ type StudentAnswer struct {
 	ID               int       `db:"id" json:"id"`
 	QuizAttemptID    int       `db:"quiz_attempt_id" json:"quiz_attempt_id"`
 	QuestionID       int       `db:"question_id" json:"question_id"`
-	SelectedOptionID *[]int      `db:"selected_option_id" json:"selected_option_id"` // Nullable, for MC/TF
+	SelectedOptionID *[]int    `db:"selected_option_id" json:"selected_option_id"` // Nullable, for MC/TF
 	AnswerText       string    `db:"answer_text" json:"answer_text"`               // Nullable, for ShortAnswer
 	IsCorrect        *bool     `db:"is_correct" json:"is_correct"`                 // Nullable until graded
 	PointsAwarded    *int      `db:"points_awarded" json:"points_awarded"`         // Nullable until graded
@@ -95,7 +95,7 @@ type StudentAnswer struct {
 }
 
 type QuestionWithCorrectAnswer struct {
-	Question       Question       `json:"question"`
+	Question       Question        `json:"question"`
 	CorrectOptions []*AnswerOption `json:"correct_options"` // Changed from CorrectAnswers to CorrectOptions
 }
 type QuestionWithStudentAnswer struct {
@@ -133,7 +133,7 @@ type UpdateQuizRequest struct {
 type UpdateQuestionRequest struct {
 	QuizID *int      `json:"quiz_id" validate:"omitempty,gte=1"`
 	Text   *string   `json:"text" validate:"omitempty,min=1,max=1000"`
-	Type   *QuizType `json:"type" validate:"omitempty,oneof=MultipleChoice TrueFalse ShortAnswer"`
+	Type   *QuizType `json:"type" validate:"omitempty,oneof=multiple_choice true_false short_answer"`
 	Points *int      `json:"points" validate:"omitempty,gte=0,lte=100"`
 }
 

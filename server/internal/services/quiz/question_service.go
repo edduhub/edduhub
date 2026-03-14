@@ -114,7 +114,18 @@ func (s *questionService) CreateQuestion(ctx context.Context, collegeID int, que
 		return fmt.Errorf("failed to find course: %w", err)
 	}
 
-	return s.questionRepo.CreateQuestion(ctx, question)
+	if err := s.questionRepo.CreateQuestion(ctx, question); err != nil {
+		return err
+	}
+
+	for _, option := range question.Options {
+		option.QuestionID = question.ID
+		if err := s.answerOptionRepo.CreateAnswerOption(ctx, option); err != nil {
+			return fmt.Errorf("failed to create answer option: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // GetQuestionByID retrieves a question by ID with college isolation.
@@ -150,7 +161,33 @@ func (s *questionService) UpdateQuestion(ctx context.Context, collegeID int, que
 		return fmt.Errorf("quiz with ID %d not found in college %d", question.QuizID, collegeID)
 	}
 
-	return s.questionRepo.UpdateQuestion(ctx, collegeID, question)
+	if err := s.questionRepo.UpdateQuestion(ctx, collegeID, question); err != nil {
+		return err
+	}
+
+	if question.Options == nil {
+		return nil
+	}
+
+	existingOptions, err := s.answerOptionRepo.FindAnswerOptionsByQuestion(ctx, question.ID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch existing answer options: %w", err)
+	}
+
+	for _, option := range existingOptions {
+		if err := s.answerOptionRepo.DeleteAnswerOption(ctx, collegeID, option.ID); err != nil {
+			return fmt.Errorf("failed to delete answer option %d: %w", option.ID, err)
+		}
+	}
+
+	for _, option := range question.Options {
+		option.QuestionID = question.ID
+		if err := s.answerOptionRepo.CreateAnswerOption(ctx, option); err != nil {
+			return fmt.Errorf("failed to recreate answer option: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // DeleteQuestion removes a question and all its associated answer options.

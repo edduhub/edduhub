@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
-import { api, endpoints } from "@/lib/api-client";
+import { api, buildAuthHeaders, endpoints, getAPIBase } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -189,9 +189,10 @@ export default function AttendancePage() {
       const lid = Number(lectureId);
       if (!cid || !lid) throw new Error('Course ID and Lecture ID are required');
 
-      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/attendance/course/${cid}/lecture/${lid}/qrcode`, {
+      const resp = await fetch(`${getAPIBase()}/api/attendance/course/${cid}/lecture/${lid}/qrcode`, {
         method: 'GET',
         credentials: 'include',
+        headers: buildAuthHeaders(),
       });
       
       if (!resp.ok) {
@@ -215,11 +216,11 @@ export default function AttendancePage() {
       setError(null);
       setMarkingSuccess(false);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${endpoints.attendance.processQR}`, {
+      const response = await fetch(`${getAPIBase()}${endpoints.attendance.processQR}`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qr_data: qrData }),
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ qrcode_data: qrData }),
       });
 
       if (!response.ok) {

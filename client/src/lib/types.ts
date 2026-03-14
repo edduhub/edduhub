@@ -79,6 +79,7 @@ export type Profile = {
 
 export type AuthSession = {
   token: string;
+  refreshToken?: string;
   user: User;
   expiresAt: string;
 };

@@ -550,7 +550,19 @@ func (h *ExamHandler) GetStudentResults(c echo.Context) error {
 	}
 
 	studentID, err := strconv.Atoi(c.Param("studentID"))
-	if err != nil {
+	if err != nil || studentID <= 0 {
+		if contextStudentID, ok := c.Get("student_id").(int); ok && contextStudentID > 0 {
+			studentID = contextStudentID
+		} else {
+			return helpers.Error(c, "invalid student ID", 400)
+		}
+	}
+
+	if contextStudentID, ok := c.Get("student_id").(int); ok && contextStudentID > 0 {
+		studentID = contextStudentID
+	}
+
+	if studentID <= 0 {
 		return helpers.Error(c, "invalid student ID", 400)
 	}
 
@@ -653,6 +665,9 @@ func (h *ExamHandler) ListRevaluationRequests(c echo.Context) error {
 		if id, err := strconv.Atoi(studentID); err == nil {
 			filters["student_id"] = id
 		}
+	}
+	if contextStudentID, ok := c.Get("student_id").(int); ok && contextStudentID > 0 {
+		filters["student_id"] = contextStudentID
 	}
 
 	requests, err := h.examService.ListRevaluationRequests(c.Request().Context(), collegeID, filters)

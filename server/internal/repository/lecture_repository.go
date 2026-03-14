@@ -33,8 +33,6 @@ func NewLectureRepository(db *DB) LectureRepository {
 	return &lectureRepository{DB: db}
 }
 
-const lectureTable = "lectures"
-
 func (r *lectureRepository) CreateLecture(ctx context.Context, lecture *models.Lecture) error {
 	now := time.Now()
 	lecture.CreatedAt = now

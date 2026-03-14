@@ -17,24 +17,24 @@ import (
 // need to check if student is enrolled in the course
 // need to check if the student is enrolled in the lecture
 type QRCodeData struct {
-	CourseID   int       `json:"course_id"`
-	LectureID  int       `json:"lecture_id"`
-	TimeStamp  time.Time `json:"time_stamp"`
-	ExpiresAt  time.Time `json:"expires_at"`
-	Token      string    `json:"token"`       // One-time use token
-	CollegeID  int       `json:"college_id"`  // Multi-tenant security
-	Latitude   *float64  `json:"latitude"`    // Optional location verification
-	Longitude  *float64  `json:"longitude"`   // Optional location verification
-	Radius     *float64  `json:"radius"`      // Allowed radius in meters
+	CourseID  int       `json:"course_id"`
+	LectureID int       `json:"lecture_id"`
+	TimeStamp time.Time `json:"time_stamp"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Token     string    `json:"token"`      // One-time use token
+	CollegeID int       `json:"college_id"` // Multi-tenant security
+	Latitude  *float64  `json:"latitude"`   // Optional location verification
+	Longitude *float64  `json:"longitude"`  // Optional location verification
+	Radius    *float64  `json:"radius"`     // Allowed radius in meters
 }
 
 func (a *attendanceService) GenerateQRCode(ctx context.Context, collegeID int, courseID int, lectureID int) (string, error) {
 	// Generate one-time use token for security
 	token := generateSecureToken()
-	
+
 	now := time.Now()
 	expiresAt := now.Add(15 * time.Minute) // Reduced expiry for better security
-	
+
 	qrCodeData := QRCodeData{
 		CourseID:  courseID,
 		LectureID: lectureID,
@@ -44,7 +44,7 @@ func (a *attendanceService) GenerateQRCode(ctx context.Context, collegeID int, c
 		Token:     token,
 		// Location fields can be populated if enabled
 	}
-	
+
 	jsonData, err := json.Marshal(qrCodeData)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal QR data: %w", err)
@@ -56,7 +56,7 @@ func (a *attendanceService) GenerateQRCode(ctx context.Context, collegeID int, c
 		cacheVal := fmt.Sprintf("%d:%d:%d", collegeID, courseID, lectureID)
 		ttl := 15 * time.Minute
 		if err := a.cache.Set(ctx, cacheKey, cacheVal, ttl); err != nil {
-			// Log but continue - QR still works without cache (fallback to timestamp validation)
+			_ = err
 		}
 	}
 
@@ -64,7 +64,7 @@ func (a *attendanceService) GenerateQRCode(ctx context.Context, collegeID int, c
 	if err != nil {
 		return "", fmt.Errorf("failed to generate QR code: %w", err)
 	}
-	
+
 	qrbase64 := base64.StdEncoding.EncodeToString(qrBytes)
 	return qrbase64, nil
 }
@@ -104,7 +104,7 @@ func (a *attendanceService) ProcessQRCode(ctx context.Context, collegeID int, st
 	}
 
 	// When Redis cache is enabled, validate and consume one-time token
-	if a.cache != nil {
+	if a.cache != nil && qrData.Token != "" {
 		cacheKey := fmt.Sprintf("qr:token:%s", qrData.Token)
 		var stored string
 		if err := a.cache.Get(ctx, cacheKey, &stored); err != nil {
@@ -115,15 +115,8 @@ func (a *attendanceService) ProcessQRCode(ctx context.Context, collegeID int, st
 			return errors.New("qr code invalid")
 		}
 		if err := a.cache.Delete(ctx, cacheKey); err != nil {
-			// Token consumed on next attempt will fail
+			_ = err
 		}
-	}
-
-	// Location-based verification if enabled
-	if qrData.Latitude != nil && qrData.Longitude != nil {
-		// This would require client to send their location
-		// For now, we'll skip this validation
-		// In production, compare student location with qrData location
 	}
 
 	// Attempt to mark attendance

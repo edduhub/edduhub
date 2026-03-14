@@ -14,6 +14,7 @@ type SelfServiceRepository interface {
 	ResolveUserIDByKratosID(ctx context.Context, kratosID string) (int, error)
 	CreateRequest(ctx context.Context, req *models.SelfServiceRequest) error
 	ListByStudent(ctx context.Context, collegeID, studentID int) ([]*models.SelfServiceRequest, error)
+	ListByCollege(ctx context.Context, collegeID int) ([]*models.SelfServiceRequest, error)
 	GetByID(ctx context.Context, collegeID, requestID int) (*models.SelfServiceRequest, error)
 	UpdateRequest(ctx context.Context, collegeID, requestID int, status, response string, respondedBy int) (*models.SelfServiceRequest, error)
 }
@@ -90,6 +91,22 @@ func (r *selfServiceRepository) ListByStudent(ctx context.Context, collegeID, st
 	items := make([]*models.SelfServiceRequest, 0)
 	if err := pgxscan.Select(ctx, r.DB.Pool, &items, query, collegeID, studentID); err != nil {
 		return nil, fmt.Errorf("ListByStudent: %w", err)
+	}
+	return items, nil
+}
+
+func (r *selfServiceRepository) ListByCollege(ctx context.Context, collegeID int) ([]*models.SelfServiceRequest, error) {
+	query := `
+		SELECT id, student_id, college_id, type, title, description, status,
+			document_type, delivery_method, admin_response, responded_by,
+			responded_at, submitted_at, created_at, updated_at
+		FROM self_service_requests
+		WHERE college_id = $1
+		ORDER BY submitted_at DESC, id DESC`
+
+	items := make([]*models.SelfServiceRequest, 0)
+	if err := pgxscan.Select(ctx, r.DB.Pool, &items, query, collegeID); err != nil {
+		return nil, fmt.Errorf("ListByCollege: %w", err)
 	}
 	return items, nil
 }

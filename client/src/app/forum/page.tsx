@@ -52,6 +52,7 @@ export default function ForumPage() {
       // Build query params
       let url = endpoints.forum.threads;
       const params = new URLSearchParams();
+      params.append('limit', '50');
       if (selectedCategory !== 'all') {
         params.append('category', selectedCategory);
       }

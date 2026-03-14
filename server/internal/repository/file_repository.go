@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"eduhub/server/internal/models"
 
@@ -37,6 +38,8 @@ type fileRepository struct {
 	db *DB
 }
 
+const fileColumns = `id, college_id, name, description, category, folder_id, current_version_id, uploaded_by, is_public, tags, created_at, updated_at`
+
 func NewFileRepository(db *DB) FileRepository {
 	return &fileRepository{db: db}
 }
@@ -61,41 +64,19 @@ func (r *fileRepository) CreateFile(ctx context.Context, file *models.File) erro
 }
 
 func (r *fileRepository) GetFileByID(ctx context.Context, collegeID, fileID int) (*models.FileWithVersion, error) {
-	query := `
-		SELECT f.*, fv.*, fol.*
-		FROM files f
-		LEFT JOIN file_versions fv ON f.current_version_id = fv.id
-		LEFT JOIN folders fol ON f.folder_id = fol.id
-		WHERE f.id = $1 AND f.college_id = $2`
+	query := fmt.Sprintf(`SELECT %s FROM files WHERE id = $1 AND college_id = $2`, fileColumns)
 
-	var file models.FileWithVersion
+	var file models.File
 	err := pgxscan.Get(ctx, r.db.Pool, &file, query, fileID, collegeID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get all versions
-	versions, err := r.GetFileVersions(ctx, fileID)
-	if err != nil {
-		return nil, err
-	}
-	// Convert []*models.FileVersion to []models.FileVersion
-	fileVersions := make([]models.FileVersion, len(versions))
-	for i, v := range versions {
-		fileVersions[i] = *v
-	}
-	file.Versions = fileVersions
-
-	return &file, nil
+	return r.hydrateFile(ctx, &file)
 }
 
 func (r *fileRepository) ListFiles(ctx context.Context, collegeID int, folderID *int, category *string, limit, offset int) ([]*models.FileWithVersion, error) {
-	query := `
-		SELECT f.*, fv.*, fol.*
-		FROM files f
-		LEFT JOIN file_versions fv ON f.current_version_id = fv.id
-		LEFT JOIN folders fol ON f.folder_id = fol.id
-		WHERE f.college_id = $1`
+	query := fmt.Sprintf(`SELECT %s FROM files WHERE college_id = $1`, fileColumns)
 
 	args := []any{collegeID}
 	argCount := 1
@@ -115,17 +96,22 @@ func (r *fileRepository) ListFiles(ctx context.Context, collegeID int, folderID 
 	query += fmt.Sprintf(" ORDER BY f.created_at DESC LIMIT $%d OFFSET $%d", argCount+1, argCount+2)
 	args = append(args, limit, offset)
 
-	var files []*models.FileWithVersion
+	query = strings.ReplaceAll(query, "f.created_at", "created_at")
+
+	var files []*models.File
 	err := pgxscan.Select(ctx, r.db.Pool, &files, query, args...)
-	return files, err
+	if err != nil {
+		return nil, err
+	}
+	return r.hydrateFiles(ctx, files)
 }
 
 func (r *fileRepository) UpdateFile(ctx context.Context, file *models.File) error {
 	query := `
 		UPDATE files
 		SET name = $1, description = $2, category = $3, folder_id = $4,
-		    is_public = $5, tags = $6, updated_at = NOW()
-		WHERE id = $7 AND college_id = $8`
+		    current_version_id = $5, is_public = $6, tags = $7, updated_at = NOW()
+		WHERE id = $8 AND college_id = $9`
 
 	tagsJSON, err := json.Marshal(file.Tags)
 	if err != nil {
@@ -134,7 +120,7 @@ func (r *fileRepository) UpdateFile(ctx context.Context, file *models.File) erro
 
 	_, err = r.db.Pool.Exec(ctx, query,
 		file.Name, file.Description, file.Category, file.FolderID,
-		file.IsPublic, tagsJSON, file.ID, file.CollegeID)
+		file.CurrentVersionID, file.IsPublic, tagsJSON, file.ID, file.CollegeID)
 
 	return err
 }
@@ -183,11 +169,18 @@ func (r *fileRepository) GetCurrentVersion(ctx context.Context, fileID int) (*mo
 }
 
 func (r *fileRepository) SetCurrentVersion(ctx context.Context, fileID, versionID int) error {
-	tx, err := r.db.Pool.Begin(ctx)
+	beginner, ok := r.db.Pool.(BeginPool)
+	if !ok {
+		return fmt.Errorf("transaction support is required")
+	}
+
+	tx, err := beginner.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	// Update all versions for this file to not current
 	_, err = tx.Exec(ctx, "UPDATE file_versions SET is_current = false WHERE file_id = $1", fileID)
@@ -274,16 +267,15 @@ func (r *fileRepository) GetFolderPath(ctx context.Context, folderID int) (strin
 }
 
 func (r *fileRepository) SearchFiles(ctx context.Context, collegeID int, query string, category *string, limit, offset int) ([]*models.FileWithVersion, error) {
-	sqlQuery := `
-		SELECT f.*, fv.*, fol.*
+	sqlQuery := fmt.Sprintf(`
+		SELECT DISTINCT %s
 		FROM files f
 		LEFT JOIN file_versions fv ON f.current_version_id = fv.id
-		LEFT JOIN folders fol ON f.folder_id = fol.id
 		WHERE f.college_id = $1 AND (
 			f.name ILIKE $2 OR
 			f.description ILIKE $2 OR
 			fv.filename ILIKE $2
-		)`
+		)`, fileColumns)
 
 	args := []any{collegeID, "%" + query + "%"}
 	argCount := 2
@@ -297,22 +289,67 @@ func (r *fileRepository) SearchFiles(ctx context.Context, collegeID int, query s
 	sqlQuery += fmt.Sprintf(" ORDER BY f.created_at DESC LIMIT $%d OFFSET $%d", argCount+1, argCount+2)
 	args = append(args, limit, offset)
 
-	var files []*models.FileWithVersion
+	var files []*models.File
 	err := pgxscan.Select(ctx, r.db.Pool, &files, sqlQuery, args...)
-	return files, err
+	if err != nil {
+		return nil, err
+	}
+	return r.hydrateFiles(ctx, files)
 }
 
 func (r *fileRepository) GetFilesByTags(ctx context.Context, collegeID int, tags []string, limit, offset int) ([]*models.FileWithVersion, error) {
-	query := `
-		SELECT f.*, fv.*, fol.*
-		FROM files f
-		LEFT JOIN file_versions fv ON f.current_version_id = fv.id
-		LEFT JOIN folders fol ON f.folder_id = fol.id
-		WHERE f.college_id = $1 AND f.tags ?| $2
-		ORDER BY f.created_at DESC
-		LIMIT $3 OFFSET $4`
+	query := fmt.Sprintf(`
+		SELECT %s
+		FROM files
+		WHERE college_id = $1 AND tags ?| $2
+		ORDER BY created_at DESC
+		LIMIT $3 OFFSET $4`, fileColumns)
 
-	var files []*models.FileWithVersion
+	var files []*models.File
 	err := pgxscan.Select(ctx, r.db.Pool, &files, query, collegeID, tags, limit, offset)
-	return files, err
+	if err != nil {
+		return nil, err
+	}
+	return r.hydrateFiles(ctx, files)
+}
+
+func (r *fileRepository) hydrateFiles(ctx context.Context, files []*models.File) ([]*models.FileWithVersion, error) {
+	result := make([]*models.FileWithVersion, 0, len(files))
+	for _, file := range files {
+		hydrated, err := r.hydrateFile(ctx, file)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, hydrated)
+	}
+	return result, nil
+}
+
+func (r *fileRepository) hydrateFile(ctx context.Context, file *models.File) (*models.FileWithVersion, error) {
+	fileWithVersion := &models.FileWithVersion{File: *file}
+
+	if file.CurrentVersionID != nil && *file.CurrentVersionID > 0 {
+		version, err := r.GetCurrentVersion(ctx, file.ID)
+		if err == nil {
+			fileWithVersion.CurrentVersion = version
+		}
+	}
+
+	versions, err := r.GetFileVersions(ctx, file.ID)
+	if err != nil {
+		return nil, err
+	}
+	fileWithVersion.Versions = make([]models.FileVersion, 0, len(versions))
+	for _, version := range versions {
+		fileWithVersion.Versions = append(fileWithVersion.Versions, *version)
+	}
+
+	if file.FolderID != nil {
+		folder, err := r.GetFolderByID(ctx, file.CollegeID, *file.FolderID)
+		if err == nil {
+			fileWithVersion.Folder = folder
+		}
+	}
+
+	return fileWithVersion, nil
 }

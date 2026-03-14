@@ -57,6 +57,14 @@ type LearningAnalytics = {
   struggling_areas: Array<{ name: string; failure_rate: number }>;
 };
 
+function formatMetric(value: number | null | undefined, digits = 1, suffix = ""): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return `N/A${suffix}`;
+  }
+
+  return `${value.toFixed(digits)}${suffix}`;
+}
+
 export default function AdvancedAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +179,30 @@ export default function AdvancedAnalyticsPage() {
     return <Badge className={styles[type]}>{type.replace('_', ' ').toUpperCase()}</Badge>;
   };
 
+  const studentOptions = students.flatMap((student) => {
+    const id = student.id ?? student.student_id;
+    if (typeof id !== "number" || Number.isNaN(id)) {
+      return [];
+    }
+
+    const label =
+      student.name ||
+      [student.first_name, student.last_name].filter(Boolean).join(" ").trim() ||
+      `Student ${id}`;
+    const rollNo = student.roll_no || student.rollNo;
+
+    return [{ id, label: rollNo ? `${label} - ${rollNo}` : label }];
+  });
+
+  const courseOptions = courses.flatMap((course) => {
+    const id = course.id ?? course.course_id;
+    if (typeof id !== "number" || Number.isNaN(id)) {
+      return [];
+    }
+
+    return [{ id, label: [course.code, course.name || course.title || course.course_name].filter(Boolean).join(" - ") || `Course ${id}` }];
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -209,7 +241,7 @@ export default function AdvancedAnalyticsPage() {
                     <Target className="h-4 w-4" />
                     Average GPA
                   </CardTitle>
-                  <div className="text-2xl font-bold">{learningAnalytics.average_gpa.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">{formatMetric(learningAnalytics.average_gpa, 2)}</div>
                 </CardHeader>
               </Card>
               <Card>
@@ -218,7 +250,7 @@ export default function AdvancedAnalyticsPage() {
                     <Award className="h-4 w-4" />
                     Retention Rate
                   </CardTitle>
-                  <div className="text-2xl font-bold">{learningAnalytics.retention_rate.toFixed(1)}%</div>
+                  <div className="text-2xl font-bold">{formatMetric(learningAnalytics.retention_rate, 1, "%")}</div>
                 </CardHeader>
               </Card>
               <Card>
@@ -227,7 +259,7 @@ export default function AdvancedAnalyticsPage() {
                     <BookOpen className="h-4 w-4" />
                     Graduation Rate
                   </CardTitle>
-                  <div className="text-2xl font-bold">{learningAnalytics.graduation_rate.toFixed(1)}%</div>
+                  <div className="text-2xl font-bold">{formatMetric(learningAnalytics.graduation_rate, 1, "%")}</div>
                 </CardHeader>
               </Card>
             </div>
@@ -265,9 +297,9 @@ export default function AdvancedAnalyticsPage() {
                         <SelectValue placeholder="Choose a student" />
                       </SelectTrigger>
                       <SelectContent>
-                        {students.map((student) => (
-                          <SelectItem key={student.id} value={student.id.toString()}>
-                            {student.name || `${student.first_name} ${student.last_name}`} - {student.roll_no || student.rollNo}
+                        {studentOptions.map((student) => (
+                          <SelectItem key={student.id} value={String(student.id)}>
+                            {student.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -286,7 +318,7 @@ export default function AdvancedAnalyticsPage() {
                             <CardTitle className="text-sm font-medium text-muted-foreground">
                               Overall GPA
                             </CardTitle>
-                            <div className="text-2xl font-bold">{studentProgression.overall_gpa.toFixed(2)}</div>
+                            <div className="text-2xl font-bold">{formatMetric(studentProgression.overall_gpa, 2)}</div>
                           </CardHeader>
                         </Card>
                         <Card>
@@ -294,7 +326,7 @@ export default function AdvancedAnalyticsPage() {
                             <CardTitle className="text-sm font-medium text-muted-foreground">
                               Attendance Rate
                             </CardTitle>
-                            <div className="text-2xl font-bold">{studentProgression.attendance_rate.toFixed(1)}%</div>
+                            <div className="text-2xl font-bold">{formatMetric(studentProgression.attendance_rate, 1, "%")}</div>
                           </CardHeader>
                         </Card>
                         <Card>
@@ -302,7 +334,7 @@ export default function AdvancedAnalyticsPage() {
                             <CardTitle className="text-sm font-medium text-muted-foreground">
                               Predicted GPA
                             </CardTitle>
-                            <div className="text-2xl font-bold">{studentProgression.predicted_gpa.toFixed(2)}</div>
+                            <div className="text-2xl font-bold">{formatMetric(studentProgression.predicted_gpa, 2)}</div>
                           </CardHeader>
                         </Card>
                       </div>
@@ -412,9 +444,9 @@ export default function AdvancedAnalyticsPage() {
                         <SelectValue placeholder="Choose a course" />
                       </SelectTrigger>
                       <SelectContent>
-                        {courses.map((course) => (
-                          <SelectItem key={course.id} value={course.id.toString()}>
-                            {course.code} - {course.name}
+                        {courseOptions.map((course) => (
+                          <SelectItem key={course.id} value={String(course.id)}>
+                            {course.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -441,7 +473,7 @@ export default function AdvancedAnalyticsPage() {
                             <CardTitle className="text-sm font-medium text-muted-foreground">
                               Average Grade
                             </CardTitle>
-                            <div className="text-2xl font-bold">{courseEngagement.average_grade.toFixed(1)}%</div>
+                            <div className="text-2xl font-bold">{formatMetric(courseEngagement.average_grade, 1, "%")}</div>
                           </CardHeader>
                         </Card>
                         <Card>
@@ -449,7 +481,7 @@ export default function AdvancedAnalyticsPage() {
                             <CardTitle className="text-sm font-medium text-muted-foreground">
                               Completion Rate
                             </CardTitle>
-                            <div className="text-2xl font-bold">{courseEngagement.completion_rate.toFixed(1)}%</div>
+                            <div className="text-2xl font-bold">{formatMetric(courseEngagement.completion_rate, 1, "%")}</div>
                           </CardHeader>
                         </Card>
                       </div>
@@ -462,21 +494,21 @@ export default function AdvancedAnalyticsPage() {
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                               <span>Engagement Rate</span>
-                              <span className="font-medium">{courseEngagement.engagement_rate.toFixed(1)}%</span>
+                              <span className="font-medium">{formatMetric(courseEngagement.engagement_rate, 1, "%")}</span>
                             </div>
                             <Progress value={courseEngagement.engagement_rate} />
                           </div>
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                               <span>Attendance Rate</span>
-                              <span className="font-medium">{courseEngagement.attendance_rate.toFixed(1)}%</span>
+                              <span className="font-medium">{formatMetric(courseEngagement.attendance_rate, 1, "%")}</span>
                             </div>
                             <Progress value={courseEngagement.attendance_rate} />
                           </div>
                           <div className="space-y-2">
                             <div className="flex justify-between text-sm">
                               <span>Assignment Submission Rate</span>
-                              <span className="font-medium">{courseEngagement.assignment_submission_rate.toFixed(1)}%</span>
+                              <span className="font-medium">{formatMetric(courseEngagement.assignment_submission_rate, 1, "%")}</span>
                             </div>
                             <Progress value={courseEngagement.assignment_submission_rate} />
                           </div>
@@ -562,7 +594,7 @@ export default function AdvancedAnalyticsPage() {
                               {getInsightBadge(insight.type)}
                             </div>
                             <CardDescription>
-                              Confidence: {(insight.confidence * 100).toFixed(0)}%
+                              Confidence: {formatMetric(insight.confidence * 100, 0, "%")}
                             </CardDescription>
                           </CardHeader>
                           <CardContent className="space-y-3">

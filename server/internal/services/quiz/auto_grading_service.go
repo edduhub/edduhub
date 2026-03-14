@@ -96,6 +96,12 @@ func (s *autoGradingService) AutoGradeAnswer(ctx context.Context, collegeID int,
 		return fmt.Errorf("failed to get question: %w", err)
 	}
 
+	options, err := s.answerOptionRepo.FindAnswerOptionsByQuestion(ctx, question.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get answer options: %w", err)
+	}
+	question.Options = options
+
 	// Grade based on question type
 	var isCorrect bool
 	var pointsAwarded int
@@ -224,19 +230,19 @@ func (s *autoGradingService) CalculateScore(ctx context.Context, collegeID int, 
 func normalizeAnswer(answer string) string {
 	// Convert to lowercase
 	normalized := strings.ToLower(answer)
-	
+
 	// Trim leading and trailing whitespace
 	normalized = strings.TrimSpace(normalized)
-	
+
 	// Replace multiple spaces with single space
 	normalized = strings.Join(strings.Fields(normalized), " ")
-	
+
 	// Remove common punctuation that doesn't affect meaning
 	normalized = strings.ReplaceAll(normalized, ".", "")
 	normalized = strings.ReplaceAll(normalized, ",", "")
 	normalized = strings.ReplaceAll(normalized, "!", "")
 	normalized = strings.ReplaceAll(normalized, "?", "")
-	
+
 	return normalized
 }
 
@@ -244,14 +250,14 @@ func normalizeAnswer(answer string) string {
 func splitAnswers(answers string) []string {
 	parts := strings.Split(answers, ";")
 	result := make([]string, 0, len(parts))
-	
+
 	for _, part := range parts {
 		trimmed := strings.TrimSpace(part)
 		if trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
-	
+
 	return result
 }
 
@@ -260,12 +266,12 @@ func splitAnswers(answers string) []string {
 func containsAnswer(studentAnswer, correctAnswer string) bool {
 	// Check if student answer contains all key words from correct answer
 	correctWords := strings.Fields(correctAnswer)
-	
+
 	// Ignore very short words (articles, prepositions)
 	minWordLength := 3
 	keyWordCount := 0
 	matchedWords := 0
-	
+
 	for _, word := range correctWords {
 		if len(word) >= minWordLength {
 			keyWordCount++
@@ -274,12 +280,12 @@ func containsAnswer(studentAnswer, correctAnswer string) bool {
 			}
 		}
 	}
-	
+
 	// Award partial credit if at least 70% of key words are present
 	if keyWordCount > 0 {
 		matchRatio := float64(matchedWords) / float64(keyWordCount)
 		return matchRatio >= 0.7
 	}
-	
+
 	return false
 }

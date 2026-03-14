@@ -17,6 +17,10 @@ import (
 	echomid "github.com/labstack/echo/v4/middleware"
 )
 
+func isWebSocketNotificationsPath(c echo.Context) bool {
+	return c.Request().URL.Path == "/api/notifications/ws"
+}
+
 type App struct {
 	e          *echo.Echo
 	db         *repository.DB
@@ -59,9 +63,23 @@ func (a *App) Start() error {
 	a.e.HideBanner = true
 	a.e.HidePort = false
 
-	a.e.Use(echomid.LoggerWithConfig(echomid.LoggerConfig{
-		Format: "${time_rfc3339_nano} ${status} ${method} ${uri} ${latency_human}\n",
-		Output: a.e.Logger.Output(),
+	a.e.Use(echomid.RequestLoggerWithConfig(echomid.RequestLoggerConfig{
+		LogStatus:  true,
+		LogMethod:  true,
+		LogURI:     true,
+		LogLatency: true,
+		LogValuesFunc: func(c echo.Context, values echomid.RequestLoggerValues) error {
+			_, err := fmt.Fprintf(
+				a.e.Logger.Output(),
+				"%s %d %s %s %s\n",
+				values.StartTime.Format(time.RFC3339Nano),
+				values.Status,
+				values.Method,
+				values.URI,
+				values.Latency,
+			)
+			return err
+		},
 	}))
 
 	a.e.Use(echomid.Recover())
@@ -81,10 +99,12 @@ func (a *App) Start() error {
 	}))
 
 	a.e.Use(echomid.GzipWithConfig(echomid.GzipConfig{
-		Level: 5,
+		Level:   5,
+		Skipper: isWebSocketNotificationsPath,
 	}))
 
-	a.e.Use(echomid.TimeoutWithConfig(echomid.TimeoutConfig{
+	a.e.Use(echomid.ContextTimeoutWithConfig(echomid.ContextTimeoutConfig{
+		Skipper: isWebSocketNotificationsPath,
 		Timeout: 30 * time.Second,
 	}))
 

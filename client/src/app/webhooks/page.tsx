@@ -26,9 +26,11 @@ type Webhook = {
 
 type WebhookApi = {
   id?: number;
+  name?: string;
   url?: string;
   event?: string;
   event_type?: string;
+  event_types?: string[];
   active?: boolean;
   is_active?: boolean;
   secret?: string;
@@ -50,7 +52,7 @@ const EVENT_TYPES = [
 const normalizeWebhook = (webhook: WebhookApi): Webhook => ({
   id: webhook.id ?? 0,
   url: webhook.url ?? "",
-  event: webhook.event ?? webhook.event_type ?? "",
+  event: webhook.event ?? webhook.event_type ?? webhook.event_types?.[0] ?? "",
   active: webhook.active ?? webhook.is_active ?? true,
   secret: webhook.secret ?? "",
   createdAt: webhook.created_at ?? new Date().toISOString(),

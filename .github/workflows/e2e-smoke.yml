@@ -1,0 +1,88 @@
+name: E2E Smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Task CLI
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Install client dependencies
+        run: npm --prefix client ci
+
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Start database services
+        run: task db:start
+
+      - name: Run migrations
+        run: task db:migrate
+
+      - name: Seed demo data
+        run: task db:seed-demo
+
+      - name: Build backend
+        run: task build
+
+      - name: Build client demo bundle
+        run: NEXT_DIST_DIR=.next-demo NEXT_PUBLIC_API_URL="http://127.0.0.1:8180" npm --prefix client run build
+
+      - name: Install Playwright browsers
+        run: npm --prefix client exec playwright install --with-deps chromium
+
+      - name: Start backend and client
+        run: |
+          APP_PORT=8180 CORS_ORIGINS="http://127.0.0.1:3100" ./bin/edduhub > /tmp/edduhub-server.log 2>&1 &
+          NEXT_DIST_DIR=.next-demo NEXT_PUBLIC_API_URL="http://127.0.0.1:8180" npm --prefix client run start -- --hostname 127.0.0.1 --port 3100 > /tmp/edduhub-client.log 2>&1 &
+
+      - name: Wait for services
+        run: |
+          for attempt in {1..60}; do
+            if curl -fsS "http://127.0.0.1:8180/health" >/dev/null && curl -fsS "http://127.0.0.1:3100" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for demo services" >&2
+          exit 1
+
+      - name: Run smoke suite
+        run: NEXT_PUBLIC_API_URL="http://127.0.0.1:8180" PLAYWRIGHT_BASE_URL="http://127.0.0.1:3100" npm --prefix client run test:e2e:smoke -- --reporter=line
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-artifacts
+          path: |
+            client/test-results
+            client/playwright-report
+            /tmp/edduhub-server.log
+            /tmp/edduhub-client.log
+          if-no-files-found: ignore

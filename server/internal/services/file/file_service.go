@@ -38,8 +38,8 @@ type FileService interface {
 }
 
 type fileService struct {
-	fileRepo    repository.FileRepository
-	storageSvc  storage.StorageService
+	fileRepo   repository.FileRepository
+	storageSvc storage.StorageService
 }
 
 func NewFileService(fileRepo repository.FileRepository, storageSvc storage.StorageService) FileService {
@@ -69,7 +69,9 @@ func (s *fileService) UploadFile(ctx context.Context, collegeID, userID int, fil
 
 	// Reset file reader for upload
 	if seeker, ok := file.(io.Seeker); ok {
-		seeker.Seek(0, io.SeekStart)
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("failed to reset file reader: %w", err)
+		}
 	}
 
 	// Upload to storage
@@ -93,7 +95,7 @@ func (s *fileService) UploadFile(ctx context.Context, collegeID, userID int, fil
 	err = s.fileRepo.CreateFile(ctx, fileModel)
 	if err != nil {
 		// Cleanup uploaded file on error
-		s.storageSvc.DeleteFile(ctx, objectKey)
+		_ = s.storageSvc.DeleteFile(ctx, objectKey)
 		return nil, fmt.Errorf("failed to create file record: %w", err)
 	}
 
@@ -114,13 +116,13 @@ func (s *fileService) UploadFile(ctx context.Context, collegeID, userID int, fil
 	err = s.fileRepo.CreateFileVersion(ctx, version)
 	if err != nil {
 		// Cleanup on error
-		s.fileRepo.DeleteFile(ctx, collegeID, fileModel.ID)
-		s.storageSvc.DeleteFile(ctx, objectKey)
+		_ = s.fileRepo.DeleteFile(ctx, collegeID, fileModel.ID)
+		_ = s.storageSvc.DeleteFile(ctx, objectKey)
 		return nil, fmt.Errorf("failed to create file version: %w", err)
 	}
 
 	// Update file with current version ID
-	fileModel.CurrentVersionID = version.ID
+	fileModel.CurrentVersionID = &version.ID
 	err = s.fileRepo.UpdateFile(ctx, fileModel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update file current version: %w", err)
@@ -175,7 +177,7 @@ func (s *fileService) DeleteFile(ctx context.Context, collegeID, fileID int) err
 
 	// Delete all versions from storage
 	for _, version := range file.Versions {
-		s.storageSvc.DeleteFile(ctx, version.ObjectKey)
+		_ = s.storageSvc.DeleteFile(ctx, version.ObjectKey)
 	}
 
 	// Delete from database (cascade will handle versions)
@@ -215,7 +217,9 @@ func (s *fileService) UploadNewVersion(ctx context.Context, collegeID, fileID, u
 
 	// Reset file reader
 	if seeker, ok := fileReader.(io.Seeker); ok {
-		seeker.Seek(0, io.SeekStart)
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("failed to reset file reader: %w", err)
+		}
 	}
 
 	// Upload to storage
@@ -240,7 +244,7 @@ func (s *fileService) UploadNewVersion(ctx context.Context, collegeID, fileID, u
 
 	err = s.fileRepo.CreateFileVersion(ctx, version)
 	if err != nil {
-		s.storageSvc.DeleteFile(ctx, objectKey)
+		_ = s.storageSvc.DeleteFile(ctx, objectKey)
 		return nil, fmt.Errorf("failed to create file version: %w", err)
 	}
 
@@ -257,11 +261,30 @@ func (s *fileService) GetFileURL(ctx context.Context, collegeID, fileID int) (st
 		return "", err
 	}
 
-	if file.CurrentVersion == nil {
+	currentVersion := file.CurrentVersion
+	if currentVersion == nil {
+		versions, versionErr := s.fileRepo.GetFileVersions(ctx, fileID)
+		if versionErr != nil {
+			return "", fmt.Errorf("failed to load file versions: %w", versionErr)
+		}
+
+		for _, version := range versions {
+			if version.IsCurrent {
+				currentVersion = version
+				break
+			}
+		}
+
+		if currentVersion == nil && len(versions) > 0 {
+			currentVersion = versions[0]
+		}
+	}
+
+	if currentVersion == nil {
 		return "", fmt.Errorf("no current version found for file")
 	}
 
-	return s.storageSvc.GetFileURL(ctx, file.CurrentVersion.ObjectKey)
+	return s.storageSvc.GetFileURL(ctx, currentVersion.ObjectKey)
 }
 
 func (s *fileService) CreateFolder(ctx context.Context, collegeID, userID int, name string, parentID *int) (*models.Folder, error) {

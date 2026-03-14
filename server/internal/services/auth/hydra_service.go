@@ -71,8 +71,12 @@ type hydraService struct {
 }
 
 func NewHydraService() *hydraService {
+	publicURL := os.Getenv(HydraPublicURL)
+	if publicURL == "" {
+		return nil
+	}
 	return &hydraService{
-		PublicURL:    os.Getenv(HydraPublicURL),
+		PublicURL:    publicURL,
 		AdminURL:     os.Getenv(HydraAdminURL),
 		ClientID:     os.Getenv(HydraClientID),
 		ClientSecret: os.Getenv(HydraClientSecret),
@@ -153,7 +157,9 @@ func (h *hydraService) ExchangeCode(ctx context.Context, code, redirectURI strin
 			Error            string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			return nil, fmt.Errorf("token exchange failed with status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("token exchange failed: %s - %s", errResp.Error, errResp.ErrorDescription)
 	}
 
@@ -198,7 +204,9 @@ func (h *hydraService) RefreshToken(ctx context.Context, refreshToken string) (*
 			Error            string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			return nil, fmt.Errorf("token refresh failed with status %d", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("token refresh failed: %s - %s", errResp.Error, errResp.ErrorDescription)
 	}
 

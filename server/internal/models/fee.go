@@ -27,25 +27,30 @@ type FeeStructure struct {
 // FeeAssignment represents a fee assigned to a student
 type FeeAssignment struct {
 	ID             int        `db:"id" json:"id"`
+	CollegeID      int        `db:"college_id" json:"college_id"`
 	StudentID      int        `db:"student_id" json:"student_id"`
 	FeeStructureID int        `db:"fee_structure_id" json:"fee_structure_id"`
 	Amount         float64    `db:"amount" json:"amount"`
+	Currency       string     `db:"currency" json:"currency,omitempty"`
+	PaidAmount     float64    `db:"paid_amount" json:"paid_amount,omitempty"`
 	WaiverAmount   float64    `db:"waiver_amount" json:"waiver_amount"`
 	WaiverReason   *string    `db:"waiver_reason" json:"waiver_reason,omitempty"`
+	PaymentDueDate *time.Time `db:"payment_due_date" json:"payment_due_date,omitempty"`
 	DueDate        *time.Time `db:"due_date" json:"due_date,omitempty"`
+	IsWaived       bool       `db:"is_waived" json:"is_waived,omitempty"`
 	Status         string     `db:"status" json:"status"`
 	CreatedAt      time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time  `db:"updated_at" json:"updated_at"`
 
 	// Relations - not stored in DB
 	FeeStructure    *FeeStructure `db:"-" json:"fee_structure,omitempty"`
-	PaidAmount      float64       `db:"-" json:"paid_amount,omitempty"`
 	RemainingAmount float64       `db:"-" json:"remaining_amount,omitempty"`
 }
 
 // FeePayment represents a payment made by a student
 type FeePayment struct {
 	ID              int        `db:"id" json:"id"`
+	CollegeID       int        `db:"college_id" json:"college_id"`
 	FeeAssignmentID int        `db:"fee_assignment_id" json:"fee_assignment_id"`
 	StudentID       int        `db:"student_id" json:"student_id"`
 	Amount          float64    `db:"amount" json:"amount"`

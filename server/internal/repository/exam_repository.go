@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"eduhub/server/internal/models"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type ExamRepository interface {
@@ -415,6 +418,9 @@ func (r *examRepository) GetStudentResults(ctx context.Context, studentID, colle
 
 	rows, err := r.db.Pool.Query(ctx, sql, studentID, collegeID)
 	if err != nil {
+		if isExamRelationMissing(err) {
+			return []*models.ExamResult{}, nil
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -492,6 +498,9 @@ func (r *examRepository) ListRevaluationRequests(ctx context.Context, collegeID 
 
 	rows, err := r.db.Pool.Query(ctx, sql, args...)
 	if err != nil {
+		if isExamRelationMissing(err) {
+			return []*models.RevaluationRequest{}, nil
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -511,6 +520,16 @@ func (r *examRepository) ListRevaluationRequests(ctx context.Context, collegeID 
 		requests = append(requests, req)
 	}
 	return requests, nil
+}
+
+func isExamRelationMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	if err == pgx.ErrNoRows {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "does not exist")
 }
 
 // UpdateRevaluationRequest updates a revaluation request

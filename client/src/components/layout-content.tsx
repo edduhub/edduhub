@@ -6,27 +6,33 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/navigation/sidebar";
 import { Topbar } from "@/components/navigation/topbar";
 import { useAuth } from "@/lib/auth-context";
+import { canAccessPath, getRoleHomePath } from "@/lib/route-access";
 
 export function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
-  
-  // Check if we're on an auth page
-  const isAuthPage = pathname?.startsWith('/auth');
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  const isAuthPage = pathname?.startsWith("/auth") ?? false;
+  const redirectTarget =
+    isAuthPage || isLoading
+      ? null
+      : !isAuthenticated || !user
+        ? "/auth/login"
+        : canAccessPath(pathname || "/", user.role)
+          ? null
+          : getRoleHomePath(user.role);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !isAuthPage) {
-      router.replace('/auth/login');
+    if (redirectTarget) {
+      router.replace(redirectTarget);
     }
-  }, [isAuthenticated, isLoading, isAuthPage, router]);
+  }, [redirectTarget, router]);
 
-  // Show content directly for auth pages
   if (isAuthPage) {
     return <>{children}</>;
   }
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -35,12 +41,10 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Redirect to login for unauthenticated non-auth routes.
-  if (!isAuthenticated) {
+  if (redirectTarget) {
     return null;
   }
 
-  // Show full layout for authenticated users
   return (
     <div className="flex min-h-screen bg-background">
       <div className="hidden md:flex">

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"eduhub/server/internal/models"
 
@@ -25,7 +26,38 @@ func NewSettingsRepository(db *DB) SettingsRepository {
 	}
 }
 
+func (r *settingsRepository) ensureSchema(ctx context.Context) error {
+	createTableSQL := `CREATE TABLE IF NOT EXISTS user_settings (
+		user_id VARCHAR(255) PRIMARY KEY,
+		email_notifications BOOLEAN DEFAULT true,
+		push_notifications BOOLEAN DEFAULT true,
+		theme VARCHAR(20) DEFAULT 'system',
+		language VARCHAR(10) DEFAULT 'en',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
+	if _, err := r.db.Exec(ctx, createTableSQL); err != nil {
+		return fmt.Errorf("ensure settings table: %w", err)
+	}
+
+	alterTableSQL := `ALTER TABLE user_settings
+		ADD COLUMN IF NOT EXISTS assignment_reminders BOOLEAN DEFAULT true,
+		ADD COLUMN IF NOT EXISTS grade_updates BOOLEAN DEFAULT true,
+		ADD COLUMN IF NOT EXISTS announcement_alerts BOOLEAN DEFAULT true,
+		ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT 'UTC',
+		ADD COLUMN IF NOT EXISTS session_timeout INTEGER DEFAULT 30`
+	if _, err := r.db.Exec(ctx, alterTableSQL); err != nil {
+		return fmt.Errorf("ensure settings columns: %w", err)
+	}
+
+	return nil
+}
+
 func (r *settingsRepository) GetSettings(ctx context.Context, userID string) (*models.Settings, error) {
+	if err := r.ensureSchema(ctx); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT user_id, email_notifications, push_notifications, assignment_reminders, 
 		       grade_updates, announcement_alerts, theme, language, timezone, session_timeout,
@@ -60,6 +92,10 @@ func (r *settingsRepository) GetSettings(ctx context.Context, userID string) (*m
 }
 
 func (r *settingsRepository) UpdateSettings(ctx context.Context, userID string, req *models.SettingsUpdateRequest) (*models.Settings, error) {
+	if err := r.ensureSchema(ctx); err != nil {
+		return nil, err
+	}
+
 	existing, err := r.GetSettings(ctx, userID)
 	if err != nil {
 		return nil, err

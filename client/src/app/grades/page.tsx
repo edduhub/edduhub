@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { api, endpoints } from "@/lib/api-client";
+import { api, buildAuthHeaders, endpoints, getAPIBase } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -150,8 +150,11 @@ export default function GradesPage() {
       
       // Use the student convenience endpoint that doesn't require studentId
       const resp = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${endpoints.reports.myGradeCard}`,
-        { credentials: 'include' }
+        `${getAPIBase()}${endpoints.reports.myGradeCard}`,
+        {
+          credentials: 'include',
+          headers: buildAuthHeaders(),
+        }
       );
       
       if (!resp.ok) {

@@ -111,6 +111,19 @@ type StudentDashboardData = {
   }>;
 };
 
+function formatDashboardDate(value?: string, pattern = "MMM dd, yyyy"): string {
+  if (!value) {
+    return "N/A";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "N/A";
+  }
+
+  return format(parsed, pattern);
+}
+
 export default function StudentDashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -370,7 +383,7 @@ export default function StudentDashboardPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Calendar className="h-3 w-3" />
-                        Due: {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}
+                        Due: {formatDashboardDate(assignment.dueDate)}
                       </div>
                     </div>
                   ))}
@@ -393,7 +406,7 @@ export default function StudentDashboardPage() {
                           <AlertCircle className="h-4 w-4 text-destructive" />
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          Was due: {format(new Date(assignment.dueDate), 'MMM dd')}
+                          Was due: {formatDashboardDate(assignment.dueDate, 'MMM dd')}
                         </div>
                       </div>
                     ))}
@@ -461,7 +474,7 @@ export default function StudentDashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Calendar className="h-3 w-3" />
-                      {format(new Date(event.date), 'MMM dd, yyyy')}
+                      {formatDashboardDate(event.date)}
                     </div>
                     {event.description && (
                       <div className="text-xs text-muted-foreground">{event.description}</div>
@@ -562,7 +575,7 @@ export default function StudentDashboardPage() {
                       <TableRow key={assignment.id}>
                         <TableCell className="font-medium">{assignment.title}</TableCell>
                         <TableCell className="text-destructive">
-                          {format(new Date(assignment.dueDate), 'MMM dd, yyyy')}
+                          {formatDashboardDate(assignment.dueDate)}
                         </TableCell>
                         <TableCell className="text-right">{assignment.maxScore}</TableCell>
                         <TableCell className="text-right">
@@ -597,7 +610,7 @@ export default function StudentDashboardPage() {
                   {assignments.upcoming.map((assignment) => (
                     <TableRow key={assignment.id}>
                       <TableCell className="font-medium">{assignment.title}</TableCell>
-                      <TableCell>{format(new Date(assignment.dueDate), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>{formatDashboardDate(assignment.dueDate)}</TableCell>
                       <TableCell className="text-right">{assignment.maxScore}</TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" variant="default" onClick={() => navigateToAssignments(assignment.id)}>
@@ -636,7 +649,7 @@ export default function StudentDashboardPage() {
                     <TableRow key={assignment.id}>
                       <TableCell className="font-medium">{assignment.title}</TableCell>
                       <TableCell>
-                        {format(new Date(assignment.submittedAt), 'MMM dd, yyyy')}
+                        {formatDashboardDate(assignment.submittedAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         {assignment.score !== null && assignment.score !== undefined
@@ -703,7 +716,7 @@ export default function StudentDashboardPage() {
                           {grade.percentage.toFixed(1)}%
                         </Badge>
                       </TableCell>
-                      <TableCell>{format(new Date(grade.gradedDate), 'MMM dd, yyyy')}</TableCell>
+                      <TableCell>{formatDashboardDate(grade.gradedDate)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

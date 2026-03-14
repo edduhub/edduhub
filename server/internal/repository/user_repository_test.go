@@ -4,8 +4,9 @@ package repository
 
 import (
 	"context"
-	"os"
+	"fmt"
 	"testing"
+	"time"
 
 	"eduhub/server/internal/models"
 
@@ -14,33 +15,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupUserTest(t *testing.T) (*pgxpool.Pool, *DB, UserRepository, context.Context) {
-	// Use environment variable for database URL - never hardcode credentials
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL not set, skipping integration test")
+func setupUserTest(t *testing.T) (*pgxpool.Pool, UserRepository, context.Context) {
+	t.Helper()
+
+	ctx, db, pool := setupIntegrationDB(t, "users")
+	repo := NewUserRepository(db)
+
+	return pool, repo, ctx
+}
+
+func createFixtureUser(t *testing.T, repo UserRepository, ctx context.Context) *models.User {
+	t.Helper()
+
+	user := &models.User{
+		Name:             fmt.Sprintf("Test User %d", time.Now().UnixNano()),
+		Role:             "student",
+		Email:            fmt.Sprintf("test-%d@example.com", time.Now().UnixNano()),
+		KratosIdentityID: fmt.Sprintf("kratos-user-%d", time.Now().UnixNano()),
+		IsActive:         true,
 	}
 
-	pool, err := pgxpool.New(context.Background(), databaseURL)
-	require.NoError(t, err)
-
+	require.NoError(t, repo.CreateUser(ctx, user))
 	t.Cleanup(func() {
-		pool.Close()
+		_ = repo.DeleteUserByID(ctx, user.ID)
 	})
 
-	db := &DB{
-		Pool: pool,
-	}
-
-	repo := NewUserRepository(db)
-	ctx := context.Background()
-
-	return pool, db, repo, ctx
+	return user
 }
 
 func TestCreateUser(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
 
 	user := &models.User{
 		Name:             "Test User",
@@ -59,8 +63,7 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestCreateUser_Error(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
 
 	user := &models.User{Email: "fail@example.com"} // Use other fields for test data
 
@@ -73,15 +76,15 @@ func TestCreateUser_Error(t *testing.T) {
 // --- Test UpdateUser ---
 
 func TestUpdateUser(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
+	user := createFixtureUser(t, repo, ctx)
 
 	userToUpdate := &models.User{
-		ID:               25,
+		ID:               user.ID,
 		Name:             "Updated User Name",
 		Role:             "admin",
-		Email:            "updated@example.com",
-		KratosIdentityID: "kratos-updated-id",
+		Email:            "updated-" + user.Email,
+		KratosIdentityID: user.KratosIdentityID + "-updated",
 		IsActive:         false,
 	}
 
@@ -92,8 +95,7 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestUpdateUser_NotFound(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
 
 	userToUpdate := &models.User{ID: 999}
 
@@ -106,19 +108,21 @@ func TestUpdateUser_NotFound(t *testing.T) {
 // --- Test FreezeUserByID ---
 
 func TestFreezeUserByID(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
+	user := createFixtureUser(t, repo, ctx)
 
-	userID := 25
+	userID := user.ID
 
 	err := repo.FreezeUserByID(ctx, userID)
 
 	assert.NoError(t, err)
+	frozenUser, err := repo.GetUserByID(ctx, userID)
+	require.NoError(t, err)
+	assert.False(t, frozenUser.IsActive)
 }
 
 func TestFreezeUserByID_NotFound(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
 
 	userID := 999
 
@@ -131,19 +135,20 @@ func TestFreezeUserByID_NotFound(t *testing.T) {
 // --- Test DeleteUserByID --- // Renamed test function
 
 func TestDeleteUserByID(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
+	user := createFixtureUser(t, repo, ctx)
 
-	userID := 25
+	userID := user.ID
 
 	err := repo.DeleteUserByID(ctx, userID)
 
 	assert.NoError(t, err)
+	_, err = repo.GetUserByID(ctx, userID)
+	assert.Error(t, err)
 }
 
 func TestDeleteUserByID_NotFound(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
 
 	userID := 999
 
@@ -154,15 +159,15 @@ func TestDeleteUserByID_NotFound(t *testing.T) {
 }
 
 func TestDeleteUserByID_Error(t *testing.T) {
-	pool, _, repo, ctx := setupUserTest(t)
-	defer pool.Close()
+	_, repo, ctx := setupUserTest(t)
+	user := createFixtureUser(t, repo, ctx)
 
-	userID := 25
+	userID := user.ID
 
 	err := repo.DeleteUserByID(ctx, userID)
+	require.NoError(t, err)
 
-	// Adjust assertion based on real DB behavior
-	if err != nil {
-		assert.Contains(t, err.Error(), "failed to execute query")
-	}
+	err = repo.DeleteUserByID(ctx, userID)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "DeleteUserByID")
 }

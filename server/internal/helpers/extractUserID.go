@@ -21,7 +21,7 @@ func ExtractUserID(c echo.Context) (int, error) {
 		return id, nil
 	}
 
-	// Fallback: check identity context for JWT-derived user ID
+	// Fallback: check identity context for resolved user ID
 	if identity, ok := c.Get("identity").(*auth.Identity); ok && identity != nil && identity.UserID > 0 {
 		return identity.UserID, nil
 	}

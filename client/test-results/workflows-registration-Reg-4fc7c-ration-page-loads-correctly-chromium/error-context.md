@@ -1,0 +1,64 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - img [ref=e6]
+      - heading "Create Your Account" [level=3] [ref=e9]
+      - paragraph [ref=e10]: Join EdduHub to manage your educational journey
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - text: First Name
+          - textbox "First Name" [ref=e15]:
+            - /placeholder: John
+        - generic [ref=e16]:
+          - text: Last Name
+          - textbox "Last Name" [ref=e17]:
+            - /placeholder: Doe
+      - generic [ref=e18]:
+        - text: Email
+        - textbox "Email" [ref=e19]:
+          - /placeholder: you@college.edu
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - text: Password
+          - textbox "Password" [ref=e22]:
+            - /placeholder: ••••••••
+        - generic [ref=e23]:
+          - text: Confirm Password
+          - textbox "Confirm Password" [ref=e24]:
+            - /placeholder: ••••••••
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - text: College ID
+          - textbox "College ID" [ref=e27]:
+            - /placeholder: COL123
+        - generic [ref=e28]:
+          - text: College Name
+          - textbox "College Name" [ref=e29]:
+            - /placeholder: University Name
+      - generic [ref=e30]:
+        - text: Role
+        - combobox "Role" [ref=e31]:
+          - option "Student" [selected]
+          - option "Faculty"
+          - option "Admin"
+      - generic [ref=e32]:
+        - text: Roll Number
+        - textbox "Roll Number" [ref=e33]:
+          - /placeholder: STU001
+      - button "Create Account" [ref=e34]
+      - generic [ref=e35]:
+        - text: Already have an account?
+        - link "Sign in" [ref=e36] [cursor=pointer]:
+          - /url: /auth/login
+  - generic [ref=e37]:
+    - img [ref=e39]
+    - button "Open Tanstack query devtools" [ref=e87] [cursor=pointer]:
+      - img [ref=e88]
+  - button "Open Next.js Dev Tools" [ref=e141] [cursor=pointer]:
+    - img [ref=e142]
+  - alert [ref=e145]
+```

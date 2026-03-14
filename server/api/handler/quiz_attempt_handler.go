@@ -33,7 +33,7 @@ func (h *QuizAttemptHandler) StartQuizAttempt(c echo.Context) error {
 		return err
 	}
 
-	studentID, err := helpers.ExtractUserID(c)
+	studentID, err := helpers.ExtractStudentID(c)
 	if err != nil {
 		return helpers.Error(c, "student ID required", 401)
 	}
@@ -59,7 +59,7 @@ func (h *QuizAttemptHandler) SubmitQuizAttempt(c echo.Context) error {
 		return err
 	}
 
-	studentID, err := helpers.ExtractUserID(c)
+	studentID, err := helpers.ExtractStudentID(c)
 	if err != nil {
 		return helpers.Error(c, "student ID required", 401)
 	}

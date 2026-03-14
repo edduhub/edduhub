@@ -353,12 +353,19 @@ func (r *roleRepository) AssignPermissionsToRole(ctx context.Context, roleID int
 		return nil
 	}
 
+	beginner, ok := r.DB.Pool.(BeginPool)
+	if !ok {
+		return fmt.Errorf("AssignPermissionsToRole: pool does not support transactions")
+	}
+
 	// Use transaction to ensure atomicity
-	tx, err := r.DB.Pool.Begin(ctx)
+	tx, err := beginner.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("AssignPermissionsToRole: failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	// Insert role_permissions entries (ignore duplicates)
 	for _, permID := range permissionIDs {

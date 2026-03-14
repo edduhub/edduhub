@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { api } from "@/lib/api-client";
+import { api, buildAuthHeaders, getAPIBase } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,9 +111,10 @@ export default function BatchOperationsPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/students/import`, {
+      const response = await fetch(`${getAPIBase()}/api/batch/students/import`, {
         method: 'POST',
         credentials: 'include',
+        headers: buildAuthHeaders(),
         body: formData,
       });
 
@@ -142,9 +143,10 @@ export default function BatchOperationsPage() {
       setError(null);
       setSuccess(null);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/students/export`, {
+      const response = await fetch(`${getAPIBase()}/api/batch/students/export`, {
         method: 'GET',
         credentials: 'include',
+        headers: buildAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -187,9 +189,10 @@ export default function BatchOperationsPage() {
       formData.append('file', file);
       formData.append('course_id', selectedCourse);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/grades/import`, {
+      const response = await fetch(`${getAPIBase()}/api/batch/grades/import`, {
         method: 'POST',
         credentials: 'include',
+        headers: buildAuthHeaders(),
         body: formData,
       });
 
@@ -223,9 +226,10 @@ export default function BatchOperationsPage() {
       setError(null);
       setSuccess(null);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/grades/export?course_id=${selectedCourse}`, {
+      const response = await fetch(`${getAPIBase()}/api/batch/grades/export?course_id=${selectedCourse}`, {
         method: 'GET',
         credentials: 'include',
+        headers: buildAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -268,9 +272,10 @@ export default function BatchOperationsPage() {
       formData.append('file', file);
       formData.append('course_id', enrollmentCourse);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/enroll`, {
+      const response = await fetch(`${getAPIBase()}/api/batch/enroll`, {
         method: 'POST',
         credentials: 'include',
+        headers: buildAuthHeaders(),
         body: formData,
       });
 

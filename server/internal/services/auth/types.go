@@ -1,14 +1,13 @@
 package auth
 
-// Identity represents a Kratos identity populated from JWT claims or the Kratos API.
-// It is the central auth object threaded through middleware and handlers.
+// Identity represents a Kratos identity used throughout middleware and handlers.
 type Identity struct {
 	// Identity is the Kratos identity UUID.
 	ID string `json:"id"`
 	// Traits contains the user's profile data stored in Kratos.
 	Traits Traits `json:"traits"`
 	// UserID is the local database user ID resolved after login.
-	// It may be embedded in tokens via the "user_id" extension claim.
+	// It is populated when local identities are provisioned or validated from identity metadata.
 	UserID int `json:"-"`
 }
 
@@ -18,7 +17,7 @@ type Traits struct {
 	Name    Name    `json:"name"`
 	Role    string  `json:"role"`
 	College College `json:"college"`
-	RollNo  string  `json:"roll_no,omitempty"`
+	RollNo  string  `json:"rollNo,omitempty"`
 }
 
 // Name holds the user's given and family name.

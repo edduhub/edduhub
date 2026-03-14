@@ -36,8 +36,6 @@ func NewPlacementRepository(db *DB) PlacementRepository {
 	return &placementRepository{DB: db}
 }
 
-const placementTable = "placements"
-
 func (r *placementRepository) CreatePlacement(ctx context.Context, placement *models.Placement) error {
 	now := time.Now()
 	placement.CreatedAt = now

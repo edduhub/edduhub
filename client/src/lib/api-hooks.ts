@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { api, endpoints } from './api-client';
 import { normalizeForumThread, type ForumThreadApi } from './forum';
+import { normalizeNotification, type NotificationAPI } from './notifications';
 import type {
   DashboardResponse,
   StudentDashboardResponse,
@@ -70,23 +71,6 @@ export const queryKeys = {
   facultyRubrics: ['faculty-tools', 'rubrics'] as const,
   facultyOfficeHours: ['faculty-tools', 'office-hours'] as const,
   facultyBookings: ['faculty-tools', 'bookings'] as const,
-};
-
-type NotificationAPI = {
-  id: number;
-  userId?: number | string;
-  user_id?: number | string;
-  title?: string;
-  message?: string;
-  type?: Notification['type'];
-  category?: string;
-  isRead?: boolean;
-  is_read?: boolean;
-  actionUrl?: string;
-  action_url?: string;
-  metadata?: Notification['metadata'];
-  createdAt?: string;
-  created_at?: string;
 };
 
 type AnnouncementAPI = {
@@ -382,18 +366,7 @@ type CreateAnnouncementInput = {
 const toISODateString = (value?: string): string =>
   value || new Date().toISOString();
 
-const mapNotification = (item: NotificationAPI): Notification => ({
-  id: item.id,
-  userId: String(item.userId ?? item.user_id ?? ''),
-  title: item.title ?? '',
-  message: item.message ?? '',
-  type: item.type ?? 'info',
-  category: item.category ?? item.type ?? 'general',
-  isRead: item.isRead ?? item.is_read ?? false,
-  actionUrl: item.actionUrl ?? item.action_url,
-  metadata: item.metadata,
-  createdAt: toISODateString(item.createdAt ?? item.created_at),
-});
+const mapNotification = (item: NotificationAPI): Notification => normalizeNotification(item);
 
 const mapAnnouncement = (item: AnnouncementAPI): Announcement => {
   const priority = item.priority;
@@ -610,8 +583,8 @@ export function useStudents(options?: UseQueryOptions<Student[], Error>) {
   return useQuery({
     queryKey: queryKeys.students,
     queryFn: async () => {
-      const data = await api.get<Student[]>(endpoints.students.list);
-      return data || [];
+      const data = await api.get<ParentStudentAPI[]>(endpoints.students.list);
+      return (data || []).map(mapParentStudent);
     },
     ...options,
   });
@@ -621,8 +594,8 @@ export function useStudent(studentId: number, options?: UseQueryOptions<Student,
   return useQuery({
     queryKey: queryKeys.student(studentId),
     queryFn: async () => {
-      const data = await api.get<Student>(endpoints.students.get(studentId));
-      return data;
+      const data = await api.get<ParentStudentAPI>(endpoints.students.get(studentId));
+      return mapParentStudent(data);
     },
     enabled: !!studentId,
     ...options,
@@ -1178,7 +1151,9 @@ type CreateSelfServiceRequestInput = {
   delivery_method?: string;
 };
 
-export function useSelfServiceRequests(options?: UseQueryOptions<SelfServiceRequest[], Error>) {
+export function useSelfServiceRequests(
+  options?: Omit<UseQueryOptions<SelfServiceRequest[], Error>, 'queryKey' | 'queryFn'>
+) {
   return useQuery({
     queryKey: ['self-service', 'requests'],
     queryFn: async () => {
@@ -1225,11 +1200,13 @@ export function useUpdateSelfServiceRequest() {
 }
 
 // Admin: Fetch all requests (not just own)
-export function useAllSelfServiceRequests(options?: UseQueryOptions<SelfServiceRequest[], Error>) {
+export function useAllSelfServiceRequests(
+  options?: Omit<UseQueryOptions<SelfServiceRequest[], Error>, 'queryKey' | 'queryFn'>
+) {
   return useQuery({
     queryKey: ['self-service', 'all-requests'],
     queryFn: async () => {
-      const data = await api.get<SelfServiceRequestsResponse>(`${endpoints.selfService.requests}?all=true`);
+      const data = await api.get<SelfServiceRequestsResponse>(endpoints.selfService.allRequests);
       const requests = Array.isArray(data) ? data : (data?.requests || []);
       return requests.map(mapSelfServiceRequest);
     },

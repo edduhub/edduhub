@@ -35,6 +35,22 @@ interface FeeAssignment {
     category: string;
 }
 
+interface FeeAssignmentAPI {
+    id?: number;
+    fee_structure_id?: number;
+    amount?: number;
+    due_date?: string | null;
+    status?: string;
+    waiver_amount?: number;
+    paid_amount?: number;
+    category?: string;
+    fee_structure?: {
+        name?: string;
+        fee_type?: string;
+        due_date?: string | null;
+    };
+}
+
 interface Payment {
     id: number;
     amount: number;
@@ -43,6 +59,58 @@ interface Payment {
     payment_status: string;
     transaction_id: string;
     fee_assignment_title: string;
+}
+
+interface PaymentAPI {
+    id?: number;
+    amount?: number;
+    payment_date?: string | null;
+    payment_method?: string;
+    payment_status?: string;
+    transaction_id?: string | null;
+    fee_assignment_title?: string;
+    created_at?: string;
+}
+
+function normalizeFeeAssignment(assignment: FeeAssignmentAPI): FeeAssignment {
+    const feeStructure = assignment.fee_structure;
+
+    return {
+        id: assignment.id ?? 0,
+        fee_structure_id: assignment.fee_structure_id ?? 0,
+        title: feeStructure?.name ?? "Course Fee",
+        amount: assignment.amount ?? 0,
+        due_date: assignment.due_date ?? feeStructure?.due_date ?? "",
+        status: assignment.status ?? "pending",
+        waiver_amount: assignment.waiver_amount ?? 0,
+        paid_amount: assignment.paid_amount ?? 0,
+        category: assignment.category ?? feeStructure?.fee_type ?? "misc",
+    };
+}
+
+function normalizePayment(payment: PaymentAPI): Payment {
+    return {
+        id: payment.id ?? 0,
+        amount: payment.amount ?? 0,
+        payment_date: payment.payment_date ?? payment.created_at ?? "",
+        payment_method: payment.payment_method ?? "unknown",
+        payment_status: payment.payment_status ?? "pending",
+        transaction_id: payment.transaction_id ?? "",
+        fee_assignment_title: payment.fee_assignment_title ?? "Course Fee",
+    };
+}
+
+function formatFeeDate(value?: string): string {
+    if (!value) {
+        return "N/A";
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return "N/A";
+    }
+
+    return format(parsed, "MMM dd, yyyy");
 }
 
 declare global {
@@ -71,11 +139,11 @@ export default function FeesPage() {
             try {
                 setLoading(true);
                 const [assignmentsData, paymentsData] = await Promise.all([
-                    api.get<FeeAssignment[]>("/api/fees/my-fees"),
-                    api.get<Payment[]>("/api/fees/my-payments")
+                    api.get<FeeAssignmentAPI[]>("/api/fees/my-fees"),
+                    api.get<PaymentAPI[]>("/api/fees/my-payments")
                 ]);
-                setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
-                setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+                setAssignments((Array.isArray(assignmentsData) ? assignmentsData : []).map(normalizeFeeAssignment));
+                setPayments((Array.isArray(paymentsData) ? paymentsData : []).map(normalizePayment));
             } catch (err) {
                 logger.error("Failed to fetch fee data:", err as Error);
                 setError("Failed to load fee information. Please try again.");
@@ -268,7 +336,7 @@ export default function FeesPage() {
                 `Amount: INR ${payment.amount.toLocaleString()}`,
                 `Payment Method: ${payment.payment_method}`,
                 `Status: ${payment.payment_status}`,
-                `Payment Date: ${new Date(payment.payment_date).toLocaleString()}`,
+                `Payment Date: ${payment.payment_date ? new Date(payment.payment_date).toLocaleString() : "N/A"}`,
                 "",
                 `Generated At: ${new Date().toLocaleString()}`,
             ].join("\n");
@@ -422,7 +490,7 @@ export default function FeesPage() {
                                                 <div>
                                                     <p className="text-xs text-muted-foreground uppercase font-black">Due Date</p>
                                                     <p className="text-lg font-bold">
-                                                        {format(new Date(assignment.due_date), 'MMM dd, yyyy')}
+                                                        {formatFeeDate(assignment.due_date)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -478,7 +546,7 @@ export default function FeesPage() {
                                                 <TableCell className="font-mono text-xs text-blue-600 font-bold">{payment.transaction_id || `TXN-${payment.id}`}</TableCell>
                                                 <TableCell className="font-medium">{payment.fee_assignment_title || "Course Fee"}</TableCell>
                                                 <TableCell className="text-sm">
-                                                    {format(new Date(payment.payment_date), 'MMM dd, yyyy')}
+                                                    {formatFeeDate(payment.payment_date)}
                                                 </TableCell>
                                                 <TableCell className="capitalize text-sm font-medium">
                                                     <div className="flex items-center gap-2">
@@ -500,6 +568,7 @@ export default function FeesPage() {
                                                         variant="ghost"
                                                         size="sm"
                                                         className="h-8 w-8 p-0"
+                                                        aria-label={`Download invoice for ${payment.transaction_id || `TXN-${payment.id}`}`}
                                                         onClick={() => handleInvoiceDownload(payment)}
                                                         disabled={downloadingInvoiceId === payment.id}
                                                     >

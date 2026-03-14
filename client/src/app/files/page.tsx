@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { api } from "@/lib/api-client";
+import { api, buildAuthHeaders, getAPIBase } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ type FileItem = {
   is_public: boolean;
   created_at: string;
   updated_at: string;
-  current_version_id: number;
+  current_version_id?: number | null;
   version_number: number;
   tags?: string[];
   uploaded_by_name?: string;
@@ -139,9 +139,10 @@ export default function FilesPage() {
       if (currentFolderId) formData.append('folder_id', currentFolderId.toString());
       if (uploadForm.tags) formData.append('tags', JSON.stringify(uploadForm.tags.split(',').map(t => t.trim())));
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/file-management/upload`, {
+      const response = await fetch(`${getAPIBase()}/api/file-management/upload`, {
         method: 'POST',
         credentials: 'include',
+        headers: buildAuthHeaders(),
         body: formData,
       });
 
@@ -219,9 +220,10 @@ export default function FilesPage() {
       formData.append('file', file);
       if (versionComment) formData.append('comment', versionComment);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/file-management/${selectedFile.id}/versions`, {
+      const response = await fetch(`${getAPIBase()}/api/file-management/${selectedFile.id}/versions`, {
         method: 'POST',
         credentials: 'include',
+        headers: buildAuthHeaders(),
         body: formData,
       });
 
@@ -511,6 +513,7 @@ export default function FilesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              aria-label={`View versions for ${file.name}`}
                               onClick={() => handleViewVersions(file)}
                             >
                               <Clock className="h-4 w-4" />
@@ -518,6 +521,7 @@ export default function FilesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              aria-label={`Download ${file.name}`}
                               onClick={() => handleDownload(file.id)}
                             >
                               <Download className="h-4 w-4" />
@@ -525,6 +529,7 @@ export default function FilesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              aria-label={`Delete ${file.name}`}
                               onClick={() => handleDeleteFile(file.id)}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
@@ -638,6 +643,7 @@ export default function FilesPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            aria-label={`Set version ${version.version_number} as current`}
                             onClick={() => handleSetCurrentVersion(version.id)}
                           >
                             Set as Current

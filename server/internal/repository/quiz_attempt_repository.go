@@ -52,14 +52,9 @@ func NewQuizAttemptRepository(db *DB) QuizAttemptRepository {
 	return &quizAttemptRepository{DB: db}
 }
 
-// Table constants for quiz attempt operations
-const (
-	quizAttemptTable = "quiz_attempts"
-)
-
 // CreateQuizAttempt creates a new quiz attempt in the database.
 // It automatically sets CreatedAt and UpdatedAt timestamps.
-// Sets default values for StartTime (current time) and Status ("InProgress") if not provided.
+// Sets default values for StartTime (current time) and Status ("in_progress") if not provided.
 // Uses parameterized queries to prevent SQL injection.
 func (r *quizAttemptRepository) CreateQuizAttempt(ctx context.Context, attempt *models.QuizAttempt) error {
 	// Set timestamps
@@ -72,7 +67,7 @@ func (r *quizAttemptRepository) CreateQuizAttempt(ctx context.Context, attempt *
 		attempt.StartTime = now
 	}
 	if attempt.Status == "" {
-		attempt.Status = "InProgress"
+		attempt.Status = models.QuizAttemptStatusInProgress
 	}
 
 	// SQL query with parameterized placeholders
@@ -81,7 +76,7 @@ func (r *quizAttemptRepository) CreateQuizAttempt(ctx context.Context, attempt *
 
 	// Prepare arguments in correct order
 	args := []any{attempt.StudentID, attempt.QuizID, attempt.CollegeID, attempt.StartTime,
-				 attempt.EndTime, attempt.Score, attempt.Status, attempt.CreatedAt, attempt.UpdatedAt}
+		attempt.EndTime, attempt.Score, attempt.Status, attempt.CreatedAt, attempt.UpdatedAt}
 
 	// Execute query and scan the returned ID
 	temp := struct {
@@ -129,7 +124,7 @@ func (r *quizAttemptRepository) UpdateQuizAttempt(ctx context.Context, attempt *
 	sql := `UPDATE quiz_attempts SET end_time = $1, score = $2, status = $3, updated_at = $4
 			WHERE id = $5 AND college_id = $6`
 	args := []any{attempt.EndTime, attempt.Score, attempt.Status, attempt.UpdatedAt,
-				 attempt.ID, attempt.CollegeID}
+		attempt.ID, attempt.CollegeID}
 
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
 	if err != nil {

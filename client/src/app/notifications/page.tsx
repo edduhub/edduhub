@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { logger } from '@/lib/logger';
-import { api, endpoints } from '@/lib/api-client';
+import { api, endpoints, getAPIBase } from '@/lib/api-client';
+import { normalizeNotification, parseNotificationEnvelope, type NotificationAPI } from '@/lib/notifications';
 import type { Notification } from '@/lib/types';
 import {
     Bell,
@@ -42,11 +43,14 @@ export default function NotificationsPage() {
     const [activeTab, setActiveTab] = useState('all');
     const [typeFilter, setTypeFilter] = useState<'all' | Notification['type']>('all');
     const wsRef = useRef<WebSocket | null>(null);
+    const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reconnectAttemptRef = useRef(0);
 
     const fetchNotifications = useCallback(async () => {
         try {
-            const data = await api.get<Notification[]>(endpoints.notifications.list);
-            setNotifications(data || []);
+            const data = await api.get<NotificationAPI[]>(endpoints.notifications.list);
+            const normalized = (Array.isArray(data) ? data : []).map(normalizeNotification);
+            setNotifications(normalized);
 
             const countData = await api.get<{ unread_count?: number; unreadCount?: number }>(endpoints.notifications.unreadCount);
             setUnreadCount(countData.unread_count ?? countData.unreadCount ?? 0);
@@ -59,15 +63,28 @@ export default function NotificationsPage() {
 
     const setupWebSocket = useCallback(() => {
         if (!user) return;
+        if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+        }
 
-        const wsUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, 'ws')}/api/notifications/ws`;
+        const wsBase = getAPIBase().replace(/^http/, 'ws');
+        const wsUrl = `${wsBase}${endpoints.notifications.ws}`;
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
+        ws.onopen = () => {
+            reconnectAttemptRef.current = 0;
+        };
+
         ws.onmessage = (event) => {
             try {
-                const newNotification = JSON.parse(event.data) as Notification;
+                const newNotification = parseNotificationEnvelope(event.data);
+                if (!newNotification) {
+                    return;
+                }
+
                 setNotifications(prev => [newNotification, ...prev]);
                 setUnreadCount(prev => prev + 1);
             } catch (err) {
@@ -75,9 +92,32 @@ export default function NotificationsPage() {
             }
         };
 
-        ws.onclose = () => {
-            logger.info('WebSocket connection closed. Reconnecting...');
-            setTimeout(setupWebSocket, 3000);
+        ws.onclose = (event) => {
+            if (wsRef.current === ws) {
+                wsRef.current = null;
+            }
+
+            if (event.code === 1000) {
+                return;
+            }
+
+            if (reconnectAttemptRef.current >= 5) {
+                logger.warn('WebSocket connection closed repeatedly; stopping reconnect attempts', {
+                    code: event.code,
+                    reason: event.reason,
+                });
+                return;
+            }
+
+            const delayMs = Math.min(30000, 1000 * Math.pow(2, reconnectAttemptRef.current));
+            reconnectAttemptRef.current += 1;
+            logger.info('WebSocket connection closed. Scheduling reconnect...', {
+                code: event.code,
+                delayMs,
+            });
+            reconnectTimerRef.current = setTimeout(() => {
+                setupWebSocket();
+            }, delayMs);
         };
 
         ws.onerror = (err) => {
@@ -85,6 +125,10 @@ export default function NotificationsPage() {
         };
 
         return () => {
+            if (reconnectTimerRef.current) {
+                clearTimeout(reconnectTimerRef.current);
+                reconnectTimerRef.current = null;
+            }
             ws.close();
         };
     }, [user]);

@@ -90,7 +90,7 @@ type Services struct {
 func NewServices(cfg *config.Config) *Services {
 	kratosService := auth.NewKratosService()
 	ketoService := auth.NewKetoService()
-	hydraService := auth.NewHydraService()
+	hydraService := auth.NewHydraService() // returns nil when HYDRA_PUBLIC_URL is not set
 
 	// Create individual repository instances using modular approach
 	studentRepo := repository.NewStudentRepository(cfg.DB)
@@ -107,7 +107,7 @@ func NewServices(cfg *config.Config) *Services {
 	calendarRepo := repository.NewCalendarRepository(cfg.DB)
 	departmentRepo := repository.NewDepartmentRepository(cfg.DB)
 
-	// Create auth service with Hydra, Kratos, and Keto
+	// Create auth service with Hydra, Kratos, Keto
 	authService := auth.NewAuthServiceWithDependencies(
 		hydraService,
 		kratosService,
@@ -115,6 +115,7 @@ func NewServices(cfg *config.Config) *Services {
 		userRepo,
 		profileRepo,
 		collegeRepo,
+		studentRepo,
 	)
 
 	var minioClient *storageclient.MinioClient
@@ -208,7 +209,7 @@ func NewServices(cfg *config.Config) *Services {
 	facultyToolsRepo := repository.NewFacultyToolsRepository(cfg.DB)
 
 	answerOptionRepo := repository.NewAnswerOptionRepository(cfg.DB)
-	questionService := quiz.NewSimpleQuestionService(questionRepo)
+	questionService := quiz.NewSimpleQuestionService(questionRepo, answerOptionRepo)
 	// Auto-grading service for quiz attempts
 	autoGradingService := quiz.NewAutoGradingService(
 		questionRepo,

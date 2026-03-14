@@ -29,7 +29,10 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.GET("/register", a.Auth.InitiateRegistration, authRateLimiter.Middleware())
 	auth.POST("/register/complete", a.Auth.HandleRegistration, authRateLimiter.Middleware())
 	auth.GET("/login/initiate", a.Auth.InitiateLogin, authRateLimiter.Middleware()) // OAuth2 flow start
-	auth.GET("/callback", a.Auth.HandleCallback, m.ValidateToken)
+	auth.POST("/login", a.Auth.DirectLogin, authRateLimiter.Middleware())           // Direct email+password login
+	auth.POST("/callback", a.Auth.HandleLogin, authRateLimiter.Middleware())        // OAuth2 code exchange
+	auth.GET("/session", a.Auth.HandleSession, m.ValidateToken)
+	auth.GET("/callback/verify", a.Auth.HandleCallback, m.ValidateToken)
 
 	auth.POST("/logout", a.Auth.HandleLogout, m.ValidateToken)
 	auth.POST("/refresh", a.Auth.RefreshToken, authRateLimiter.Middleware())
@@ -39,6 +42,7 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	auth.POST("/password-reset/complete", a.Auth.CompletePasswordReset, passwordRateLimiter.Middleware())
 
 	// Email verification (public)
+	auth.GET("/verify-email", a.Auth.VerifyEmail)
 	auth.POST("/verify-email/initiate", a.Auth.InitiateEmailVerification, m.ValidateToken)
 
 	auth.POST("/change-password", a.Auth.ChangePassword, m.ValidateToken, passwordRateLimiter.Middleware())
@@ -265,12 +269,12 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 
 	// Quiz Attempts management
 	quizAttempts := apiGroup.Group("/quizzes/:quizID/attempts")
-	quizAttempts.POST("/start", a.QuizAttempt.StartQuizAttempt, m.RequireRole(middleware.RoleStudent))
+	quizAttempts.POST("/start", a.QuizAttempt.StartQuizAttempt, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	quizAttempts.GET("", a.QuizAttempt.ListQuizAttempts, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	attemptRoutes := apiGroup.Group("/attempts")
 	attemptRoutes.GET("/:attemptID", a.QuizAttempt.GetQuizAttempt)
-	attemptRoutes.POST("/:attemptID/submit", a.QuizAttempt.SubmitQuizAttempt, m.RequireRole(middleware.RoleStudent))
+	attemptRoutes.POST("/:attemptID/submit", a.QuizAttempt.SubmitQuizAttempt, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
 	attemptRoutes.GET("/student/:studentID", a.QuizAttempt.ListStudentAttempts)
 
 	// File Upload management (legacy)
@@ -452,8 +456,13 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	exams.GET("/:examID/result-stats", a.Exam.GetResultStats, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
 	// Student exam views
-	apiGroup.GET("/students/:studentID/exam-enrollments", a.Exam.GetStudentEnrollments)
-	apiGroup.GET("/students/:studentID/exam-results", a.Exam.GetStudentResults)
+	apiGroup.GET("/students/:studentID/exam-enrollments", a.Exam.GetStudentEnrollments,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty, middleware.RoleStudent),
+		m.LoadStudentProfile,
+		m.VerifyStudentOwnership())
+	apiGroup.GET("/students/:studentID/exam-results", a.Exam.GetStudentResults,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty, middleware.RoleStudent),
+		m.LoadStudentProfile)
 
 	// Course exams
 	apiGroup.GET("/courses/:courseID/exams", a.Exam.ListExamsByCourse)
@@ -461,7 +470,9 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	// Revaluation
 	revaluation := apiGroup.Group("/revaluation-requests")
 	revaluation.POST("", a.Exam.CreateRevaluationRequest, m.RequireRole(middleware.RoleStudent), m.LoadStudentProfile)
-	revaluation.GET("", a.Exam.ListRevaluationRequests, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	revaluation.GET("", a.Exam.ListRevaluationRequests,
+		m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty, middleware.RoleStudent),
+		m.LoadStudentProfile)
 	revaluation.PUT("/:requestID/approve", a.Exam.ApproveRevaluationRequest, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	revaluation.PUT("/:requestID/reject", a.Exam.RejectRevaluationRequest, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 
@@ -521,8 +532,9 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	selfService.GET("/requests/:requestID", a.SelfService.GetRequest)
 	selfService.GET("/types", a.SelfService.GetRequestTypes)
 
-	// Self-Service Admin Routes
-	selfServiceAdmin := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleAdmin))
+	// Self-Service Staff Routes
+	selfServiceAdmin := apiGroup.Group("/self-service", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
+	selfServiceAdmin.GET("/all-requests", a.SelfService.GetAllRequests)
 	selfServiceAdmin.PUT("/requests/:requestID", a.SelfService.UpdateRequest)
 
 	// Faculty tools: rubrics, office hours, and booking workflow

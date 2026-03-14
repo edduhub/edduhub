@@ -39,8 +39,6 @@ func NewUserRepository(db *DB) UserRepository {
 	}
 }
 
-const userTable = "users"
-
 // CreateUser inserts a new user record into the database.
 func (u *userRepository) CreateUser(ctx context.Context, user *models.User) error {
 	// Set timestamps if they are zero-valued

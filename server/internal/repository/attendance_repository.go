@@ -28,8 +28,6 @@ type AttendanceRepository interface {
 	GetAttendanceByLecture(ctx context.Context, collegeID int, lectureID int, courseID int, limit, offset uint64) ([]*models.Attendance, error)
 }
 
-const attendanceTable = "attendance"
-
 type PoolExecutor interface {
 	pgxscan.Querier
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
@@ -83,7 +81,7 @@ func (a *attendanceRepository) MarkAttendance(ctx context.Context, collegeID int
     	$1, $2, $3, $4, $5, $6, $7
 	) ON CONFLICT (student_id, course_id, lecture_id, date, college_id)
 	DO UPDATE SET scanned_at = EXCLUDED.scanned_at, status = EXCLUDED.status
-	RETURNING *`
+	RETURNING id, student_id, course_id, college_id, date, status, scanned_at, lecture_id`
 
 	var result models.Attendance
 	err := pgxscan.Get(ctx, a.Pool, &result, sql, int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), attendanceDate, "Present", now)

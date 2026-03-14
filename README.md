@@ -15,6 +15,25 @@ Tidy modules: task tidy
 Build the app: task build
 Generate and view coverage
 
+Demo workflow:
+1. `task db:start`
+2. `task db:migrate`
+3. `task db:seed-demo`
+4. `task verify:demo`
+5. `task dev`
+
+Demo accounts seeded by `task db:seed-demo`:
+- `admin.demo@eduhub.local / EduHub#2026!LocalSeed$A7q2`
+- `faculty.demo@eduhub.local / EduHub#2026!LocalSeed$A7q2`
+- `student.demo@eduhub.local / EduHub#2026!LocalSeed$A7q2`
+- `parent.demo@eduhub.local / EduHub#2026!LocalSeed$A7q2`
+
+`task db:seed-demo` is authoritative and self-validating: it reconciles the local DB rows and Kratos identities, then verifies each account through `POST /auth/login`.
+
+`task verify:demo` is the canonical demo gate. It runs the server build/tests/lint, client typecheck/lint/build/Jest suite, checks that the DB is at the latest migration, reseeds and verifies the demo users, then runs the seeded Playwright demo suite (route-access smoke coverage plus auth, student experience, faculty tools, and admin operations workflows).
+
+Demo verification and smoke runs use isolated Next.js build output directories so they can run safely alongside an active `next dev` session without corrupting production assets.
+
 
 ```bash
 curl -s -X GET \

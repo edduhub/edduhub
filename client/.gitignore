@@ -12,10 +12,14 @@
 
 # testing
 /coverage
+.next-demo*/
+playwright-report/
+test-results/
 *.out
 
 # next.js
 /.next/
+.next/
 /out/
 
 # production

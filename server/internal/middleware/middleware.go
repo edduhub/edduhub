@@ -25,7 +25,6 @@ func NewMiddleware(svc *services.Services) *Middleware {
 		svc.Auth,            // TokenValidator – the full auth.AuthService satisfies it
 		svc.StudentService,  // StudentLoader  – student.StudentService satisfies it
 		nil,                 // hydra: already embedded inside svc.Auth
-		nil,                 // jwtManager: already embedded inside svc.Auth
 	)
 
 	return &Middleware{Auth: authMiddleware}

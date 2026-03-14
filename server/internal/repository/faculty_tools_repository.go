@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"eduhub/server/internal/models"
 
@@ -53,11 +52,18 @@ func (r *facultyToolsRepository) ResolveUserIDByKratosID(ctx context.Context, kr
 }
 
 func (r *facultyToolsRepository) CreateRubric(ctx context.Context, rubric *models.GradingRubric) error {
-	tx, err := r.DB.Pool.Begin(ctx)
+	beginner, ok := r.DB.Pool.(BeginPool)
+	if !ok {
+		return fmt.Errorf("transaction support is required")
+	}
+
+	tx, err := beginner.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	insertRubric := `
 		INSERT INTO grading_rubrics (
@@ -111,11 +117,18 @@ func (r *facultyToolsRepository) CreateRubric(ctx context.Context, rubric *model
 }
 
 func (r *facultyToolsRepository) UpdateRubric(ctx context.Context, rubric *models.GradingRubric) error {
-	tx, err := r.DB.Pool.Begin(ctx)
+	beginner, ok := r.DB.Pool.(BeginPool)
+	if !ok {
+		return fmt.Errorf("transaction support is required")
+	}
+
+	tx, err := beginner.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
 	updateRubric := `
 		UPDATE grading_rubrics
@@ -448,7 +461,6 @@ func (r *facultyToolsRepository) ListOfficeHours(ctx context.Context, collegeID 
 	if activeOnly {
 		query += fmt.Sprintf(` AND oh.is_active = $%d`, argPos)
 		args = append(args, true)
-		argPos++
 	}
 	query += ` ORDER BY oh.day_of_week ASC, oh.start_time ASC`
 
@@ -571,7 +583,6 @@ func (r *facultyToolsRepository) ListBookings(ctx context.Context, collegeID int
 	if facultyID != nil {
 		query += fmt.Sprintf(` AND oh.faculty_id = $%d`, argPos)
 		args = append(args, *facultyID)
-		argPos++
 	}
 	query += ` ORDER BY b.booking_date DESC, b.start_time ASC, b.id DESC`
 
@@ -646,16 +657,4 @@ func (r *facultyToolsRepository) UpdateBookingStatus(ctx context.Context, colleg
 		return nil, err
 	}
 	return item, nil
-}
-
-func parseTimeHHMM(in string) (string, error) {
-	if in == "" {
-		return "", fmt.Errorf("time is required")
-	}
-	for _, layout := range []string{"15:04", "15:04:05"} {
-		if t, err := time.Parse(layout, in); err == nil {
-			return t.Format("15:04"), nil
-		}
-	}
-	return "", fmt.Errorf("invalid time format")
 }

@@ -26,7 +26,7 @@ type File struct {
 	Description string    `json:"description" db:"description"`
 	Category    string    `json:"category" db:"category"` // assignment, lecture, profile, document, etc.
 	FolderID    *int      `json:"folder_id" db:"folder_id"`
-	CurrentVersionID int  `json:"current_version_id" db:"current_version_id"`
+	CurrentVersionID *int `json:"current_version_id" db:"current_version_id"`
 	UploadedBy  int       `json:"uploaded_by" db:"uploaded_by"`
 	IsPublic    bool      `json:"is_public" db:"is_public"`
 	Tags        []string  `json:"tags" db:"tags"` // JSON array of tags

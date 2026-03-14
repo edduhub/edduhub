@@ -46,11 +46,6 @@ func NewRedisTokenStore(client *redis.Client) *RedisTokenStore {
 	}
 }
 
-// tokenKeys generates Redis keys for token storage
-func (r *RedisTokenStore) tokenKeys() string {
-	return "edduhub:tokens"
-}
-
 // refreshTokenKey generates the key for a refresh token
 func (r *RedisTokenStore) refreshTokenKey(tokenID string) string {
 	return fmt.Sprintf("edduhub:refresh:%s", tokenID)

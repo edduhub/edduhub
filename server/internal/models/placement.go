@@ -1,11 +1,6 @@
 package models
 
-import (
-	"database/sql/driver"
-	"encoding/json"
-	"errors"
-	"time"
-)
+import "time"
 
 // Placement represents a job placement/recruitment drive record.
 type Placement struct {
@@ -21,7 +16,7 @@ type Placement struct {
 	SalaryRangeMin      *float64    `db:"salary_range_min" json:"salary_range_min,omitempty"`
 	SalaryRangeMax      *float64    `db:"salary_range_max" json:"salary_range_max,omitempty"`
 	SalaryCurrency      string      `db:"salary_currency" json:"salary_currency"`
-	RequiredSkills      StringArray `db:"required_skills" json:"required_skills,omitempty"`
+	RequiredSkills      []string    `db:"required_skills" json:"required_skills,omitempty"`
 	EligibilityCriteria *string     `db:"eligibility_criteria" json:"eligibility_criteria,omitempty"`
 	ApplicationDeadline *time.Time  `db:"application_deadline" json:"application_deadline,omitempty"`
 	DriveDate           *time.Time  `db:"drive_date" json:"drive_date,omitempty"`
@@ -69,30 +64,6 @@ type PlacementInterview struct {
 
 	// Relations
 	Application *PlacementApplication `db:"-" json:"application,omitempty"`
-}
-
-// StringArray is a custom type for PostgreSQL TEXT[] array
-type StringArray []string
-
-// Value implements driver.Valuer for StringArray
-func (a StringArray) Value() (driver.Value, error) {
-	if a == nil {
-		return nil, nil
-	}
-	return json.Marshal(a)
-}
-
-// Scan implements sql.Scanner for StringArray
-func (a *StringArray) Scan(value any) error {
-	if value == nil {
-		*a = nil
-		return nil
-	}
-	bytes, ok := value.([]byte)
-	if !ok {
-		return errors.New("failed to scan StringArray: not a byte slice")
-	}
-	return json.Unmarshal(bytes, a)
 }
 
 // Placement status constants

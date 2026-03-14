@@ -21,20 +21,22 @@ type departmentService struct {
 }
 
 func NewDepartmentService(departmentRepo repository.DepartmentRepository) DepartmentService {
-	return &departmentService{
-		departmentRepo: departmentRepo,
-	}
+	return &departmentService{departmentRepo: departmentRepo}
 }
 
 func (s *departmentService) CreateDepartment(ctx context.Context, department *models.Department) error {
 	if department == nil {
 		return errors.New("department cannot be nil")
 	}
+	if department.Code == "" {
+		department.Code = department.Name
+	}
+	department.IsActive = true
 	return s.departmentRepo.CreateDepartment(ctx, department)
 }
 
 func (s *departmentService) GetDepartment(ctx context.Context, collegeID int, departmentID int) (*models.Department, error) {
-	return s.departmentRepo.GetDepartmentByID(ctx, departmentID, collegeID)
+	return s.departmentRepo.GetDepartmentByID(ctx, collegeID, departmentID)
 }
 
 func (s *departmentService) GetDepartments(ctx context.Context, collegeID int, limit, offset uint64) ([]*models.Department, error) {
@@ -45,9 +47,9 @@ func (s *departmentService) GetDepartments(ctx context.Context, collegeID int, l
 }
 
 func (s *departmentService) UpdateDepartment(ctx context.Context, collegeID int, departmentID int, req *models.UpdateDepartmentRequest) error {
-	return s.departmentRepo.UpdateDepartmentPartial(ctx, req)
+	return s.departmentRepo.UpdateDepartmentPartial(ctx, collegeID, departmentID, req)
 }
 
 func (s *departmentService) DeleteDepartment(ctx context.Context, collegeID int, departmentID int) error {
-	return s.departmentRepo.DeleteDepartment(ctx, departmentID, collegeID)
+	return s.departmentRepo.DeleteDepartment(ctx, collegeID, departmentID)
 }

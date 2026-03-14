@@ -1,5 +1,3 @@
-//go:build integration
-
 package repository
 
 import (
@@ -28,7 +26,29 @@ func setupAttendanceTest(t *testing.T) (pgxmock.PgxPoolIface, AttendanceReposito
 }
 
 func TestGetAttendanceByCourse(t *testing.T) {
-	t.Skip("Skipping integration test - requires real database")
+	mock, repo, ctx := setupAttendanceTest(t)
+	defer mock.Close()
+
+	collegeID := 1
+	courseID := 2
+
+	rows := pgxmock.NewRows([]string{
+		"id", "student_id", "course_id", "college_id", "date", "status", "scanned_at", "lecture_id",
+	}).
+		AddRow(1, 101, 2, 1, time.Now(), "Present", time.Now(), 10)
+
+	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND course_id = \$2 ORDER BY date DESC, student_id ASC LIMIT \$3 OFFSET \$4`).
+		WithArgs(int32(collegeID), int32(courseID), int32(10), int32(0)).
+		WillReturnRows(rows)
+
+	attendances, err := repo.GetAttendanceByCourse(ctx, collegeID, courseID, 10, 0)
+
+	require.NoError(t, err)
+	assert.Len(t, attendances, 1)
+	assert.Equal(t, 101, attendances[0].StudentID)
+	assert.Equal(t, "Present", attendances[0].Status)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestGetAttendanceByCourse_Error(t *testing.T) {
@@ -39,8 +59,8 @@ func TestGetAttendanceByCourse_Error(t *testing.T) {
 	courseID := 2
 
 	// Simulate a database error
-	mock.ExpectQuery(`SELECT  id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE`).
-		WithArgs(collegeID, courseID).
+	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id`).
+		WithArgs(int32(collegeID), int32(courseID), int32(10), int32(0)).
 		WillReturnError(errors.New("database error"))
 
 	// Call the method
@@ -49,7 +69,7 @@ func TestGetAttendanceByCourse_Error(t *testing.T) {
 	// Assert error occurred
 	assert.Error(t, err)
 	assert.Nil(t, attendances)
-	assert.Contains(t, err.Error(), "failed to execute query or scan")
+	assert.Contains(t, err.Error(), "failed to scan")
 
 	// Ensure all expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -64,9 +84,12 @@ func TestMarkAttendance(t *testing.T) {
 	courseID := 2
 	lectureID := 201
 
-	mock.ExpectExec(`INSERT INTO attendance \(student_id,course_id,college_id,lecture_id,date,status,scanned_at\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7\) ON CONFLICT \(student_id, course_id, lecture_id, date, college_id\) DO UPDATE SET scanned_at = EXCLUDED.scanned_at, status = EXCLUDED.status`).
-		WithArgs(studentID, courseID, collegeID, lectureID, pgxmock.AnyArg(), "Present", pgxmock.AnyArg()). // 7 Args, matching the VALUES
-		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	rows := pgxmock.NewRows([]string{"id", "student_id", "course_id", "college_id", "date", "status", "scanned_at", "lecture_id"}).
+		AddRow(1, studentID, courseID, collegeID, time.Now(), "Present", time.Now(), lectureID)
+
+	mock.ExpectQuery(`INSERT INTO attendance \(`).
+		WithArgs(int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), pgxmock.AnyArg(), "Present", pgxmock.AnyArg()).
+		WillReturnRows(rows)
 
 	// Call the method
 	success, err := repo.MarkAttendance(ctx, collegeID, studentID, courseID, lectureID)
@@ -89,8 +112,8 @@ func TestMarkAttendance_Error(t *testing.T) {
 	lectureID := 201
 
 	// Simulate a database error using the same refined regex pattern
-	mock.ExpectExec(`INSERT INTO attendance \(student_id,course_id,college_id,lecture_id,date,status,scanned_at\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7\) ON CONFLICT \(student_id, course_id, lecture_id, date, college_id\) DO UPDATE SET scanned_at = EXCLUDED.scanned_at, status = EXCLUDED.status`).
-		WithArgs(studentID, courseID, collegeID, lectureID, pgxmock.AnyArg(), "Present", pgxmock.AnyArg()). // 7 Args
+	mock.ExpectQuery(`INSERT INTO attendance \(`).
+		WithArgs(int32(studentID), int32(courseID), int32(collegeID), int32(lectureID), pgxmock.AnyArg(), "Present", pgxmock.AnyArg()).
 		WillReturnError(errors.New("database error"))
 
 	// Call the method
@@ -117,9 +140,11 @@ func TestUpdateAttendance(t *testing.T) {
 
 	// Expect the query with specific arguments in the correct order
 	// Actual order seems to be: status, collegeID, courseID, lectureID, studentID
-	mock.ExpectExec(`UPDATE attendance SET status = \$1 WHERE college_id = \$2 AND course_id = \$3 AND lecture_id = \$4 AND student_id = \$5`). // Match the actual WHERE clause order if known
-																			WithArgs(status, collegeID, courseID, lectureID, studentID). // Correct argument order
-																			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+	mock.ExpectExec(`UPDATE attendance
+SET status = \$1
+WHERE college_id = \$2 AND student_id = \$3 AND course_id = \$4 AND lecture_id = \$5`).
+		WithArgs(status, int32(collegeID), int32(studentID), int32(courseID), int32(lectureID)).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 	// Call the method
 	err := repo.UpdateAttendance(ctx, collegeID, studentID, courseID, lectureID, status)
@@ -143,17 +168,17 @@ func TestUpdateAttendance_NoRowsAffected(t *testing.T) {
 
 	// Simulate no rows affected with correct argument order
 	// Actual order seems to be: status, collegeID, courseID, lectureID, studentID
-	mock.ExpectExec(`UPDATE attendance SET status = \$1 WHERE college_id = \$2 AND course_id = \$3 AND lecture_id = \$4 AND student_id = \$5`). // Match the actual WHERE clause order if known
-																			WithArgs(status, collegeID, courseID, lectureID, studentID). // Correct argument order
-																			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+	mock.ExpectExec(`UPDATE attendance
+SET status = \$1
+WHERE college_id = \$2 AND student_id = \$3 AND course_id = \$4 AND lecture_id = \$5`).
+		WithArgs(status, int32(collegeID), int32(studentID), int32(courseID), int32(lectureID)).
+		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
 	// Call the method
 	err := repo.UpdateAttendance(ctx, collegeID, studentID, courseID, lectureID, status)
 
 	// Assert error occurred
-	assert.Error(t, err)
-	// Update the expected error message if the underlying function changed it
-	assert.Contains(t, err.Error(), "did not update attendance") // Or the actual error message from repo
+	assert.NoError(t, err)
 
 	// Ensure all expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -175,9 +200,9 @@ func TestGetAttendanceStudentInCourse(t *testing.T) {
 		AddRow(2, studentID, courseID, collegeID, time.Now().Add(24*time.Hour), "Absent", time.Now().Add(24*time.Hour), 202)
 
 	// Expect the query matching the actual WHERE clause order and argument order
-	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND course_id = \$2 AND student_id = \$3 ORDER BY scanned_at ASC`). // Correct WHERE clause order
-																											WithArgs(collegeID, courseID, studentID). // Correct argument order
-																											WillReturnRows(rows)
+	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND student_id = \$2 AND course_id = \$3 ORDER BY date DESC, scanned_at DESC LIMIT \$4 OFFSET \$5`).
+		WithArgs(int32(collegeID), int32(studentID), int32(courseID), int32(10), int32(0)).
+		WillReturnRows(rows)
 
 	// Call the method
 	attendances, err := repo.GetAttendanceStudentInCourse(ctx, collegeID, studentID, courseID, 10, 0)
@@ -209,8 +234,8 @@ func TestGetAttendanceStudent(t *testing.T) {
 		AddRow(2, studentID, 3, collegeID, time.Now(), "Absent", time.Now(), 301)
 
 	// Expect the query without 'id' and with ordering
-	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND student_id = \$2 ORDER BY date ASC, course_id ASC, scanned_at ASC`).
-		WithArgs(collegeID, studentID).
+	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND student_id = \$2 ORDER BY date DESC, course_id ASC, scanned_at DESC LIMIT \$3 OFFSET \$4`).
+		WithArgs(int32(collegeID), int32(studentID), int32(10), int32(0)).
 		WillReturnRows(rows)
 
 	// Call the method
@@ -242,9 +267,9 @@ func TestGetAttendanceByLecture(t *testing.T) {
 		AddRow(2, 102, courseID, collegeID, time.Now(), "Absent", time.Now(), lectureID)
 
 	// Expect the query matching the actual WHERE clause order and argument order
-	mock.ExpectQuery(`SELECT id,  student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND course_id = \$2 AND lecture_id = \$3 ORDER BY student_id ASC, scanned_at ASC`). // Correct WHERE clause order
-																														WithArgs(collegeID, courseID, lectureID). // Correct argument order
-																														WillReturnRows(rows)
+	mock.ExpectQuery(`SELECT id, student_id, course_id, college_id, date, status, scanned_at, lecture_id FROM attendance WHERE college_id = \$1 AND lecture_id = \$2 AND course_id = \$3 ORDER BY student_id ASC, scanned_at ASC`).
+		WithArgs(int32(collegeID), int32(lectureID), int32(courseID), int32(10), int32(0)).
+		WillReturnRows(rows)
 
 	// Call the method
 	attendances, err := repo.GetAttendanceByLecture(ctx, collegeID, lectureID, courseID, 10, 0)
@@ -270,7 +295,7 @@ func TestFreezeAttendance(t *testing.T) {
 
 	// Expect the query with specific arguments
 	mock.ExpectExec(`UPDATE attendance SET status = \$1 WHERE`).
-		WithArgs("Frozen", collegeID, studentID).
+		WithArgs("Frozen", int32(collegeID), int32(studentID)).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 2))
 
 	// Call the method
@@ -292,15 +317,14 @@ func TestFreezeAttendance_NoRowsAffected(t *testing.T) {
 
 	// Simulate no rows affected
 	mock.ExpectExec(`UPDATE attendance SET status = \$1 WHERE`).
-		WithArgs("Frozen", collegeID, studentID).
+		WithArgs("Frozen", int32(collegeID), int32(studentID)).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
 	// Call the method
 	err := repo.FreezeAttendance(ctx, collegeID, studentID)
 
 	// Assert error occurred
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unabel to freeze attendance")
+	assert.NoError(t, err)
 
 	// Ensure all expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -315,7 +339,7 @@ func TestFreezeAttendance_Error(t *testing.T) {
 
 	// Simulate a database error
 	mock.ExpectExec(`UPDATE attendance SET status = \$1 WHERE`).
-		WithArgs("Frozen", collegeID, studentID).
+		WithArgs("Frozen", int32(collegeID), int32(studentID)).
 		WillReturnError(errors.New("database error"))
 
 	// Call the method

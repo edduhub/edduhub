@@ -2,10 +2,13 @@ package notification
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"eduhub/server/internal/models"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -121,4 +124,53 @@ func TestWebSocketService_GetConnectionStats(t *testing.T) {
 		assert.Contains(t, stats, "colleges")
 		assert.Equal(t, 0, stats["total_connections"])
 	})
+}
+
+func TestWebSocketService_StopIsSafe(t *testing.T) {
+	mockRepo := new(mockNotificationRepository)
+	service := NewWebSocketService(mockRepo, []string{"http://localhost:3000"})
+
+	assert.NotPanics(t, func() {
+		service.Stop()
+		service.Stop()
+	})
+}
+
+func TestExtractCollegeIDFromContext(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest("GET", "/api/notifications/ws", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set("college_id", 42)
+
+	collegeID, err := extractCollegeIDFromContext(c)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 42, collegeID)
+}
+
+func TestExtractCollegeIDFromContext_Missing(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest("GET", "/api/notifications/ws", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	collegeID, err := extractCollegeIDFromContext(c)
+
+	assert.Error(t, err)
+	assert.Zero(t, collegeID)
+}
+
+func TestNewWebSocketMessage_UsesEnvelopeFields(t *testing.T) {
+	nowBefore := time.Now()
+	notification := &models.Notification{ID: 7, Title: "Demo"}
+
+	message := newWebSocketMessage("notification", 9, 13, notification, map[string]string{"state": "ok"})
+
+	assert.Equal(t, "notification", message.Type)
+	assert.Equal(t, 9, message.CollegeID)
+	assert.Equal(t, 13, message.UserID)
+	assert.Equal(t, notification, message.Notification)
+	assert.Equal(t, map[string]string{"state": "ok"}, message.Data)
+	assert.WithinDuration(t, nowBefore, message.Timestamp, time.Second)
 }

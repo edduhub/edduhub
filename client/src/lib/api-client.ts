@@ -1,25 +1,24 @@
 // Enhanced API client with authentication support, retry logic, and better error handling
 
-import { AuthSession, ValidationError, Quiz, Profile, User } from './types';
+import { ValidationError, Quiz, Profile, User } from './types';
 import { APIError as CustomAPIError } from './errors';
 import { logger } from './logger';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-const AUTH_STORAGE_KEY = 'edduhub_auth';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const auth = localStorage.getItem(AUTH_STORAGE_KEY);
-  if (!auth) return null;
-  try {
-    const session = JSON.parse(auth) as AuthSession;
-    return session.token;
-  } catch (err) {
-    logger.error('Failed to parse auth token', err as Error);
-    return null;
-  }
+export function getAPIBase(): string {
+  return API_BASE;
+}
+
+export function getAuthToken(): string | null {
+  return null;
+}
+
+export function buildAuthHeaders(headers?: HeadersInit): Headers {
+  const resolvedHeaders = new Headers(headers);
+  return resolvedHeaders;
 }
 
 // Re-export APIError from errors module for backward compatibility
@@ -98,17 +97,11 @@ export async function apiClient<T>(
     retryDelay = RETRY_DELAY
   } = options;
 
-  const token = getAuthToken();
-
   const requestHeaders: HeadersInit = {
     'Content-Type': 'application/json',
     'X-Client-Version': '1.0.0',
     ...headers,
   };
-
-  if (requireAuth && token) {
-    requestHeaders['Authorization'] = `Bearer ${token}`;
-  }
 
   const config: RequestInit = {
     method,
@@ -150,10 +143,6 @@ export async function apiClient<T>(
 
       // Handle authentication errors
       if (response.status === 401) {
-        // Clear invalid token
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem(AUTH_STORAGE_KEY);
-        }
         // Redirect to login
         if (typeof window !== 'undefined') {
           window.location.href = '/auth/login';
@@ -352,6 +341,7 @@ export const endpoints = {
     markAsRead: (id: number) => `/api/notifications/${id}/read`,
     markAllAsRead: '/api/notifications/mark-all-read',
     delete: (id: number) => `/api/notifications/${id}`,
+    ws: '/api/notifications/ws',
   },
 
   // Quizzes
@@ -582,6 +572,7 @@ export const endpoints = {
   // Self-Service
   selfService: {
     requests: '/api/self-service/requests',
+    allRequests: '/api/self-service/all-requests',
     request: (requestId: number) => `/api/self-service/requests/${requestId}`,
     types: '/api/self-service/types',
     updateRequest: (requestId: number) => `/api/self-service/requests/${requestId}`,

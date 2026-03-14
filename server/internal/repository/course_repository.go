@@ -14,7 +14,6 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"eduhub/server/internal/models"
 )
@@ -55,7 +54,7 @@ type CourseRepository interface {
 
 // courseRepository implements the CourseRepository interface
 type courseRepository struct {
-	Pool *pgxpool.Pool
+	Pool PoolIface
 }
 
 // NewCourseRepository creates a new instance of CourseRepository

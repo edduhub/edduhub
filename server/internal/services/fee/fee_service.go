@@ -260,9 +260,13 @@ func (s *feeService) MakeFeePayment(ctx context.Context, req *models.MakeFeePaym
 	remainingAmount := assignment.Amount - paidAmount - assignment.WaiverAmount
 
 	if remainingAmount <= 0 {
-		s.feeRepo.UpdateFeeAssignmentStatus(ctx, req.FeeAssignmentID, "paid")
+		if err := s.feeRepo.UpdateFeeAssignmentStatus(ctx, req.FeeAssignmentID, "paid"); err != nil {
+			return nil, fmt.Errorf("failed to update fee assignment status: %w", err)
+		}
 	} else {
-		s.feeRepo.UpdateFeeAssignmentStatus(ctx, req.FeeAssignmentID, "partial")
+		if err := s.feeRepo.UpdateFeeAssignmentStatus(ctx, req.FeeAssignmentID, "partial"); err != nil {
+			return nil, fmt.Errorf("failed to update fee assignment status: %w", err)
+		}
 	}
 
 	return payment, nil
@@ -368,9 +372,13 @@ func (s *feeService) VerifyPayment(ctx context.Context, req *models.ConfirmOnlin
 	remainingAmount := assignment.Amount - paidAmount - assignment.WaiverAmount
 
 	if remainingAmount <= 0 {
-		s.feeRepo.UpdateFeeAssignmentStatus(ctx, payment.FeeAssignmentID, "paid")
+		if err := s.feeRepo.UpdateFeeAssignmentStatus(ctx, payment.FeeAssignmentID, "paid"); err != nil {
+			return fmt.Errorf("failed to update fee assignment status: %w", err)
+		}
 	} else {
-		s.feeRepo.UpdateFeeAssignmentStatus(ctx, payment.FeeAssignmentID, "partial")
+		if err := s.feeRepo.UpdateFeeAssignmentStatus(ctx, payment.FeeAssignmentID, "partial"); err != nil {
+			return fmt.Errorf("failed to update fee assignment status: %w", err)
+		}
 	}
 
 	return nil

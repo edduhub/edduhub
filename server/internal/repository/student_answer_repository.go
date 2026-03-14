@@ -48,11 +48,6 @@ func NewStudentAnswerRepository(db *DB) StudentAnswerRepository {
 	return &studentAnswerRepository{DB: db}
 }
 
-// Table constants for student answer operations
-const (
-	studentAnswerTable = "student_answers"
-)
-
 // CreateStudentAnswer creates a new student answer in the database.
 // It automatically sets CreatedAt and UpdatedAt timestamps.
 // Uses UPSERT (ON CONFLICT) to handle duplicate answers for the same question in the same attempt.
@@ -62,22 +57,37 @@ func (r *studentAnswerRepository) CreateStudentAnswer(ctx context.Context, answe
 	now := time.Now()
 	answer.CreatedAt = now
 	answer.UpdatedAt = now
+	selectedOptionID := firstSelectedOptionID(answer.SelectedOptionID)
 
 	// SQL query with UPSERT to handle conflicts
-	sql := `INSERT INTO student_answers (quiz_attempt_id, question_id, selected_option_id, answer_text, is_correct, points_awarded, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	sql := `INSERT INTO student_answers (
+			attempt_id,
+			quiz_attempt_id,
+			question_id,
+			selected_option_id,
+			answer_text,
+			is_correct,
+			marks_awarded,
+			points_awarded,
+			created_at,
+			updated_at
+		)
+			VALUES ($1, $1, $2, $3, $4, $5, $6, $6, $7, $8)
 			ON CONFLICT (quiz_attempt_id, question_id)
-			DO UPDATE SET selected_option_id = EXCLUDED.selected_option_id,
+			DO UPDATE SET attempt_id = EXCLUDED.attempt_id,
+						 quiz_attempt_id = EXCLUDED.quiz_attempt_id,
+						 selected_option_id = EXCLUDED.selected_option_id,
 						 answer_text = EXCLUDED.answer_text,
 						 is_correct = EXCLUDED.is_correct,
+						 marks_awarded = EXCLUDED.marks_awarded,
 						 points_awarded = EXCLUDED.points_awarded,
 						 updated_at = EXCLUDED.updated_at
 			RETURNING id`
 
 	// Prepare arguments in correct order
-	args := []any{answer.QuizAttemptID, answer.QuestionID, answer.SelectedOptionID,
-				 answer.AnswerText, answer.IsCorrect, answer.PointsAwarded,
-				 answer.CreatedAt, answer.UpdatedAt}
+	args := []any{answer.QuizAttemptID, answer.QuestionID, selectedOptionID,
+		answer.AnswerText, answer.IsCorrect, answer.PointsAwarded,
+		answer.CreatedAt, answer.UpdatedAt}
 
 	// Execute query and scan the returned ID
 	temp := struct {
@@ -99,7 +109,15 @@ func (r *studentAnswerRepository) GetStudentAnswerByID(ctx context.Context, coll
 	answer := &models.StudentAnswer{}
 
 	// Query with college isolation through JOIN
-	sql := `SELECT sa.id, sa.quiz_attempt_id, sa.question_id, sa.selected_option_id, sa.answer_text, sa.is_correct, sa.points_awarded, sa.created_at, sa.updated_at
+	sql := `SELECT sa.id,
+			COALESCE(sa.quiz_attempt_id, sa.attempt_id) AS quiz_attempt_id,
+			sa.question_id,
+			CASE WHEN sa.selected_option_id IS NULL THEN NULL ELSE ARRAY[sa.selected_option_id] END AS selected_option_id,
+			sa.answer_text,
+			sa.is_correct,
+			COALESCE(sa.points_awarded, sa.marks_awarded) AS points_awarded,
+			sa.created_at,
+			sa.updated_at
 			FROM student_answers sa
 			JOIN quiz_attempts qa ON sa.quiz_attempt_id = qa.id
 			WHERE sa.id = $1 AND qa.college_id = $2`
@@ -124,7 +142,7 @@ func (r *studentAnswerRepository) UpdateStudentAnswer(ctx context.Context, colle
 	answer.UpdatedAt = time.Now()
 
 	// Update query with college isolation through subquery
-	sql := `UPDATE student_answers SET is_correct = $1, points_awarded = $2, updated_at = $3
+	sql := `UPDATE student_answers SET is_correct = $1, marks_awarded = $2, points_awarded = $2, updated_at = $3
 			WHERE id = $4 AND quiz_attempt_id IN (SELECT id FROM quiz_attempts WHERE college_id = $5)`
 	args := []any{answer.IsCorrect, answer.PointsAwarded, answer.UpdatedAt, answer.ID, collegeID}
 
@@ -147,7 +165,15 @@ func (r *studentAnswerRepository) UpdateStudentAnswer(ctx context.Context, colle
 func (r *studentAnswerRepository) FindStudentAnswersByAttempt(ctx context.Context, collegeID int, attemptID int, limit, offset uint64) ([]*models.StudentAnswer, error) {
 	answers := []*models.StudentAnswer{}
 
-	sql := `SELECT sa.id, sa.quiz_attempt_id, sa.question_id, sa.selected_option_id, sa.answer_text, sa.is_correct, sa.points_awarded, sa.created_at, sa.updated_at
+	sql := `SELECT sa.id,
+			COALESCE(sa.quiz_attempt_id, sa.attempt_id) AS quiz_attempt_id,
+			sa.question_id,
+			CASE WHEN sa.selected_option_id IS NULL THEN NULL ELSE ARRAY[sa.selected_option_id] END AS selected_option_id,
+			sa.answer_text,
+			sa.is_correct,
+			COALESCE(sa.points_awarded, sa.marks_awarded) AS points_awarded,
+			sa.created_at,
+			sa.updated_at
 			FROM student_answers sa
 			JOIN quiz_attempts qa ON sa.quiz_attempt_id = qa.id
 			WHERE sa.quiz_attempt_id = $1 AND qa.college_id = $2
@@ -169,7 +195,15 @@ func (r *studentAnswerRepository) FindStudentAnswersByAttempt(ctx context.Contex
 func (r *studentAnswerRepository) GetStudentAnswerForQuestion(ctx context.Context, collegeID int, attemptID int, questionID int) (*models.StudentAnswer, error) {
 	answer := &models.StudentAnswer{}
 
-	sql := `SELECT sa.id, sa.quiz_attempt_id, sa.question_id, sa.selected_option_id, sa.answer_text, sa.is_correct, sa.points_awarded, sa.created_at, sa.updated_at
+	sql := `SELECT sa.id,
+			COALESCE(sa.quiz_attempt_id, sa.attempt_id) AS quiz_attempt_id,
+			sa.question_id,
+			CASE WHEN sa.selected_option_id IS NULL THEN NULL ELSE ARRAY[sa.selected_option_id] END AS selected_option_id,
+			sa.answer_text,
+			sa.is_correct,
+			COALESCE(sa.points_awarded, sa.marks_awarded) AS points_awarded,
+			sa.created_at,
+			sa.updated_at
 			FROM student_answers sa
 			JOIN quiz_attempts qa ON sa.quiz_attempt_id = qa.id
 			WHERE sa.quiz_attempt_id = $1 AND sa.question_id = $2 AND qa.college_id = $3`
@@ -184,4 +218,13 @@ func (r *studentAnswerRepository) GetStudentAnswerForQuestion(ctx context.Contex
 	}
 
 	return answer, nil
+}
+
+func firstSelectedOptionID(selectedOptionID *[]int) *int {
+	if selectedOptionID == nil || len(*selectedOptionID) == 0 {
+		return nil
+	}
+
+	value := (*selectedOptionID)[0]
+	return &value
 }

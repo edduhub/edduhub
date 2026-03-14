@@ -10,7 +10,6 @@ type AuthConfig struct {
 	AdminURL          string
 	Domain            string
 	Port              string
-	JWTSecret         string
 	College           CollegeConfig
 	HydraPublicURL    string
 	HydraAdminURL     string
@@ -26,22 +25,11 @@ type CollegeConfig struct {
 }
 
 func LoadAuthConfig() (*AuthConfig, error) {
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
-	}
-
-	// SECURITY: Enforce minimum secret length for security
-	if len(jwtSecret) < 32 {
-		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters for adequate security")
-	}
-
 	config := &AuthConfig{
 		PublicURL:         os.Getenv("KRATOS_PUBLIC_URL"),
 		AdminURL:          os.Getenv("KRATOS_ADMIN_URL"),
 		Domain:            os.Getenv("KRATOS_DOMAIN"),
 		Port:              os.Getenv("PORT"),
-		JWTSecret:         jwtSecret,
 		HydraPublicURL:    os.Getenv("HYDRA_PUBLIC_URL"),
 		HydraAdminURL:     os.Getenv("HYDRA_ADMIN_URL"),
 		HydraClientID:     os.Getenv("HYDRA_CLIENT_ID"),
@@ -57,6 +45,11 @@ func LoadAuthConfig() (*AuthConfig, error) {
 	// Validate required fields
 	if config.PublicURL == "" || config.AdminURL == "" {
 		return nil, fmt.Errorf("missing required Kratos configuration")
+	}
+
+	// Ensure full validation is applied
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	return config, nil

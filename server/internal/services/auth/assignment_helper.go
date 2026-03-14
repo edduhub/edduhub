@@ -25,7 +25,6 @@ func (a *Assigner) AssignFacultyToCourse(ctx context.Context, facultyID, courseI
 			return
 		}
 	}
-	return
 }
 
 func (a *Assigner) AssignStudentToCourse(ctx context.Context, studentID, courseID string) error {

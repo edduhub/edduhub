@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useStudents, useCreateStudent, useUpdateStudent } from "@/lib/api-hooks";
+import { buildAuthHeaders, getAPIBase } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,9 +96,10 @@ export default function StudentsPage() {
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/batch/students/export`, {
+      const resp = await fetch(`${getAPIBase()}/api/batch/students/export`, {
         method: 'GET',
         credentials: 'include',
+        headers: buildAuthHeaders(),
       });
       if (!resp.ok) throw new Error('Export failed');
       const blob = await resp.blob();

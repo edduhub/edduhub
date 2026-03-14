@@ -1,14 +1,10 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {
   Dialog,
   DialogTrigger,
-  DialogContent,
   DialogHeader,
   DialogFooter,
-  DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog';
 
 describe('DialogHeader', () => {

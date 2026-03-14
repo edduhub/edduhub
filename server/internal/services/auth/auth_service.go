@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"eduhub/server/internal/models"
-	"eduhub/server/pkg/jwt"
 )
 
 type AuthService interface {
 	// --- Kratos: identity registration & self-service ---
 	InitiateRegistrationFlow(ctx context.Context) (map[string]any, error)
-	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (string, *Identity, error)
+	CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error)
 	ValidateSession(ctx context.Context, sessionToken string) (*Identity, error)
 	InitiatePasswordReset(ctx context.Context, email string) error
 	CompletePasswordReset(ctx context.Context, flowID string, newPassword string) error
@@ -38,13 +38,9 @@ type AuthService interface {
 	// RefreshAccessToken exchanges a refresh token for a new token pair.
 	RefreshAccessToken(ctx context.Context, refreshToken string) (*OAuth2Token, error)
 
-	// --- Local JWT (optional fast-path) ---
-	// ValidateJWT validates a locally-signed JWT without calling Hydra.
-	ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error)
-	// RefreshToken rotates a local JWT token.
-	RefreshToken(ctx context.Context, token string) (string, error)
-	// Login performs a direct Kratos password login and issues a local JWT.
-	Login(ctx context.Context, email, password string) (string, *Identity, error)
+	// --- Direct Login ---
+	// Login performs a direct Kratos password login and returns the identity plus session token.
+	Login(ctx context.Context, email, password string) (*Identity, string, error)
 
 	// --- Keto: fine-grained access control ---
 	CheckPermission(ctx context.Context, identity *Identity, action, resource string) (bool, error)
@@ -58,22 +54,18 @@ type AuthService interface {
 	CheckCollegeAccess(identity *Identity, collegeID string) bool
 	HasRole(identity *Identity, role string) bool
 	ExtractStudentID(identity *Identity) (int, error)
+	ResolveCollegeID(ctx context.Context, externalID string) (int, error)
 }
 
 type authService struct {
 	Hydra          *hydraService
 	Auth           *kratosService
 	AuthZ          *ketoService
-	JWTManager     JWTManager
 	CollegeChecker CollegeChecker
 	UserStore      UserStore
 	ProfileStore   ProfileStore
 	CollegeStore   CollegeStore
-}
-
-type JWTManager interface {
-	Generate(userID int, kratosID, email, role, collegeID, firstName, lastName string) (string, error)
-	Verify(token string) (*jwt.JWTClaims, error)
+	StudentStore   StudentStore
 }
 
 type CollegeChecker interface {
@@ -95,19 +87,23 @@ type CollegeStore interface {
 	GetCollegeByExternalID(ctx context.Context, externalID string) (*models.College, error)
 }
 
-func NewAuthService(kratos *kratosService, keto *ketoService, jwtManager JWTManager) AuthService {
+type StudentStore interface {
+	FindByKratosID(ctx context.Context, kratosID string) (*models.Student, error)
+	CreateStudent(ctx context.Context, student *models.Student) error
+	UpdateStudent(ctx context.Context, student *models.Student) error
+}
+
+func NewAuthService(kratos *kratosService, keto *ketoService) AuthService {
 	return &authService{
-		Auth:       kratos,
-		AuthZ:      keto,
-		JWTManager: jwtManager,
+		Auth:  kratos,
+		AuthZ: keto,
 	}
 }
 
-func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, jwtManager JWTManager, collegeChecker CollegeChecker) AuthService {
+func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, collegeChecker CollegeChecker) AuthService {
 	return &authService{
 		Auth:           kratos,
 		AuthZ:          keto,
-		JWTManager:     jwtManager,
 		CollegeChecker: collegeChecker,
 	}
 }
@@ -118,13 +114,14 @@ func NewAuthServiceWithCollege(kratos *kratosService, keto *ketoService, jwtMana
 //   - kratos – Ory Kratos for identity management, registration, and self-service flows
 //   - keto   – Ory Keto for fine-grained relationship-based access control
 //
-// userRepo, profileRepo, and collegeRepo are checked against the UserStore, ProfileStore,
-// CollegeStore and CollegeChecker interfaces at run-time and wired in when satisfied.
-func NewAuthServiceWithDependencies(hydra *hydraService, kratos *kratosService, keto *ketoService, userRepo any, profileRepo any, collegeRepo any) AuthService {
+// userRepo, profileRepo, collegeRepo, and studentRepo are checked against the
+// UserStore, ProfileStore, CollegeStore, CollegeChecker, and StudentStore
+// interfaces at run-time and wired in when satisfied.
+func NewAuthServiceWithDependencies(hydra *hydraService, kratos *kratosService, keto *ketoService, userRepo any, profileRepo any, collegeRepo any, studentRepo any) AuthService {
 	service := &authService{
-		Hydra: hydra,
-		Auth:  kratos,
-		AuthZ: keto,
+		Hydra:      hydra,
+		Auth:       kratos,
+		AuthZ:      keto,
 	}
 
 	if us, ok := userRepo.(UserStore); ok {
@@ -139,55 +136,32 @@ func NewAuthServiceWithDependencies(hydra *hydraService, kratos *kratosService, 
 	if cc, ok := collegeRepo.(CollegeChecker); ok {
 		service.CollegeChecker = cc
 	}
+	if ss, ok := studentRepo.(StudentStore); ok {
+		service.StudentStore = ss
+	}
 
 	return service
 }
 
-func (a *authService) Login(ctx context.Context, email, password string) (string, *Identity, error) {
+func (a *authService) Login(ctx context.Context, email, password string) (*Identity, string, error) {
 	if a.Auth == nil {
-		return "", nil, fmt.Errorf("kratos service not configured")
+		return nil, "", fmt.Errorf("kratos service not configured")
 	}
 	// Authenticate with Kratos
-	identity, err := a.Auth.Login(ctx, email, password)
+	identity, sessionToken, err := a.Auth.Login(ctx, email, password)
 	if err != nil {
-		return "", nil, fmt.Errorf("authentication failed: %w", err)
+		return nil, "", fmt.Errorf("authentication failed: %w", err)
 	}
 
-	userID, err := a.resolveAndProvisionLocalIdentity(ctx, identity)
+	_, err = a.resolveAndProvisionLocalIdentity(ctx, identity)
 	if err != nil {
-		return "", nil, err
+		return nil, "", err
 	}
 
-	if a.JWTManager == nil {
-		// No local JWT manager – return empty token; callers should use OAuth2 flow.
-		return "", identity, nil
-	}
-
-	// Generate JWT token
-	token, err := a.JWTManager.Generate(
-		userID,
-		identity.ID,
-		identity.Traits.Email,
-		identity.Traits.Role,
-		identity.Traits.College.ID,
-		identity.Traits.Name.First,
-		identity.Traits.Name.Last,
-	)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate token: %w", err)
-	}
-
-	return token, identity, nil
+	return identity, sessionToken, nil
 }
 
 func (a *authService) ExtractStudentID(identity *Identity) (int, error) {
-	// In JWT-based authentication, the student ID can be extracted directly from JWT claims
-	// without needing middleware context. However, we need to implement the logic to
-	// find the student by kratos ID.
-
-	// We cannot access services from this layer, so this method signature should be
-	// changed to accept the student service, or the logic should be moved to middleware.
-	// For now, return error indicating this should be handled by middleware.
 	return 0, fmt.Errorf("ExtractStudentID requires service dependencies - use helpers.ExtractStudentID(c) with LoadStudentProfile middleware instead")
 }
 
@@ -195,67 +169,25 @@ func (a *authService) InitiateRegistrationFlow(ctx context.Context) (map[string]
 	return a.Auth.InitiateRegistrationFlow(ctx)
 }
 
-func (a *authService) CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (string, *Identity, error) {
+func (a *authService) CompleteRegistration(ctx context.Context, flowID string, req RegistrationRequest) (*Identity, error) {
 	identity, err := a.Auth.CompleteRegistration(ctx, flowID, req)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to complete registration: %w", err)
+		return nil, fmt.Errorf("failed to complete registration: %w", err)
 	}
 
-	userID, err := a.resolveAndProvisionLocalIdentity(ctx, identity)
+	_, err = a.resolveAndProvisionLocalIdentity(ctx, identity)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	if a.JWTManager == nil {
-		return "", identity, nil
-	}
-
-	// Generate JWT token
-	token, err := a.JWTManager.Generate(
-		userID,
-		identity.ID,
-		identity.Traits.Email,
-		identity.Traits.Role,
-		identity.Traits.College.ID,
-		identity.Traits.Name.First,
-		identity.Traits.Name.Last,
-	)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate token: %w", err)
-	}
-
-	return token, identity, nil
+	return identity, nil
 }
 
 func (a *authService) ValidateSession(ctx context.Context, sessionToken string) (*Identity, error) {
 	return a.Auth.ValidateSession(ctx, sessionToken)
 }
 
-func (a *authService) ValidateJWT(ctx context.Context, jwtToken string) (*Identity, error) {
-	if a.JWTManager == nil {
-		return nil, fmt.Errorf("jwt manager not configured")
-	}
-	claims, err := a.JWTManager.Verify(jwtToken)
-	if err != nil {
-		return nil, fmt.Errorf("invalid JWT token: %w", err)
-	}
 
-	identity := &Identity{
-		ID: claims.KratosID,
-	}
-	identity.Traits.Email = claims.Email
-	identity.Traits.Role = claims.Role
-	identity.Traits.College.ID = claims.CollegeID
-	identity.Traits.Name.First = claims.FirstName
-	identity.Traits.Name.Last = claims.LastName
-	identity.UserID = claims.UserID
-
-	if _, err := a.resolveAndProvisionLocalIdentity(ctx, identity); err != nil {
-		return nil, err
-	}
-
-	return identity, nil
-}
 
 func (a *authService) CheckCollegeAccess(identity *Identity, collegeID string) bool {
 	return a.Auth.CheckCollegeAccess(identity, collegeID)
@@ -327,51 +259,7 @@ func (a *authService) ValidateCollegeAccess(ctx context.Context, collegeID int) 
 	return a.CollegeChecker.GetCollegeByID(ctx, collegeID)
 }
 
-// RefreshToken validates and generates a new JWT token with updated expiration
-// Implements token rotation for enhanced security
-func (a *authService) RefreshToken(ctx context.Context, token string) (string, error) {
-	if a.JWTManager == nil {
-		return "", fmt.Errorf("jwt manager not configured")
-	}
-	// Validate the existing token
-	claims, err := a.JWTManager.Verify(token)
-	if err != nil {
-		return "", fmt.Errorf("invalid token: %w", err)
-	}
 
-	userID := claims.UserID
-	if userID == 0 {
-		identity := &Identity{
-			ID: claims.KratosID,
-		}
-		identity.Traits.Email = claims.Email
-		identity.Traits.Role = claims.Role
-		identity.Traits.College.ID = claims.CollegeID
-		identity.Traits.Name.First = claims.FirstName
-		identity.Traits.Name.Last = claims.LastName
-
-		userID, err = a.resolveAndProvisionLocalIdentity(ctx, identity)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	// Generate a new token with the same claims but new expiration
-	newToken, err := a.JWTManager.Generate(
-		userID,
-		claims.KratosID,
-		claims.Email,
-		claims.Role,
-		claims.CollegeID,
-		claims.FirstName,
-		claims.LastName,
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate new token: %w", err)
-	}
-
-	return newToken, nil
-}
 
 func (a *authService) resolveAndProvisionLocalIdentity(ctx context.Context, identity *Identity) (int, error) {
 	if identity == nil {
@@ -393,6 +281,9 @@ func (a *authService) resolveAndProvisionLocalIdentity(ctx context.Context, iden
 
 	identity.UserID = user.ID
 	if err := a.ensureLocalProfile(ctx, user, identity); err != nil {
+		return 0, err
+	}
+	if err := a.ensureLocalStudent(ctx, user, identity); err != nil {
 		return 0, err
 	}
 	return user.ID, nil
@@ -419,7 +310,9 @@ func (a *authService) ensureLocalUser(ctx context.Context, identity *Identity) (
 			existing.Email = identity.Traits.Email
 			updated = true
 		}
-		if identity.Traits.Role != "" && existing.Role != identity.Traits.Role {
+		if strings.EqualFold(existing.Role, "parent") && !strings.EqualFold(identity.Traits.Role, "parent") {
+			identity.Traits.Role = existing.Role
+		} else if identity.Traits.Role != "" && existing.Role != identity.Traits.Role {
 			existing.Role = identity.Traits.Role
 			updated = true
 		}
@@ -432,6 +325,9 @@ func (a *authService) ensureLocalUser(ctx context.Context, identity *Identity) (
 			if err := a.UserStore.UpdateUser(ctx, existing); err != nil {
 				return nil, fmt.Errorf("failed to update local user: %w", err)
 			}
+		}
+		if identity.Traits.Role == "" {
+			identity.Traits.Role = existing.Role
 		}
 
 		return existing, nil
@@ -504,6 +400,77 @@ func (a *authService) ensureLocalProfile(ctx context.Context, user *models.User,
 	return nil
 }
 
+func (a *authService) ensureLocalStudent(ctx context.Context, user *models.User, identity *Identity) error {
+	if a.StudentStore == nil {
+		return nil
+	}
+	if identity == nil {
+		return fmt.Errorf("identity is nil")
+	}
+	if !strings.EqualFold(identity.Traits.Role, "student") {
+		return nil
+	}
+	if user == nil || user.ID == 0 {
+		return fmt.Errorf("invalid user for student provisioning")
+	}
+
+	collegeID, err := a.resolveCollegeID(ctx, identity.Traits.College.ID)
+	if err != nil {
+		return err
+	}
+	if collegeID == 0 {
+		return fmt.Errorf("student provisioning requires a college id")
+	}
+
+	existing, err := a.StudentStore.FindByKratosID(ctx, identity.ID)
+	if err == nil && existing != nil {
+		updated := false
+
+		if existing.UserID != user.ID {
+			existing.UserID = user.ID
+			updated = true
+		}
+		if existing.CollegeID != collegeID {
+			existing.CollegeID = collegeID
+			updated = true
+		}
+		rollNo := deriveStudentRollNo(identity, existing.RollNo)
+		if rollNo != "" && existing.RollNo != rollNo {
+			existing.RollNo = rollNo
+			updated = true
+		}
+		if !existing.IsActive {
+			existing.IsActive = true
+			updated = true
+		}
+
+		if updated {
+			if err := a.StudentStore.UpdateStudent(ctx, existing); err != nil {
+				return fmt.Errorf("failed to update local student: %w", err)
+			}
+		}
+		return nil
+	}
+	if err != nil && !isNotFoundErr(err) {
+		return fmt.Errorf("failed to fetch local student: %w", err)
+	}
+
+	student := &models.Student{
+		UserID:           user.ID,
+		CollegeID:        collegeID,
+		KratosIdentityID: identity.ID,
+		EnrollmentYear:   time.Now().Year(),
+		RollNo:           deriveStudentRollNo(identity, ""),
+		IsActive:         true,
+	}
+
+	if err := a.StudentStore.CreateStudent(ctx, student); err != nil {
+		return fmt.Errorf("failed to create local student: %w", err)
+	}
+
+	return nil
+}
+
 func (a *authService) resolveCollegeID(ctx context.Context, externalCollegeID string) (int, error) {
 	if externalCollegeID == "" {
 		return 0, nil
@@ -526,12 +493,34 @@ func (a *authService) resolveCollegeID(ctx context.Context, externalCollegeID st
 	return collegeID, nil
 }
 
+func (a *authService) ResolveCollegeID(ctx context.Context, externalID string) (int, error) {
+	return a.resolveCollegeID(ctx, externalID)
+}
+
 func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "no rows")
+}
+
+func deriveStudentRollNo(identity *Identity, fallback string) string {
+	if identity != nil {
+		if rollNo := strings.TrimSpace(identity.Traits.RollNo); rollNo != "" {
+			return rollNo
+		}
+		if identity.UserID > 0 {
+			return fmt.Sprintf("AUTO-%06d", identity.UserID)
+		}
+		if suffix := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(identity.ID), "-", "")); suffix != "" {
+			if len(suffix) > 8 {
+				suffix = suffix[:8]
+			}
+			return "AUTO-" + suffix
+		}
+	}
+	return strings.TrimSpace(fallback)
 }
 
 // ── Hydra OAuth2 / OIDC implementations ─────────────────────────────────────
@@ -587,8 +576,7 @@ func (a *authService) CompleteLogin(ctx context.Context, code, redirectURI, stat
 // This is the primary token validation path for OAuth2-protected API routes.
 func (a *authService) ValidateToken(ctx context.Context, accessToken string) (*Identity, error) {
 	if a.Hydra == nil {
-		// Fall back to local JWT validation when Hydra is not configured.
-		return a.ValidateJWT(ctx, accessToken)
+		return nil, fmt.Errorf("hydra service not configured")
 	}
 
 	introspected, err := a.Hydra.ValidateAccessToken(ctx, accessToken)

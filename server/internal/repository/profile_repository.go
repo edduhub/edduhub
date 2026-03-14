@@ -13,8 +13,6 @@ import (
 	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
 
-const profileTable = "profiles"
-
 type ProfileRepository interface {
 	CreateProfile(ctx context.Context, profile *models.Profile) error
 	GetProfileByUserID(ctx context.Context, userID int) (*models.Profile, error)

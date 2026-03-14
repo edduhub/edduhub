@@ -108,9 +108,11 @@ func (h *TimetableHandler) DeleteTimeTableBlock(c echo.Context) error {
 }
 
 func (h *TimetableHandler) GetStudentTimetable(c echo.Context) error {
-	studentID := c.Get("student_id").(int)
+	collegeID := c.Get("college_id").(int)
 
-	blocks, err := h.timetableService.GetStudentTimetable(c.Request().Context(), studentID)
+	blocks, err := h.timetableService.GetTimeTableBlocks(c.Request().Context(), models.TimeTableBlockFilter{
+		CollegeID: collegeID,
+	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get student timetable: "+err.Error())
 	}

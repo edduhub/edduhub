@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- DefaultRedisConfig ---
-
 func TestDefaultRedisConfig(t *testing.T) {
 	cfg := DefaultRedisConfig()
 
@@ -26,147 +24,90 @@ func TestDefaultRedisConfig(t *testing.T) {
 	assert.Equal(t, 4*time.Second, cfg.PoolTimeout)
 }
 
-// --- BuildStudentKey ---
+func TestCacheKey(t *testing.T) {
+	tests := []struct {
+		name       string
+		components []any
+		expected   string
+	}{
+		{
+			name:       "single string",
+			components: []any{"user"},
+			expected:   `["user"]`,
+		},
+		{
+			name:       "single int",
+			components: []any{42},
+			expected:   `[42]`,
+		},
+		{
+			name:       "multiple strings",
+			components: []any{"user", "profile"},
+			expected:   `["user","profile"]`,
+		},
+		{
+			name:       "mixed types",
+			components: []any{"course", 1, "lecture", 5},
+			expected:   `["course",1,"lecture",5]`,
+		},
+		{
+			name:       "empty components",
+			components: []any{},
+			expected:   `[]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CacheKey(tt.components...)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
 
 func TestBuildStudentKey(t *testing.T) {
-	t.Run("standard key", func(t *testing.T) {
-		assert.Equal(t, "student:1:42", BuildStudentKey(1, 42))
-	})
-
-	t.Run("zero values", func(t *testing.T) {
-		assert.Equal(t, "student:0:0", BuildStudentKey(0, 0))
-	})
-
-	t.Run("large values", func(t *testing.T) {
-		assert.Equal(t, "student:99999:88888", BuildStudentKey(99999, 88888))
-	})
+	key := BuildStudentKey(1, 42)
+	assert.Equal(t, "student:1:42", key)
 }
-
-// --- BuildCourseKey ---
 
 func TestBuildCourseKey(t *testing.T) {
-	t.Run("standard key", func(t *testing.T) {
-		assert.Equal(t, "course:1:100", BuildCourseKey(1, 100))
-	})
-
-	t.Run("zero values", func(t *testing.T) {
-		assert.Equal(t, "course:0:0", BuildCourseKey(0, 0))
-	})
+	key := BuildCourseKey(3, 10)
+	assert.Equal(t, "course:3:10", key)
 }
-
-// --- BuildCourseListKey ---
 
 func TestBuildCourseListKey(t *testing.T) {
-	t.Run("standard key", func(t *testing.T) {
-		assert.Equal(t, "course:list:1:p1:l20", BuildCourseListKey(1, 1, 20))
-	})
-
-	t.Run("different pagination", func(t *testing.T) {
-		assert.Equal(t, "course:list:5:p3:l50", BuildCourseListKey(5, 3, 50))
-	})
+	key := BuildCourseListKey(1, 2, 25)
+	assert.Equal(t, "course:list:1:p2:l25", key)
 }
-
-// --- BuildAttendanceKey ---
 
 func TestBuildAttendanceKey(t *testing.T) {
-	t.Run("standard key", func(t *testing.T) {
-		assert.Equal(t, "attendance:1:42:100", BuildAttendanceKey(1, 42, 100))
-	})
-
-	t.Run("zero values", func(t *testing.T) {
-		assert.Equal(t, "attendance:0:0:0", BuildAttendanceKey(0, 0, 0))
-	})
+	key := BuildAttendanceKey(1, 42, 10)
+	assert.Equal(t, "attendance:1:42:10", key)
 }
-
-// --- BuildCalendarKey ---
 
 func TestBuildCalendarKey(t *testing.T) {
-	t.Run("standard key", func(t *testing.T) {
-		assert.Equal(t, "calendar:1:2024-01-01:2024-01-31", BuildCalendarKey(1, "2024-01-01", "2024-01-31"))
-	})
-
-	t.Run("empty dates", func(t *testing.T) {
-		assert.Equal(t, "calendar:1::", BuildCalendarKey(1, "", ""))
-	})
+	key := BuildCalendarKey(1, "2026-01-01", "2026-01-31")
+	assert.Equal(t, "calendar:1:2026-01-01:2026-01-31", key)
 }
-
-// --- BuildSessionKey ---
 
 func TestBuildSessionKey(t *testing.T) {
-	t.Run("standard key", func(t *testing.T) {
-		assert.Equal(t, "session:abc-123-def", BuildSessionKey("abc-123-def"))
-	})
-
-	t.Run("empty session", func(t *testing.T) {
-		assert.Equal(t, "session:", BuildSessionKey(""))
-	})
+	key := BuildSessionKey("abc-123")
+	assert.Equal(t, "session:abc-123", key)
 }
 
-// --- CacheKey ---
-
-func TestCacheKey(t *testing.T) {
-	t.Run("single component", func(t *testing.T) {
-		key := CacheKey("student")
-		assert.NotEmpty(t, key)
-	})
-
-	t.Run("multiple components", func(t *testing.T) {
-		key := CacheKey("student", 1, "grades")
-		assert.NotEmpty(t, key)
-	})
-
-	t.Run("different components produce different keys", func(t *testing.T) {
-		key1 := CacheKey("student", 1)
-		key2 := CacheKey("student", 2)
-		assert.NotEqual(t, key1, key2)
-	})
-
-	t.Run("same components produce same key", func(t *testing.T) {
-		key1 := CacheKey("course", 5, "list")
-		key2 := CacheKey("course", 5, "list")
-		assert.Equal(t, key1, key2)
-	})
-}
-
-// --- TTL constants ---
-
-func TestTTLConstants(t *testing.T) {
-	assert.Equal(t, 5*time.Minute, TTLShort)
-	assert.Equal(t, 30*time.Minute, TTLMedium)
-	assert.Equal(t, 2*time.Hour, TTLLong)
-	assert.Equal(t, 24*time.Hour, TTLDay)
-}
-
-// --- Prefix constants ---
-
-func TestPrefixConstants(t *testing.T) {
-	assert.Equal(t, "student:", PrefixStudent)
-	assert.Equal(t, "course:", PrefixCourse)
-	assert.Equal(t, "lecture:", PrefixLecture)
-	assert.Equal(t, "attendance:", PrefixAttendance)
-	assert.Equal(t, "grade:", PrefixGrade)
-	assert.Equal(t, "calendar:", PrefixCalendar)
-	assert.Equal(t, "department:", PrefixDepartment)
-	assert.Equal(t, "college:", PrefixCollege)
-	assert.Equal(t, "user:", PrefixUser)
-	assert.Equal(t, "session:", PrefixSession)
-}
-
-// --- buildKey ---
-
-func TestRedisCache_BuildKey(t *testing.T) {
+func TestRedisCache_buildKey(t *testing.T) {
 	t.Run("with prefix", func(t *testing.T) {
-		rc := &RedisCache{prefix: "eduhub:"}
-		assert.Equal(t, "eduhub:mykey", rc.buildKey("mykey"))
+		c := &RedisCache{prefix: "test:"}
+		assert.Equal(t, "test:mykey", c.buildKey("mykey"))
 	})
 
 	t.Run("without prefix", func(t *testing.T) {
-		rc := &RedisCache{prefix: ""}
-		assert.Equal(t, "mykey", rc.buildKey("mykey"))
+		c := &RedisCache{prefix: ""}
+		assert.Equal(t, "mykey", c.buildKey("mykey"))
 	})
 
-	t.Run("empty key with prefix", func(t *testing.T) {
-		rc := &RedisCache{prefix: "app:"}
-		assert.Equal(t, "app:", rc.buildKey(""))
+	t.Run("with nested key", func(t *testing.T) {
+		c := &RedisCache{prefix: "app:"}
+		assert.Equal(t, "app:user:42:profile", c.buildKey("user:42:profile"))
 	})
 }

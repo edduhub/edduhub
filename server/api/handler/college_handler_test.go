@@ -1,3 +1,5 @@
+//go:build integration
+
 package handler
 
 import (
@@ -6,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"strconv"
 
 	"eduhub/server/internal/repository"
 	"eduhub/server/internal/services/college"
@@ -25,7 +28,7 @@ func TestCollegeIntegrationFlow(t *testing.T) {
 
 	// Test GetCollegeDetails - Success case
 	t.Run("GetCollegeDetails_Success", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/colleges/"+string(rune(fixture.CollegeID)), nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/colleges/"+strconv.Itoa(fixture.CollegeID), nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.Set("college_id", fixture.CollegeID)
@@ -53,7 +56,7 @@ func TestCollegeIntegrationFlow(t *testing.T) {
 
 	// Test GetCollegeStats - Success case
 	t.Run("GetCollegeStats_Success", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/colleges/"+string(rune(fixture.CollegeID))+"/stats", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/colleges/"+strconv.Itoa(fixture.CollegeID)+"/stats", nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.Set("college_id", fixture.CollegeID)
@@ -69,7 +72,7 @@ func TestCollegeIntegrationFlow(t *testing.T) {
 	// Test UpdateCollegeDetails - Success case
 	t.Run("UpdateCollegeDetails_Success", func(t *testing.T) {
 		updateReq := []byte(`{"name":"Updated College Name","city":"New City"}`)
-		req := httptest.NewRequest(http.MethodPut, "/api/colleges/"+string(rune(fixture.CollegeID)), bytes.NewReader(updateReq))
+		req := httptest.NewRequest(http.MethodPut, "/api/colleges/"+strconv.Itoa(fixture.CollegeID), bytes.NewReader(updateReq))
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
@@ -86,7 +89,7 @@ func TestCollegeIntegrationFlow(t *testing.T) {
 	// Test UpdateCollegeDetails - Invalid request
 	t.Run("UpdateCollegeDetails_InvalidRequest", func(t *testing.T) {
 		invalidReq := []byte(`invalid json`)
-		req := httptest.NewRequest(http.MethodPut, "/api/colleges/"+string(rune(fixture.CollegeID)), bytes.NewReader(invalidReq))
+		req := httptest.NewRequest(http.MethodPut, "/api/colleges/"+strconv.Itoa(fixture.CollegeID), bytes.NewReader(invalidReq))
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
@@ -100,7 +103,7 @@ func TestCollegeIntegrationFlow(t *testing.T) {
 
 	// Test GetCollegeDetails after update to verify changes
 	t.Run("GetCollegeDetails_AfterUpdate", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/colleges/"+string(rune(fixture.CollegeID)), nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/colleges/"+strconv.Itoa(fixture.CollegeID), nil)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.Set("college_id", fixture.CollegeID)
@@ -121,7 +124,7 @@ func TestCollegeIntegrationFlow(t *testing.T) {
 func TestCollegeHandler_MissingCollegeID(t *testing.T) {
 	_, db, pool := setupIntegrationDB(t, "colleges")
 	if pool == nil {
-		t.Skip("No database connection")
+		t.Fatalf("expected database pool when running integration test")
 	}
 
 	repo := repository.NewCollegeRepository(db)

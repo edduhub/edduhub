@@ -194,7 +194,6 @@ func (r *announcementRepository) GetAnnouncements(ctx context.Context, filter mo
 	if filter.IsPublished != nil {
 		sql += fmt.Sprintf(` AND is_published = $%d`, argIndex)
 		args = append(args, *filter.IsPublished)
-		argIndex++
 	}
 
 	sql += ` ORDER BY created_at DESC`
@@ -239,7 +238,6 @@ func (r *announcementRepository) CountAnnouncements(ctx context.Context, filter 
 	if filter.IsPublished != nil {
 		sql += fmt.Sprintf(` AND is_published = $%d`, argIndex)
 		args = append(args, *filter.IsPublished)
-		argIndex++
 	}
 
 	temp := struct {

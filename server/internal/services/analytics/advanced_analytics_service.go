@@ -933,11 +933,19 @@ func (s *advancedAnalyticsService) compareCourses(ctx context.Context, collegeID
 
 		switch metric {
 		case "avg_grade":
-			s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(percentage),0) FROM grades WHERE course_id = $1 AND college_id = $2", courseID1, collegeID).Scan(&value1)
-			s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(percentage),0) FROM grades WHERE course_id = $1 AND college_id = $2", courseID2, collegeID).Scan(&value2)
+			if err := s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(percentage),0) FROM grades WHERE course_id = $1 AND college_id = $2", courseID1, collegeID).Scan(&value1); err != nil {
+				return nil, err
+			}
+			if err := s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(percentage),0) FROM grades WHERE course_id = $1 AND college_id = $2", courseID2, collegeID).Scan(&value2); err != nil {
+				return nil, err
+			}
 		case "attendance_rate":
-			s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(CASE WHEN status = 'Present' THEN 100 ELSE 0 END),0) FROM attendance WHERE course_id = $1 AND college_id = $2", courseID1, collegeID).Scan(&value1)
-			s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(CASE WHEN status = 'Present' THEN 100 ELSE 0 END),0) FROM attendance WHERE course_id = $1 AND college_id = $2", courseID2, collegeID).Scan(&value2)
+			if err := s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(CASE WHEN status = 'Present' THEN 100 ELSE 0 END),0) FROM attendance WHERE course_id = $1 AND college_id = $2", courseID1, collegeID).Scan(&value1); err != nil {
+				return nil, err
+			}
+			if err := s.db.Pool.QueryRow(ctx, "SELECT COALESCE(AVG(CASE WHEN status = 'Present' THEN 100 ELSE 0 END),0) FROM attendance WHERE course_id = $1 AND college_id = $2", courseID2, collegeID).Scan(&value2); err != nil {
+				return nil, err
+			}
 		}
 
 		comparison.Metrics[metric+"_1"] = value1

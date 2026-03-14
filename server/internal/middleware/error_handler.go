@@ -185,7 +185,7 @@ func RecoverMiddleware() echo.MiddlewareFunc {
 					c.Logger().Error("Panic recovered: ", err)
 
 					// Return internal server error
-					c.JSON(http.StatusInternalServerError, ErrorResponse{
+					_ = c.JSON(http.StatusInternalServerError, ErrorResponse{
 						Error:   "INTERNAL_SERVER_ERROR",
 						Message: "An unexpected error occurred. Please try again later.",
 						Code:    "PANIC_RECOVERED",

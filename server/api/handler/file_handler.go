@@ -58,7 +58,9 @@ func (h *FileHandler) UploadFile(c echo.Context) error {
 	tagsStr := c.FormValue("tags")
 	var tags []string
 	if tagsStr != "" {
-		json.Unmarshal([]byte(tagsStr), &tags)
+		if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
+			return helpers.Error(c, "invalid tags payload", 400)
+		}
 	}
 
 	// Validate file size (50MB limit for versioned files)

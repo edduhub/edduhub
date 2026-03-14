@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"eduhub/server/internal/models"
@@ -11,14 +12,6 @@ import (
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5" // For pgx.ErrNoRows
 )
-
-const timeTableBlockTable = "timetable_blocks"
-
-var timeTableBlockQueryFields = []string{
-	"id", "college_id", "department_id", "course_id", "class_id",
-	"day_of_week", "start_time", "end_time", "room_number", "faculty_id",
-	"created_at", "updated_at",
-}
 
 type TimeTableRepository interface {
 	CreateTimeTableBlock(ctx context.Context, block *models.TimeTableBlock) error
@@ -159,6 +152,9 @@ func (r *timetableRepository) GetTimeTableBlocks(ctx context.Context, filter mod
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []*models.TimeTableBlock{}, nil
 		}
+		if isTimetableSchemaMissing(err) {
+			return []*models.TimeTableBlock{}, nil
+		}
 		return nil, fmt.Errorf("GetTimeTableBlocks: failed to execute query or scan: %w", err)
 	}
 	return blocks, nil
@@ -214,7 +210,18 @@ func (r *timetableRepository) CountTimeTableBlocks(ctx context.Context, filter m
 	}{}
 	err := pgxscan.Get(ctx, r.DB.Pool, &temp, sql, args...)
 	if err != nil {
+		if isTimetableSchemaMissing(err) {
+			return 0, nil
+		}
 		return 0, fmt.Errorf("CountTimeTableBlocks: failed to execute query or scan: %w", err)
 	}
 	return temp.Count, nil
+}
+
+func isTimetableSchemaMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "does not exist")
 }

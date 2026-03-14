@@ -3,12 +3,12 @@ package repository
 import (
 	"context"
 	sqlDriver "database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"eduhub/server/internal/models"
 )
@@ -30,7 +30,7 @@ type StudentRepository interface {
 }
 
 type studentRepository struct {
-	Pool *pgxpool.Pool
+	Pool PoolIface
 }
 
 func NewStudentRepository(database *DB) StudentRepository {
@@ -38,8 +38,6 @@ func NewStudentRepository(database *DB) StudentRepository {
 		Pool: database.Pool,
 	}
 }
-
-const studentTable = "students"
 
 func (s *studentRepository) CreateStudent(ctx context.Context, student *models.Student) error {
 	// Set timestamps if they are zero-valued
@@ -64,7 +62,7 @@ func (s *studentRepository) CreateStudent(ctx context.Context, student *models.S
     $1, $2, $3, $4, $5, $6, $7, $8
 ) RETURNING student_id, user_id, college_id, kratos_identity_id, enrollment_year, roll_no, is_active, created_at, updated_at`
 
-	var enrollmentYear int32
+	enrollmentYear := int32(student.EnrollmentYear)
 
 	args := []any{int32(student.UserID), int32(student.CollegeID), student.KratosIdentityID, enrollmentYear, student.RollNo, student.IsActive, student.CreatedAt, student.UpdatedAt}
 	err := pgxscan.Get(ctx, s.Pool, student, sql, args...)
@@ -85,7 +83,7 @@ WHERE roll_no = $1 AND college_id = $2`
 	var enrollmentYear sqlDriver.NullInt32
 	err := pgxscan.Get(ctx, s.Pool, &student, sql, rollNo, int32(collegeID))
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("GetStudentByRollNo: student with rollNo %s not found in college %d", rollNo, collegeID)
 		}
 		return nil, fmt.Errorf("GetStudentByRollNo: failed to execute query or scan for college %d, rollNo %s: %w", collegeID, rollNo, err)
@@ -150,7 +148,7 @@ WHERE student_id = $1 AND college_id = $2`
 
 	err := pgxscan.Get(ctx, s.Pool, &student, sql, studentID, collegeID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("GetStudentByID: failed to execute query: %w", err)
@@ -230,7 +228,7 @@ WHERE kratos_identity_id = $1`
 	var student models.Student
 	err := pgxscan.Get(ctx, s.Pool, &student, sql, kratosID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("FindByKratosID: failed to execute query: %w", err)

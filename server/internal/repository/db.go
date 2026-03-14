@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,16 +12,20 @@ import (
 // PoolIface defines the methods of pgxpool.Pool used by our repositories.
 // This interface enables context-based queries and better testability.
 type PoolIface interface {
+	pgxscan.Querier
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (commandTag pgconn.CommandTag, err error)
 	Close()
-	// Add other methods from pgxpool.Pool if needed by any repository
+}
+
+type BeginPool interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // DB represents the database connection structure used by repositories
 type DB struct {
-	Pool *pgxpool.Pool // Direct pgxpool.Pool reference for connection pooling
+	Pool PoolIface
 }
 
 // NewDB creates a new database connection structure

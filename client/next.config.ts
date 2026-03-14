@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
+const distDir = process.env.NEXT_DIST_DIR?.trim();
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: true,
+  ...(distDir ? { distDir } : {}),
   turbopack: {
     root: process.cwd(),
   },

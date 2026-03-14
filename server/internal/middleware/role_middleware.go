@@ -28,7 +28,7 @@ func NewRoleMiddleware(authSvc auth.AuthService) *RoleMiddleware {
 // It retrieves the user's identity from the request context (set by previous authentication middleware)
 // and verifies if the user has any of the required roles using the AuthService.
 //
-// This middleware should be used after authentication middleware (like ValidateJWT) to ensure
+// This middleware should be used after authentication middleware to ensure
 // the identity is available in the context.
 //
 // Parameters:

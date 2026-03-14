@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"eduhub/server/internal/models"
-	jwtpkg "eduhub/server/pkg/jwt"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,6 +82,46 @@ func (m *memoryProfileStore) CreateProfile(_ context.Context, profile *models.Pr
 	return nil
 }
 
+type memoryStudentStore struct {
+	byKratos map[string]*models.Student
+	nextID   int
+}
+
+func newMemoryStudentStore() *memoryStudentStore {
+	return &memoryStudentStore{
+		byKratos: make(map[string]*models.Student),
+		nextID:   1,
+	}
+}
+
+func (m *memoryStudentStore) FindByKratosID(_ context.Context, kratosID string) (*models.Student, error) {
+	student, ok := m.byKratos[kratosID]
+	if !ok {
+		return nil, fmt.Errorf("student not found")
+	}
+	copy := *student
+	return &copy, nil
+}
+
+func (m *memoryStudentStore) CreateStudent(_ context.Context, student *models.Student) error {
+	if student.StudentID == 0 {
+		student.StudentID = m.nextID
+		m.nextID++
+	}
+	copy := *student
+	m.byKratos[student.KratosIdentityID] = &copy
+	return nil
+}
+
+func (m *memoryStudentStore) UpdateStudent(_ context.Context, student *models.Student) error {
+	if _, ok := m.byKratos[student.KratosIdentityID]; !ok {
+		return fmt.Errorf("student not found")
+	}
+	copy := *student
+	m.byKratos[student.KratosIdentityID] = &copy
+	return nil
+}
+
 type staticCollegeResolver struct {
 	college *models.College
 }
@@ -92,23 +131,6 @@ func (s *staticCollegeResolver) GetCollegeByExternalID(_ context.Context, extern
 		return nil, fmt.Errorf("college %q not found", externalID)
 	}
 	return s.college, nil
-}
-
-type recordingJWTManager struct {
-	claims            *jwtpkg.JWTClaims
-	lastGeneratedUser int
-}
-
-func (r *recordingJWTManager) Generate(userID int, kratosID, email, role, collegeID, firstName, lastName string) (string, error) {
-	r.lastGeneratedUser = userID
-	return "token", nil
-}
-
-func (r *recordingJWTManager) Verify(token string) (*jwtpkg.JWTClaims, error) {
-	if r.claims == nil {
-		return nil, fmt.Errorf("invalid token")
-	}
-	return r.claims, nil
 }
 
 func TestEnsureLocalUserCreatesUserWhenMissing(t *testing.T) {
@@ -155,66 +177,33 @@ func TestEnsureLocalProfileCreatesProfileWhenMissing(t *testing.T) {
 	assert.Equal(t, "Hopper", profile.LastName)
 }
 
-func TestValidateJWTResolvesMissingUserIDFromStore(t *testing.T) {
-	store := newMemoryUserStore()
-	require.NoError(t, store.CreateUser(context.Background(), &models.User{
-		KratosIdentityID: "kratos-55",
-		Name:             "User",
-		Email:            "u@example.edu",
-		Role:             "student",
-		IsActive:         true,
-	}))
-
+func TestResolveAndProvisionLocalIdentityCreatesStudentRecord(t *testing.T) {
+	users := newMemoryUserStore()
+	profiles := newMemoryProfileStore()
+	students := newMemoryStudentStore()
 	service := &authService{
-		JWTManager: &recordingJWTManager{
-			claims: &jwtpkg.JWTClaims{
-				UserID:    0,
-				KratosID:  "kratos-55",
-				Email:     "u@example.edu",
-				Role:      "student",
-				CollegeID: "1",
-				FirstName: "U",
-				LastName:  "Ser",
-			},
-		},
-		UserStore: store,
+		UserStore:    users,
+		ProfileStore: profiles,
+		CollegeStore: &staticCollegeResolver{college: &models.College{ID: 42}},
+		StudentStore: students,
 	}
 
-	identity, err := service.ValidateJWT(context.Background(), "token")
+	identity := &Identity{ID: "kratos-student-1"}
+	identity.Traits.Email = "student@example.edu"
+	identity.Traits.Role = "student"
+	identity.Traits.RollNo = "CS001"
+	identity.Traits.Name.First = "Ada"
+	identity.Traits.Name.Last = "Student"
+	identity.Traits.College.ID = "COL-42"
+
+	userID, err := service.resolveAndProvisionLocalIdentity(context.Background(), identity)
 	require.NoError(t, err)
-	assert.Equal(t, 1, identity.UserID)
-	assert.Equal(t, "kratos-55", identity.ID)
-}
+	assert.Equal(t, 1, userID)
 
-func TestRefreshTokenUsesResolvedUserID(t *testing.T) {
-	store := newMemoryUserStore()
-	require.NoError(t, store.CreateUser(context.Background(), &models.User{
-		KratosIdentityID: "kratos-77",
-		Name:             "User",
-		Email:            "u@example.edu",
-		Role:             "admin",
-		IsActive:         true,
-	}))
-
-	jwtMgr := &recordingJWTManager{
-		claims: &jwtpkg.JWTClaims{
-			UserID:    0,
-			KratosID:  "kratos-77",
-			Email:     "u@example.edu",
-			Role:      "admin",
-			CollegeID: "3",
-			FirstName: "Admin",
-			LastName:  "User",
-		},
-	}
-
-	service := &authService{
-		JWTManager: jwtMgr,
-		UserStore:  store,
-	}
-
-	token, err := service.RefreshToken(context.Background(), "old-token")
+	student, err := students.FindByKratosID(context.Background(), "kratos-student-1")
 	require.NoError(t, err)
-	assert.Equal(t, "token", token)
-	assert.Equal(t, 1, jwtMgr.lastGeneratedUser)
+	assert.Equal(t, 1, student.UserID)
+	assert.Equal(t, 42, student.CollegeID)
+	assert.Equal(t, "CS001", student.RollNo)
+	assert.True(t, student.IsActive)
 }

@@ -2,13 +2,18 @@ version: '3'
 
 vars:
   APP_NAME: edduhub
+  GOLANGCI_LINT_VERSION: v1.64.8
+  DEMO_SERVER_PORT: "8180"
+  DEMO_CLIENT_PORT: "3100"
+  DEMO_CLIENT_DIST_DIR: ".next-demo"
+  VERIFY_CLIENT_DIST_DIR: ".next-verify"
+  TEST_DATABASE_URL: postgres://testuser:testpass@localhost:5433/testdb?sslmode=disable
+  TEST_DB_URL: "{{.TEST_DATABASE_URL}}"
   COVERAGE_UNIT_OUT: coverage-unit.out
   COVERAGE_INTEGRATION_OUT: coverage-integration.out
   COVERAGE_MERGED_OUT: coverage-merged.out
   COVERAGE_HTML_OUT: coverage.html
   MIGRATE_PATH: server/db/migrations
-  # Using TEST_DB_URL assuming this is for the test database based on the instructions
-  TEST_DB_URL: postgres://keto:secret@localhost:5432/keto?sslmode=disable
 
 
 tasks:
@@ -29,7 +34,13 @@ tasks:
   test:integration:
     desc: Run integration tests (requires Docker running)
     cmds:
-      - docker info > /dev/null || (echo "Docker is not running. Please start Docker." && exit 1)
+      - task: test:integration:bootstrap
+
+  test:integration:bootstrap:
+    desc: Start required services and run integration suite
+    cmds:
+      - task: test:services:start
+      - TEST_DATABASE_URL="{{.TEST_DATABASE_URL}}" task migrate:up
       - go test -tags=integration -race -coverprofile={{.COVERAGE_INTEGRATION_OUT}} -v ./...
 
   cover:
@@ -58,7 +69,7 @@ tasks:
   lint:
     desc: Run golangci-lint
     cmds:
-      - golangci-lint run ./...
+      - go run github.com/golangci/golangci-lint/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}} run ./...
 
   tidy:
     desc: Run go mod tidy
@@ -103,9 +114,11 @@ tasks:
       - swag init -g server/main.go -o server/docs
 
   migrate:up:
-    desc: "Apply database migrations to the test database"
+    desc: "Apply database migrations to the configured database URL"
     cmds:
-      - migrate -path {{.MIGRATE_PATH}} -database {{.TEST_DB_URL}} up
+      - |
+        DATABASE_URL="${TEST_DATABASE_URL:-{{.TEST_DB_URL}}}"
+        migrate -path {{.MIGRATE_PATH}} -database "$DATABASE_URL" up
 
   # ==============================================================================
   # BOOTSTRAP & SETUP TASKS
@@ -116,12 +129,12 @@ tasks:
     cmds:
       - |
         echo "Checking environment configuration..."
-        if [ ! -f server/.env.local ]; then
-          echo "❌ Missing server/.env.local"
-          echo "   Run: cp server/.env.example server/.env.local && edit server/.env.local"
+        if [ ! -f .env ] && [ ! -f server/.env.local ]; then
+          echo "❌ Missing root .env and server/.env.local"
+          echo "   Run: cp server/.env.example server/.env.local && edit it, or create a root .env"
           exit 1
         fi
-        echo "✓ server/.env.local found"
+        echo "✓ Server environment file found"
         
         if [ ! -f client/.env.local ]; then
           echo "⚠ Missing client/.env.local (creating from example)"
@@ -170,6 +183,7 @@ tasks:
         echo "Setting up client dependencies..."
         cd client
         npm install
+        npm run typecheck
         cd ..
         echo "✓ Client dependencies ready"
 
@@ -184,6 +198,31 @@ tasks:
         docker-compose -f docker-compose.dev.yml exec -T postgres pg_isready -U keto || echo "⚠ PostgreSQL not ready yet"
         echo "✓ Database services started"
 
+  test:services:start:
+    desc: Start test-only services for integration suite
+    cmds:
+      - |
+        echo "Starting integration services..."
+        docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d test-db redis kratos-db kratos keto
+        echo "Waiting for integration services..."
+        for _ in $(seq 1 60); do
+          if pg_isready -h localhost -p 5433 -U testuser -d testdb >/dev/null 2>&1 && \
+             docker-compose -f docker-compose.dev.yml exec -T redis redis-cli ping | grep -q PONG && \
+             curl -fsS "http://127.0.0.1:4433/health/alive" >/dev/null 2>&1 && \
+             curl -fsS "http://127.0.0.1:4467/health/alive" >/dev/null 2>&1; then
+            echo "Integration services are ready."
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "Timed out waiting for integration services." >&2
+        exit 1
+
+  test:services:stop:
+    desc: Stop integration test services
+    cmds:
+      - docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
+
   db:stop:
     desc: Stop database services
     cmds:
@@ -193,10 +232,37 @@ tasks:
     desc: Run all database migrations
     cmds:
       - |
-        DB_URL="postgres://$(grep '^DB_USER=' server/.env.local | cut -d= -f2):$(grep '^DB_PASSWORD=' server/.env.local | cut -d= -f2)@localhost:$(grep '^DB_PORT=' server/.env.local | cut -d= -f2)/$(grep '^DB_NAME=' server/.env.local | cut -d= -f2)?sslmode=disable"
+        if [ -n "${TEST_DATABASE_URL:-}" ]; then
+          DB_URL="${TEST_DATABASE_URL}"
+        else
+          DB_URL="postgres://$(grep '^DB_USER=' server/.env.local | cut -d= -f2):$(grep '^DB_PASSWORD=' server/.env.local | cut -d= -f2)@localhost:$(grep '^DB_PORT=' server/.env.local | cut -d= -f2)/$(grep '^DB_NAME=' server/.env.local | cut -d= -f2)?sslmode=disable"
+        fi
         echo "Running migrations..."
         migrate -path {{.MIGRATE_PATH}} -database "$DB_URL" up
         echo "✓ Database migrations completed"
+
+  db:migration-status:
+    desc: Verify the local database is at the latest migration
+    cmds:
+      - |
+        set -euo pipefail
+        LATEST=$(find {{.MIGRATE_PATH}} -name '*.up.sql' -print | sed 's#.*/##' | cut -d_ -f1 | sort | tail -n 1 | sed 's/^0*//')
+        CURRENT=$(docker-compose -f docker-compose.dev.yml exec -T postgres psql -U "$(grep '^DB_USER=' server/.env.local | cut -d= -f2)" -d "$(grep '^DB_NAME=' server/.env.local | cut -d= -f2)" -Atc "select version::text || case when dirty then '-dirty' else '' end from schema_migrations limit 1;" | sed 's/^0*//')
+        if [ "$CURRENT" != "$LATEST" ]; then
+          echo "❌ Database migration status mismatch. Current: $CURRENT, Latest: $LATEST"
+          exit 1
+        fi
+        echo "✓ Database migrations are at version $CURRENT"
+
+  db:seed-demo:
+    desc: Seed deterministic demo data across visible modules
+    cmds:
+      - |
+        echo "Seeding demo data..."
+        go run ./server/cmd/demo_seed --seed-only
+        echo "Verifying seeded demo logins..."
+        go run ./server/cmd/demo_seed --verify-only
+        echo "✓ Demo data seeded and verified"
 
   db:reset:
     desc: Reset database (WARNING - drops all data)
@@ -250,6 +316,111 @@ tasks:
     cmds:
       - cd client && npm run dev
 
+  demo:smoke:
+    desc: Run the role-aware Playwright demo smoke suite against local built apps
+    cmds:
+      - |
+        set -euo pipefail
+        if lsof -t -iTCP:{{.DEMO_SERVER_PORT}} -sTCP:LISTEN >/dev/null 2>&1; then
+          echo "❌ Demo server port {{.DEMO_SERVER_PORT}} is already in use."
+          exit 1
+        fi
+        if lsof -t -iTCP:{{.DEMO_CLIENT_PORT}} -sTCP:LISTEN >/dev/null 2>&1; then
+          echo "❌ Demo client port {{.DEMO_CLIENT_PORT}} is already in use."
+          exit 1
+        fi
+
+        SERVER_LOG=$(mktemp)
+        CLIENT_LOG=$(mktemp)
+        cleanup() {
+          EXIT_CODE=$?
+          for PID in ${CLIENT_PID:-} ${SERVER_PID:-}; do
+            if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+              kill "$PID" 2>/dev/null || true
+            fi
+          done
+          for PID in ${CLIENT_PID:-} ${SERVER_PID:-}; do
+            if [ -z "$PID" ]; then
+              continue
+            fi
+            for _ in $(seq 1 10); do
+              if ! kill -0 "$PID" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            if kill -0 "$PID" 2>/dev/null; then
+              kill -9 "$PID" 2>/dev/null || true
+            fi
+            wait "$PID" 2>/dev/null || true
+          done
+          exit "$EXIT_CODE"
+        }
+        trap cleanup EXIT
+
+        DEMO_API_URL="http://127.0.0.1:{{.DEMO_SERVER_PORT}}"
+        DEMO_APP_URL="http://127.0.0.1:{{.DEMO_CLIENT_PORT}}"
+
+        if ! (
+          cd client
+          NEXT_DIST_DIR="{{.DEMO_CLIENT_DIST_DIR}}" NEXT_PUBLIC_API_URL="$DEMO_API_URL" npm run build
+        ) >"$CLIENT_LOG" 2>&1; then
+          echo "❌ Client build failed"
+          cat "$CLIENT_LOG"
+          exit 1
+        fi
+
+        APP_PORT={{.DEMO_SERVER_PORT}} CORS_ORIGINS="$DEMO_APP_URL" ./bin/{{.APP_NAME}} >"$SERVER_LOG" 2>&1 &
+        SERVER_PID=$!
+        (
+          cd client
+          exec env NEXT_DIST_DIR="{{.DEMO_CLIENT_DIST_DIR}}" NEXT_PUBLIC_API_URL="$DEMO_API_URL" npm run start -- --hostname 127.0.0.1 --port {{.DEMO_CLIENT_PORT}}
+        ) >>"$CLIENT_LOG" 2>&1 &
+        CLIENT_PID=$!
+
+        for _ in $(seq 1 60); do
+          if curl -fsS "$DEMO_API_URL/health" >/dev/null; then
+            break
+          fi
+          sleep 1
+        done
+        if ! curl -fsS "$DEMO_API_URL/health" >/dev/null; then
+          echo "❌ Server failed to start"
+          cat "$SERVER_LOG"
+          exit 1
+        fi
+
+        for _ in $(seq 1 60); do
+          if curl -fsS "$DEMO_APP_URL" >/dev/null; then
+            break
+          fi
+          sleep 1
+        done
+        if ! curl -fsS "$DEMO_APP_URL" >/dev/null; then
+          echo "❌ Client failed to start"
+          cat "$CLIENT_LOG"
+          exit 1
+        fi
+
+        cd client
+        npx playwright install chromium
+        NEXT_PUBLIC_API_URL="$DEMO_API_URL" PLAYWRIGHT_BASE_URL="$DEMO_APP_URL" npm run test:e2e:demo
+
+  verify:demo:
+    desc: Run the full local demo-readiness verification flow
+    cmds:
+      - task: db:start
+      - task: build
+      - task: test:unit
+      - task: lint
+      - cd client && npm run typecheck
+      - cd client && npm run lint
+      - cd client && NEXT_DIST_DIR="{{.VERIFY_CLIENT_DIST_DIR}}" npm run build
+      - cd client && npm test -- --runInBand
+      - task: db:migration-status
+      - task: db:seed-demo
+      - task: demo:smoke
+
   health:
     desc: Check health of running services
     cmds:
@@ -258,7 +429,15 @@ tasks:
         echo ""
         
         echo "Backend API:"
-        curl -s http://localhost:8080/api/health -I | head -n 1 || echo "❌ Backend not responding"
+        curl -s http://localhost:8080/health -I | head -n 1 || echo "❌ Backend not responding"
+
+        echo ""
+        echo "Backend readiness:"
+        curl -s http://localhost:8080/ready -I | head -n 1 || echo "⚠ Readiness endpoint not responding"
+
+        echo ""
+        echo "Backend liveness:"
+        curl -s http://localhost:8080/alive -I | head -n 1 || echo "⚠ Liveness endpoint not responding"
         
         echo ""
         echo "Frontend:"

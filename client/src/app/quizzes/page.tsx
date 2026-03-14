@@ -466,14 +466,14 @@ export default function QuizzesPage() {
       }
 
       const payload: {
-        question_text: string;
-        question_type: string;
-        options?: Array<{ option_text: string; is_correct: boolean }>;
+        text: string;
+        type: string;
+        options?: Array<{ text: string; is_correct: boolean }>;
         correct_answer?: string;
         points: number;
       } = {
-        question_text: newQuestion.text.trim(),
-        question_type: newQuestion.type,
+        text: newQuestion.text.trim(),
+        type: newQuestion.type,
         points: Number(newQuestion.points) || 1,
       };
 
@@ -481,7 +481,7 @@ export default function QuizzesPage() {
         payload.options = newQuestion.options
           ?.filter((opt) => opt.text.trim())
           .map((opt) => ({
-            option_text: opt.text.trim(),
+            text: opt.text.trim(),
             is_correct: opt.isCorrect,
           }));
       } else {
@@ -572,9 +572,10 @@ export default function QuizzesPage() {
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Course ID</label>
+                <label htmlFor="quiz-course-id" className="text-sm font-medium">Course ID</label>
                 {courses.length > 0 ? (
                   <select
+                    id="quiz-course-id"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={newQuiz.courseId}
                     onChange={(event) => setNewQuiz({ ...newQuiz, courseId: event.target.value })}
@@ -588,6 +589,7 @@ export default function QuizzesPage() {
                   </select>
                 ) : (
                   <Input
+                    id="quiz-course-id"
                     value={newQuiz.courseId}
                     onChange={(event) => setNewQuiz({ ...newQuiz, courseId: event.target.value })}
                     placeholder="Course ID"
@@ -595,30 +597,34 @@ export default function QuizzesPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Title</label>
+                <label htmlFor="quiz-title" className="text-sm font-medium">Title</label>
                 <Input
+                  id="quiz-title"
                   value={newQuiz.title}
                   onChange={(event) => setNewQuiz({ ...newQuiz, title: event.target.value })}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium">Description</label>
+                <label htmlFor="quiz-description" className="text-sm font-medium">Description</label>
                 <Input
+                  id="quiz-description"
                   value={newQuiz.description}
                   onChange={(event) => setNewQuiz({ ...newQuiz, description: event.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Duration (min)</label>
+                <label htmlFor="quiz-duration" className="text-sm font-medium">Duration (min)</label>
                 <Input
+                  id="quiz-duration"
                   type="number"
                   value={newQuiz.duration}
                   onChange={(event) => setNewQuiz({ ...newQuiz, duration: Number(event.target.value || 30) })}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Due Date (optional)</label>
+                <label htmlFor="quiz-due-date" className="text-sm font-medium">Due Date (optional)</label>
                 <Input
+                  id="quiz-due-date"
                   type="date"
                   value={newQuiz.dueDate}
                   onChange={(event) => setNewQuiz({ ...newQuiz, dueDate: event.target.value })}
@@ -943,18 +949,20 @@ export default function QuizzesPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Question Text</label>
-                <Input
-                  value={newQuestion.text}
-                  onChange={(e) => setNewQuestion({ ...newQuestion, text: e.target.value })}
-                  placeholder="Enter your question"
+                  <label htmlFor="quiz-question-text" className="text-sm font-medium">Question Text</label>
+                  <Input
+                    id="quiz-question-text"
+                    value={newQuestion.text}
+                    onChange={(e) => setNewQuestion({ ...newQuestion, text: e.target.value })}
+                    placeholder="Enter your question"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Question Type</label>
+                  <label htmlFor="quiz-question-type" className="text-sm font-medium">Question Type</label>
                   <select
+                    id="quiz-question-type"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={newQuestion.type}
                     onChange={(e) =>
@@ -979,8 +987,9 @@ export default function QuizzesPage() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Points</label>
+                  <label htmlFor="quiz-question-points" className="text-sm font-medium">Points</label>
                   <Input
+                    id="quiz-question-points"
                     type="number"
                     min="1"
                     value={newQuestion.points}
@@ -1010,10 +1019,11 @@ export default function QuizzesPage() {
                           }}
                           className="h-4 w-4"
                         />
-                        <Input
-                          value={option.text}
-                          onChange={(e) => {
-                            const newOptions = [...(newQuestion.options || [])];
+                          <Input
+                            id={`quiz-question-option-${index}`}
+                            value={option.text}
+                            onChange={(e) => {
+                              const newOptions = [...(newQuestion.options || [])];
                             newOptions[index] = { ...newOptions[index], text: e.target.value };
                             setNewQuestion({ ...newQuestion, options: newOptions });
                           }}
@@ -1028,9 +1038,10 @@ export default function QuizzesPage() {
 
               {(newQuestion.type === "true_false" || newQuestion.type === "short_answer") && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Correct Answer</label>
+                  <label htmlFor="quiz-question-answer" className="text-sm font-medium">Correct Answer</label>
                   {newQuestion.type === "true_false" ? (
                     <select
+                      id="quiz-question-answer"
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={newQuestion.correctAnswer}
                       onChange={(e) => setNewQuestion({ ...newQuestion, correctAnswer: e.target.value })}
@@ -1041,6 +1052,7 @@ export default function QuizzesPage() {
                     </select>
                   ) : (
                     <Input
+                      id="quiz-question-answer"
                       value={newQuestion.correctAnswer}
                       onChange={(e) => setNewQuestion({ ...newQuestion, correctAnswer: e.target.value })}
                       placeholder="Enter correct answer"

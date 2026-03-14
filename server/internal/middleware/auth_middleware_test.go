@@ -3,8 +3,10 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"eduhub/server/internal/models"
@@ -18,17 +20,10 @@ import (
 // --- mock types ---
 
 type mockTokenValidator struct {
-	validateJWTFunc       func(ctx context.Context, token string) (*auth.Identity, error)
 	validateTokenFunc     func(ctx context.Context, accessToken string) (*auth.Identity, error)
 	hasRoleFunc           func(identity *auth.Identity, role string) bool
 	checkPermissionFunc   func(ctx context.Context, identity *auth.Identity, action, resource string) (bool, error)
-}
-
-func (m *mockTokenValidator) ValidateJWT(ctx context.Context, token string) (*auth.Identity, error) {
-	if m.validateJWTFunc != nil {
-		return m.validateJWTFunc(ctx, token)
-	}
-	return nil, errors.New("not implemented")
+	resolveCollegeIDFunc  func(ctx context.Context, externalID string) (int, error)
 }
 
 func (m *mockTokenValidator) ValidateToken(ctx context.Context, accessToken string) (*auth.Identity, error) {
@@ -50,6 +45,18 @@ func (m *mockTokenValidator) CheckPermission(ctx context.Context, identity *auth
 		return m.checkPermissionFunc(ctx, identity, action, resource)
 	}
 	return false, nil
+}
+
+func (m *mockTokenValidator) ResolveCollegeID(ctx context.Context, externalID string) (int, error) {
+	if m.resolveCollegeIDFunc != nil {
+		return m.resolveCollegeIDFunc(ctx, externalID)
+	}
+	// Default: try to parse as integer, otherwise return 0
+	id, err := strconv.Atoi(externalID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to resolve college from external id %q", externalID)
+	}
+	return id, nil
 }
 
 type mockStudentLoader struct {
@@ -200,7 +207,7 @@ func TestGetCollegeIDHelper(t *testing.T) {
 
 func TestAuthMiddleware_ValidateToken(t *testing.T) {
 	t.Run("rejects missing auth header", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 
 		handler := mw.ValidateToken(func(c echo.Context) error {
@@ -220,7 +227,7 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 				return nil, errors.New("invalid token")
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer bad-token"})
 
 		handler := mw.ValidateToken(func(c echo.Context) error {
@@ -240,7 +247,7 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 				return identity, nil
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer valid-token"})
 
 		var ctxIdentity *auth.Identity
@@ -262,7 +269,7 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 				return identity, nil
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer tok"})
 
 		var uid any
@@ -282,7 +289,7 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 				return identity, nil
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer tok"})
 
 		var uid any
@@ -296,69 +303,11 @@ func TestAuthMiddleware_ValidateToken(t *testing.T) {
 	})
 }
 
-// --- ValidateJWT middleware ---
-
-func TestAuthMiddleware_ValidateJWT(t *testing.T) {
-	t.Run("rejects missing auth header", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
-		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
-
-		handler := mw.ValidateJWT(func(c echo.Context) error {
-			return nil
-		})
-
-		err := handler(c)
-		require.Error(t, err)
-		he := err.(*echo.HTTPError)
-		assert.Equal(t, http.StatusUnauthorized, he.Code)
-	})
-
-	t.Run("rejects invalid JWT", func(t *testing.T) {
-		validator := &mockTokenValidator{
-			validateJWTFunc: func(ctx context.Context, token string) (*auth.Identity, error) {
-				return nil, errors.New("expired")
-			},
-		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
-		c, _ := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer expired-token"})
-
-		handler := mw.ValidateJWT(func(c echo.Context) error {
-			return nil
-		})
-
-		err := handler(c)
-		require.Error(t, err)
-		he := err.(*echo.HTTPError)
-		assert.Equal(t, http.StatusUnauthorized, he.Code)
-	})
-
-	t.Run("sets identity on success", func(t *testing.T) {
-		identity := &auth.Identity{ID: "jwt-id", UserID: 5}
-		validator := &mockTokenValidator{
-			validateJWTFunc: func(ctx context.Context, token string) (*auth.Identity, error) {
-				return identity, nil
-			},
-		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
-		c, _ := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer valid-jwt"})
-
-		var ctxIdentity *auth.Identity
-		handler := mw.ValidateJWT(func(c echo.Context) error {
-			ctxIdentity, _ = c.Get("identity").(*auth.Identity)
-			return nil
-		})
-
-		err := handler(c)
-		require.NoError(t, err)
-		assert.Equal(t, identity, ctxIdentity)
-	})
-}
-
 // --- RequireCollege middleware ---
 
 func TestAuthMiddleware_RequireCollege(t *testing.T) {
 	t.Run("rejects when no identity", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 
 		handler := mw.RequireCollege(func(c echo.Context) error {
@@ -370,7 +319,7 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 	})
 
 	t.Run("rejects empty college ID", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{Traits: auth.Traits{College: auth.College{ID: ""}}})
 
@@ -383,7 +332,7 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 	})
 
 	t.Run("sets numeric college ID as int", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{Traits: auth.Traits{College: auth.College{ID: "42"}}})
 
@@ -398,8 +347,14 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 		assert.Equal(t, 42, collegeID)
 	})
 
-	t.Run("sets non-numeric college ID as string", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+	t.Run("resolves non-numeric college ID via ResolveCollegeID", func(t *testing.T) {
+		validator := &mockTokenValidator{
+			resolveCollegeIDFunc: func(ctx context.Context, externalID string) (int, error) {
+				assert.Equal(t, "uuid-abc-123", externalID)
+				return 99, nil // simulate DB lookup
+			},
+		}
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{Traits: auth.Traits{College: auth.College{ID: "uuid-abc-123"}}})
 
@@ -411,15 +366,16 @@ func TestAuthMiddleware_RequireCollege(t *testing.T) {
 
 		err := handler(c)
 		require.NoError(t, err)
-		assert.Equal(t, "uuid-abc-123", collegeID)
+		assert.Equal(t, 99, collegeID)
 	})
+
 }
 
 // --- LoadStudentProfile middleware ---
 
 func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	t.Run("rejects when no identity", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 
 		handler := mw.LoadStudentProfile(func(c echo.Context) error {
@@ -431,7 +387,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 	})
 
 	t.Run("passes through for non-student roles", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "abc", Traits: auth.Traits{Role: "admin"}})
 
@@ -451,7 +407,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 				return student, nil
 			},
 		}
-		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "kratos-1", Traits: auth.Traits{Role: "student"}})
 
@@ -472,7 +428,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 				return nil, errors.New("not found")
 			},
 		}
-		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "kratos-1", Traits: auth.Traits{Role: "student"}})
 
@@ -490,7 +446,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 				return nil, nil
 			},
 		}
-		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "kratos-1", Traits: auth.Traits{Role: "student"}})
 
@@ -509,7 +465,7 @@ func TestAuthMiddleware_LoadStudentProfile(t *testing.T) {
 				return student, nil
 			},
 		}
-		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil)
 		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "kratos-1", Traits: auth.Traits{Role: "student"}})
 
@@ -534,7 +490,7 @@ func TestAuthMiddleware_RequireRole(t *testing.T) {
 	}
 
 	t.Run("rejects when no identity", func(t *testing.T) {
-		mw := NewAuthMiddleware(makeValidator(true), &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(makeValidator(true), &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 
 		handler := mw.RequireRole("admin")(func(c echo.Context) error {
@@ -547,7 +503,7 @@ func TestAuthMiddleware_RequireRole(t *testing.T) {
 	})
 
 	t.Run("allows matching role", func(t *testing.T) {
-		mw := NewAuthMiddleware(makeValidator(true), &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(makeValidator(true), &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{Traits: auth.Traits{Role: "admin"}})
 
@@ -561,7 +517,7 @@ func TestAuthMiddleware_RequireRole(t *testing.T) {
 	})
 
 	t.Run("rejects non-matching role", func(t *testing.T) {
-		mw := NewAuthMiddleware(makeValidator(false), &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(makeValidator(false), &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{Traits: auth.Traits{Role: "student"}})
 
@@ -579,7 +535,7 @@ func TestAuthMiddleware_RequireRole(t *testing.T) {
 
 func TestAuthMiddleware_RequirePermission(t *testing.T) {
 	t.Run("rejects when no identity", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 
 		handler := mw.RequirePermission("user", "resource", "action")(func(c echo.Context) error {
@@ -597,7 +553,7 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 				return true, nil
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "u1"})
 
@@ -616,7 +572,7 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 				return false, nil
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "u1"})
 
@@ -635,7 +591,7 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 				return false, errors.New("keto error")
 			},
 		}
-		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
 		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
 		c.Set("identity", &auth.Identity{ID: "u1"})
 
@@ -653,7 +609,7 @@ func TestAuthMiddleware_RequirePermission(t *testing.T) {
 
 func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	t.Run("rejects when no identity", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/1", nil)
 		rec := httptest.NewRecorder()
@@ -670,7 +626,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("rejects missing studentID param", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/", nil)
 		rec := httptest.NewRecorder()
@@ -686,7 +642,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("rejects invalid studentID param", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/abc", nil)
 		rec := httptest.NewRecorder()
@@ -704,7 +660,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("allows student accessing own data", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/42", nil)
 		rec := httptest.NewRecorder()
@@ -723,7 +679,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("rejects student accessing other student data", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/99", nil)
 		rec := httptest.NewRecorder()
@@ -742,7 +698,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("allows admin accessing any student data", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/99", nil)
 		rec := httptest.NewRecorder()
@@ -760,7 +716,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("allows faculty accessing any student data", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/99", nil)
 		rec := httptest.NewRecorder()
@@ -778,7 +734,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("rejects unknown role", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/1", nil)
 		rec := httptest.NewRecorder()
@@ -796,7 +752,7 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 	})
 
 	t.Run("rejects student with no student_id in context", func(t *testing.T) {
-		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil, nil)
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodGet, "/students/1", nil)
 		rec := httptest.NewRecorder()
@@ -811,5 +767,186 @@ func TestAuthMiddleware_VerifyStudentOwnership(t *testing.T) {
 
 		_ = handler(c)
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+
+	t.Run("rejects negative studentID", func(t *testing.T) {
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/students/-5", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("studentID")
+		c.SetParamValues("-5")
+		c.Set("identity", &auth.Identity{Traits: auth.Traits{Role: "admin"}})
+
+		handler := mw.VerifyStudentOwnership()(func(c echo.Context) error {
+			return nil
+		})
+
+		_ = handler(c)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("rejects student_id wrong type in context", func(t *testing.T) {
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet, "/students/42", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("studentID")
+		c.SetParamValues("42")
+		c.Set("identity", &auth.Identity{Traits: auth.Traits{Role: "student"}})
+		c.Set("student_id", "not-an-int")
+
+		handler := mw.VerifyStudentOwnership()(func(c echo.Context) error {
+			return nil
+		})
+
+		_ = handler(c)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
+// --- ValidateToken edge cases ---
+
+func TestAuthMiddleware_ValidateToken_AccessTokenCookie(t *testing.T) {
+	t.Run("uses access token cookie when Authorization header is missing", func(t *testing.T) {
+		identity := &auth.Identity{ID: "ws-user"}
+		validator := &mockTokenValidator{
+			validateTokenFunc: func(ctx context.Context, token string) (*auth.Identity, error) {
+				assert.Equal(t, "ws-token-123", token)
+				return identity, nil
+			},
+		}
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
+		c, rec := newAuthEchoContext(http.MethodGet, "/", nil)
+		c.Request().AddCookie(&http.Cookie{
+			Name:  "edduhub_access_token",
+			Value: "ws-token-123",
+		})
+
+		var ctxIdentity *auth.Identity
+		handler := mw.ValidateToken(func(c echo.Context) error {
+			ctxIdentity, _ = c.Get("identity").(*auth.Identity)
+			return c.String(http.StatusOK, "ok")
+		})
+
+		err := handler(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, identity, ctxIdentity)
+	})
+}
+
+func TestAuthMiddleware_ValidateToken_SetsUserID(t *testing.T) {
+	t.Run("sets user_id in context when identity.UserID > 0", func(t *testing.T) {
+		identity := &auth.Identity{ID: "k-99", UserID: 77}
+		validator := &mockTokenValidator{
+			validateTokenFunc: func(ctx context.Context, token string) (*auth.Identity, error) {
+				return identity, nil
+			},
+		}
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
+		c, _ := newAuthEchoContext(http.MethodGet, "/", map[string]string{"Authorization": "Bearer tok"})
+
+		var uid any
+		handler := mw.ValidateToken(func(c echo.Context) error {
+			uid = c.Get("user_id")
+			return nil
+		})
+
+		_ = handler(c)
+		assert.Equal(t, 77, uid)
+	})
+}
+
+// --- RequireCollege edge cases ---
+
+func TestAuthMiddleware_RequireCollege_ResolveError(t *testing.T) {
+	t.Run("returns error when ResolveCollegeID fails", func(t *testing.T) {
+		validator := &mockTokenValidator{
+			resolveCollegeIDFunc: func(ctx context.Context, externalID string) (int, error) {
+				return 0, errors.New("db connection failed")
+			},
+		}
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
+		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
+		c.Set("identity", &auth.Identity{Traits: auth.Traits{College: auth.College{ID: "college-xyz"}}})
+
+		handler := mw.RequireCollege(func(c echo.Context) error {
+			return nil
+		})
+
+		err := handler(c)
+		require.Error(t, err)
+		he, ok := err.(*echo.HTTPError)
+		require.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, he.Code)
+	})
+}
+
+func TestAuthMiddleware_RequireCollege_ZeroCollegeID(t *testing.T) {
+	t.Run("returns error when ResolveCollegeID returns zero", func(t *testing.T) {
+		validator := &mockTokenValidator{
+			resolveCollegeIDFunc: func(ctx context.Context, externalID string) (int, error) {
+				return 0, nil
+			},
+		}
+		mw := NewAuthMiddleware(validator, &mockStudentLoader{}, nil)
+		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
+		c.Set("identity", &auth.Identity{Traits: auth.Traits{College: auth.College{ID: "college-xyz"}}})
+
+		handler := mw.RequireCollege(func(c echo.Context) error {
+			return nil
+		})
+
+		err := handler(c)
+		require.Error(t, err)
+		he, ok := err.(*echo.HTTPError)
+		require.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, he.Code)
+	})
+}
+
+func TestAuthMiddleware_RequireCollege_EmptyCollegeID(t *testing.T) {
+	t.Run("returns error when identity has empty College.ID", func(t *testing.T) {
+		mw := NewAuthMiddleware(&mockTokenValidator{}, &mockStudentLoader{}, nil)
+		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
+		c.Set("identity", &auth.Identity{Traits: auth.Traits{College: auth.College{ID: ""}}})
+
+		handler := mw.RequireCollege(func(c echo.Context) error {
+			return nil
+		})
+
+		err := handler(c)
+		require.Error(t, err)
+		he, ok := err.(*echo.HTTPError)
+		require.True(t, ok)
+		assert.Equal(t, http.StatusBadRequest, he.Code)
+	})
+}
+
+// --- LoadStudentProfile edge cases ---
+
+func TestAuthMiddleware_LoadStudentProfile_FindByKratosIDError(t *testing.T) {
+	t.Run("returns 500 when FindByKratosID returns an actual error", func(t *testing.T) {
+		loader := &mockStudentLoader{
+			findByKratosIDFunc: func(ctx context.Context, kratosID string) (*models.Student, error) {
+				return nil, errors.New("database connection refused")
+			},
+		}
+		mw := NewAuthMiddleware(&mockTokenValidator{}, loader, nil)
+		c, _ := newAuthEchoContext(http.MethodGet, "/", nil)
+		c.Set("identity", &auth.Identity{ID: "kratos-1", Traits: auth.Traits{Role: "student"}})
+
+		handler := mw.LoadStudentProfile(func(c echo.Context) error {
+			return nil
+		})
+
+		err := handler(c)
+		require.Error(t, err)
+		he, ok := err.(*echo.HTTPError)
+		require.True(t, ok)
+		assert.Equal(t, http.StatusInternalServerError, he.Code)
 	})
 }

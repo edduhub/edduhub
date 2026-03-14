@@ -165,6 +165,9 @@ export default function RegisterPage() {
                   required
                   disabled={isLoading}
                 />
+                {fieldErrors.firstName && (
+                  <p className="text-sm text-destructive">{fieldErrors.firstName}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -181,6 +184,9 @@ export default function RegisterPage() {
                   required
                   disabled={isLoading}
                 />
+                {fieldErrors.lastName && (
+                  <p className="text-sm text-destructive">{fieldErrors.lastName}</p>
+                )}
               </div>
             </div>
 
@@ -199,6 +205,9 @@ export default function RegisterPage() {
                 required
                 disabled={isLoading}
               />
+                {fieldErrors.email && (
+                  <p className="text-sm text-destructive">{fieldErrors.email}</p>
+                )}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -217,6 +226,9 @@ export default function RegisterPage() {
                   required
                   disabled={isLoading}
                 />
+                {fieldErrors.password && (
+                  <p className="text-sm text-destructive">{fieldErrors.password}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -234,6 +246,9 @@ export default function RegisterPage() {
                   required
                   disabled={isLoading}
                 />
+                {fieldErrors.confirmPassword && (
+                  <p className="text-sm text-destructive">{fieldErrors.confirmPassword}</p>
+                )}
               </div>
             </div>
 
@@ -251,6 +266,9 @@ export default function RegisterPage() {
                   required
                   disabled={isLoading}
                 />
+                {fieldErrors.collegeId && (
+                  <p className="text-sm text-destructive">{fieldErrors.collegeId}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -266,6 +284,9 @@ export default function RegisterPage() {
                   required
                   disabled={isLoading}
                 />
+                {fieldErrors.collegeName && (
+                  <p className="text-sm text-destructive">{fieldErrors.collegeName}</p>
+                )}
               </div>
             </div>
 

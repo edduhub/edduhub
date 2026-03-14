@@ -9,7 +9,7 @@ type AuthContextType = {
   session: AuthSession | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthSession>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -28,7 +28,6 @@ type RegisterData = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'edduhub_auth';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const DEFAULT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const VALID_USER_ROLES = new Set<User['role']>(['student', 'faculty', 'admin', 'super_admin', 'parent']);
@@ -71,21 +70,27 @@ function unwrapData(payload: unknown): unknown {
 
 function extractToken(payload: unknown): string {
   const data = asRecord(payload);
-  return (data && firstString(data.token)) || '';
+  return (data && firstString(data.token, data.accessToken, data.access_token)) || '';
+}
+
+function extractRefreshToken(payload: unknown): string | undefined {
+  const data = asRecord(payload);
+  return data ? firstString(data.refreshToken, data.refresh_token) : undefined;
 }
 
 function extractExpiresAt(payload: unknown): string {
   const data = asRecord(payload);
+  const expiresIn = data?.expiresIn;
+  if (typeof expiresIn === 'number' && expiresIn > 0) {
+    return new Date(Date.now() + expiresIn * 1000).toISOString();
+  }
   return (
     firstString(data?.expiresAt, data?.expires_at) ||
     new Date(Date.now() + DEFAULT_SESSION_TTL_MS).toISOString()
   );
 }
 
-function extractMessage(payload: unknown, fallback: string): string {
-  const data = asRecord(payload);
-  return firstString(data?.message, data?.error, fallback) || fallback;
-}
+
 
 function normalizeUser(payload: unknown, fallbackUser: User | null = null): User | null {
   const data = asRecord(payload);
@@ -172,45 +177,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const abortController = new AbortController();
 
     const bootstrap = async () => {
-      const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
-      let storedSession: AuthSession | null = null;
-
-      if (storedAuth) {
-        try {
-          const parsed = asRecord(JSON.parse(storedAuth));
-          const parsedUser = normalizeUser(parsed?.user || null);
-          const parsedExpiresAt = firstString(parsed?.expiresAt, parsed?.expires_at);
-          const parsedToken = firstString(parsed?.token) || '';
-
-          if (parsedUser && parsedExpiresAt) {
-            storedSession = {
-              token: parsedToken,
-              user: parsedUser,
-              expiresAt: parsedExpiresAt,
-            };
-          } else {
-            logger.warn('Stored auth payload is missing required fields', { key: AUTH_STORAGE_KEY });
-            localStorage.removeItem(AUTH_STORAGE_KEY);
-          }
-        } catch (error) {
-          logger.error('Failed to parse stored auth during bootstrap', error as Error, { key: AUTH_STORAGE_KEY });
-          localStorage.removeItem(AUTH_STORAGE_KEY);
-        }
-      }
-
-      const storedToken = storedSession?.token || '';
-
       try {
-        // Resolve current identity from the auth callback endpoint.
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (storedToken) {
-          headers.Authorization = `Bearer ${storedToken}`;
-        }
-
-        const resp = await fetch(`${API_BASE}/auth/callback`, {
+        const resp = await fetch(`${API_BASE}/auth/session`, {
           method: 'GET',
           credentials: 'include',
-          headers,
+          headers: { 'Content-Type': 'application/json' },
           signal: abortController.signal,
         });
 
@@ -219,27 +190,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (resp.ok) {
           const result = await resp.json();
-          const userData = normalizeUser(unwrapData(result), storedSession?.user || null);
+          const payload = unwrapData(result);
+          const userData = normalizeUser(payload, null);
+          const token = extractToken(payload) || '';
+          const expiresAt = extractExpiresAt(payload);
           if (userData) {
             setUser(userData);
             setSession({
-              token: storedToken,
+              token,
+              refreshToken: extractRefreshToken(payload),
               user: userData,
-              expiresAt:
-                storedSession?.expiresAt ||
-                new Date(Date.now() + DEFAULT_SESSION_TTL_MS).toISOString(),
+              expiresAt,
             });
             setIsLoading(false);
             return;
           }
 
-          logger.warn('Auth callback response missing user fields; falling back to stored session');
-        } else if (storedToken && (resp.status === 401 || resp.status === 403)) {
-          logger.warn('Stored token is no longer valid; clearing local session cache', {
+          logger.warn('Auth session response missing user fields; forcing unauthenticated state', {
             status: resp.status,
           });
-          storedSession = null;
-          localStorage.removeItem(AUTH_STORAGE_KEY);
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') return;
@@ -249,21 +218,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Check if component was unmounted during fetch
       if (abortController.signal.aborted) return;
 
-      // Fallback: Load session from localStorage
-      if (storedSession) {
-        try {
-          const authData: AuthSession = storedSession;
-          if (new Date(authData.expiresAt) > new Date()) {
-            setSession(authData);
-            setUser(authData.user);
-          } else {
-            localStorage.removeItem(AUTH_STORAGE_KEY);
-          }
-        } catch (error) {
-          logger.error('Failed to parse stored auth', error as Error, { key: AUTH_STORAGE_KEY });
-          localStorage.removeItem(AUTH_STORAGE_KEY);
-        }
-      }
       setIsLoading(false);
     };
 
@@ -278,16 +232,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const saveSession = (authSession: AuthSession) => {
     setSession(authSession);
     setUser(authSession.user);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
   };
 
   const clearSession = () => {
     setSession(null);
     setUser(null);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<AuthSession> => {
     try {
       const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
@@ -316,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const authSession: AuthSession = {
         token: extractToken(data),
+        refreshToken: extractRefreshToken(data),
         user: mappedUser,
         expiresAt: extractExpiresAt(data),
       };
@@ -324,6 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       saveSession(authSession);
+      return authSession;
     } catch (error) {
       logger.error('Login failed', error as Error, { email });
       throw error;
@@ -356,13 +310,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const mappedUser = normalizeUser(responseData);
 
       if (!token || !mappedUser) {
-        throw new Error(
-          extractMessage(responseData, 'Registration successful. Please sign in with your credentials.')
-        );
+        // Backend might not return a token upon registration. In that case, automatically log in.
+        await login(data.email, data.password);
+        return;
       }
 
       const authSession: AuthSession = {
         token,
+        refreshToken: extractRefreshToken(responseData),
         user: mappedUser,
         expiresAt: extractExpiresAt(responseData),
       };
@@ -379,7 +334,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
-        headers: session?.token ? { 'Authorization': `Bearer ${session.token}` } : undefined,
       });
     } catch (error) {
       logger.error('Logout failed', error as Error);
@@ -390,12 +344,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshSession = async () => {
     try {
-      const headers: Record<string, string> = {};
-      if (session?.token) headers['Authorization'] = `Bearer ${session.token}`;
       const response = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (response.ok) {
@@ -413,8 +365,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const updatedSession: AuthSession = {
             ...currentSession,
             token: refreshedToken,
+            refreshToken: extractRefreshToken(data) || currentSession.refreshToken,
             user: mappedUser,
-            expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS).toISOString(),
+            expiresAt: extractExpiresAt(data),
           };
           saveSession(updatedSession);
         }

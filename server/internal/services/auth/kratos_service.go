@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -67,9 +70,69 @@ func (k *kratosService) GetIdentity(ctx context.Context, identityID string) (*Id
 	return &identity, nil
 }
 
+// FindIdentityByEmail retrieves an identity by its password identifier email.
+func (k *kratosService) FindIdentityByEmail(ctx context.Context, email string) (*Identity, error) {
+	if strings.TrimSpace(email) == "" {
+		return nil, fmt.Errorf("email is required")
+	}
+
+	url := fmt.Sprintf("%s/identities?credentials_identifier=%s", k.AdminURL, url.QueryEscape(email))
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create identity lookup request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find identity: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to find identity: %d", resp.StatusCode)
+	}
+
+	var identities []Identity
+	if err := json.NewDecoder(resp.Body).Decode(&identities); err != nil {
+		return nil, fmt.Errorf("failed to decode identity list response: %w", err)
+	}
+	if len(identities) == 0 {
+		return nil, nil
+	}
+
+	return &identities[0], nil
+}
+
+// DeleteIdentity removes an identity from the Kratos admin API.
+func (k *kratosService) DeleteIdentity(ctx context.Context, identityID string) error {
+	if identityID == "" {
+		return fmt.Errorf("identity ID is required")
+	}
+
+	url := fmt.Sprintf("%s/identities/%s", k.AdminURL, identityID)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete identity request: %w", err)
+	}
+
+	resp, err := k.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete identity: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("delete identity failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+}
+
 // InitiateRegistrationFlow starts the registration process
 func (k *kratosService) InitiateRegistrationFlow(ctx context.Context) (map[string]any, error) {
-	url := fmt.Sprintf("%s/self-service/registration/flows", k.PublicURL)
+	url := fmt.Sprintf("%s/self-service/registration/api", k.PublicURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration request: %w", err)
@@ -97,7 +160,7 @@ func (k *kratosService) CompleteRegistration(ctx context.Context, flowID string,
 		return nil, fmt.Errorf("failed to marshal registration data: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/self-service/registration/flows?id=%s", k.PublicURL, flowID)
+	url := fmt.Sprintf("%s/self-service/registration?flow=%s", k.PublicURL, flowID)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create registration completion request: %w", err)
@@ -112,12 +175,8 @@ func (k *kratosService) CompleteRegistration(ctx context.Context, flowID string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		var errResp struct {
-			Error            string `json:"error"`
-			ErrorDescription string `json:"error_description"`
-		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf("registration failed: %s - %s", errResp.Error, errResp.ErrorDescription)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("registration failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var result struct {
@@ -328,31 +387,31 @@ func (k *kratosService) ChangePassword(ctx context.Context, identityID string, o
 }
 
 // Login authenticates a user with Kratos using the password strategy.
-// It initiates a login flow, submits the credentials, and returns the resolved Identity.
-func (k *kratosService) Login(ctx context.Context, email, password string) (*Identity, error) {
+// It initiates a login flow, submits the credentials, and returns the resolved Identity plus session token.
+func (k *kratosService) Login(ctx context.Context, email, password string) (*Identity, string, error) {
 	// Step 1: Initiate a native-API login flow.
 	flowURL := fmt.Sprintf("%s/self-service/login/api", k.PublicURL)
 	initReq, err := http.NewRequestWithContext(ctx, "GET", flowURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create login flow request: %w", err)
+		return nil, "", fmt.Errorf("failed to create login flow request: %w", err)
 	}
 	initReq.Header.Set("Accept", "application/json")
 
 	initResp, err := k.HTTPClient.Do(initReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initiate login flow: %w", err)
+		return nil, "", fmt.Errorf("failed to initiate login flow: %w", err)
 	}
 	defer initResp.Body.Close()
 
 	if initResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("login flow initiation failed with status: %d", initResp.StatusCode)
+		return nil, "", fmt.Errorf("login flow initiation failed with status: %d", initResp.StatusCode)
 	}
 
 	var flow struct {
 		ID string `json:"id"`
 	}
 	if err := json.NewDecoder(initResp.Body).Decode(&flow); err != nil {
-		return nil, fmt.Errorf("failed to decode login flow: %w", err)
+		return nil, "", fmt.Errorf("failed to decode login flow: %w", err)
 	}
 
 	// Step 2: Submit credentials.
@@ -363,20 +422,20 @@ func (k *kratosService) Login(ctx context.Context, email, password string) (*Ide
 	}
 	data, err := json.Marshal(creds)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal credentials: %w", err)
+		return nil, "", fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
 	submitURL := fmt.Sprintf("%s/self-service/login?flow=%s", k.PublicURL, flow.ID)
 	submitReq, err := http.NewRequestWithContext(ctx, "POST", submitURL, bytes.NewBuffer(data))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create login submit request: %w", err)
+		return nil, "", fmt.Errorf("failed to create login submit request: %w", err)
 	}
 	submitReq.Header.Set("Content-Type", "application/json")
 	submitReq.Header.Set("Accept", "application/json")
 
 	submitResp, err := k.HTTPClient.Do(submitReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to submit login: %w", err)
+		return nil, "", fmt.Errorf("failed to submit login: %w", err)
 	}
 	defer submitResp.Body.Close()
 
@@ -388,25 +447,41 @@ func (k *kratosService) Login(ctx context.Context, email, password string) (*Ide
 		}
 		// Best-effort decode; fall back to status code on parse failure.
 		if decErr := json.NewDecoder(submitResp.Body).Decode(&errBody); decErr != nil || errBody.Error.Message == "" {
-			return nil, fmt.Errorf("login failed: status %d", submitResp.StatusCode)
+			return nil, "", fmt.Errorf("login failed: status %d", submitResp.StatusCode)
 		}
-		return nil, fmt.Errorf("login failed: %s", errBody.Error.Message)
+		return nil, "", fmt.Errorf("login failed: %s", errBody.Error.Message)
 	}
 
 	var result struct {
 		Session struct {
-			Identity Identity `json:"identity"`
+			Identity     Identity `json:"identity"`
+			Token        string   `json:"token"`
+			SessionToken string   `json:"session_token"`
 		} `json:"session"`
 	}
 	if err := json.NewDecoder(submitResp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode login response: %w", err)
+		return nil, "", fmt.Errorf("failed to decode login response: %w", err)
 	}
 
 	if result.Session.Identity.ID == "" {
-		return nil, fmt.Errorf("login response missing identity")
+		return nil, "", fmt.Errorf("login response missing identity")
 	}
 
-	return &result.Session.Identity, nil
+	sessionToken := strings.TrimSpace(result.Session.SessionToken)
+	if sessionToken == "" {
+		sessionToken = strings.TrimSpace(result.Session.Token)
+	}
+
+	if sessionToken == "" {
+		for _, cookie := range submitResp.Cookies() {
+			if strings.TrimSpace(cookie.Name) != "" && strings.TrimSpace(cookie.Value) != "" {
+				sessionToken = strings.TrimSpace(cookie.Value)
+				break
+			}
+		}
+	}
+
+	return &result.Session.Identity, sessionToken, nil
 }
 
 // CheckCollegeAccess returns true when the identity's college ID matches the expected value.

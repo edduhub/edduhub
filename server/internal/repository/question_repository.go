@@ -50,11 +50,6 @@ func NewQuestionRepository(db *DB) QuestionRepository {
 	return &questionRepository{DB: db}
 }
 
-// Table constants for question operations
-const (
-	questionTable = "questions"
-)
-
 // CreateQuestion creates a new question in the database.
 // It automatically sets CreatedAt and UpdatedAt timestamps.
 // Uses parameterized queries to prevent SQL injection.
@@ -65,12 +60,23 @@ func (r *questionRepository) CreateQuestion(ctx context.Context, question *model
 	question.UpdatedAt = now
 
 	// SQL query with parameterized placeholders
-	sql := `INSERT INTO questions (quiz_id, text, type, points, correct_answer, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	sql := `INSERT INTO questions (
+			quiz_id,
+			question_text,
+			question_type,
+			marks,
+			text,
+			type,
+			points,
+			correct_answer,
+			created_at,
+			updated_at
+		)
+			VALUES ($1, $2, $3, $4, $2, $3, $4, $5, $6, $7) RETURNING id`
 
 	// Prepare arguments in correct order
 	args := []any{question.QuizID, question.Text, question.Type, question.Points,
-				 question.CorrectAnswer, question.CreatedAt, question.UpdatedAt}
+		question.CorrectAnswer, question.CreatedAt, question.UpdatedAt}
 
 	// Execute query and scan the returned ID
 	temp := struct {
@@ -92,7 +98,11 @@ func (r *questionRepository) GetQuestionByID(ctx context.Context, collegeID int,
 	question := &models.Question{}
 
 	// Query with college isolation through JOIN
-	sql := `SELECT q.id, q.quiz_id, q.text, q.type, q.points, q.correct_answer, q.created_at, q.updated_at
+	sql := `SELECT q.id, q.quiz_id,
+			COALESCE(q.text, q.question_text) AS text,
+			COALESCE(q.type, q.question_type) AS type,
+			COALESCE(q.points, q.marks) AS points,
+			q.correct_answer, q.created_at, q.updated_at
 			FROM questions q
 			JOIN quizzes qu ON q.quiz_id = qu.id
 			WHERE q.id = $1 AND qu.college_id = $2`
@@ -117,10 +127,18 @@ func (r *questionRepository) UpdateQuestion(ctx context.Context, collegeID int, 
 	question.UpdatedAt = time.Now()
 
 	// Update query with college isolation through subquery
-	sql := `UPDATE questions SET text = $1, type = $2, points = $3, correct_answer = $4, updated_at = $5
+	sql := `UPDATE questions
+			SET question_text = $1,
+				question_type = $2,
+				marks = $3,
+				text = $1,
+				type = $2,
+				points = $3,
+				correct_answer = $4,
+				updated_at = $5
 			WHERE id = $6 AND quiz_id IN (SELECT id FROM quizzes WHERE college_id = $7)`
 	args := []any{question.Text, question.Type, question.Points, question.CorrectAnswer, question.UpdatedAt,
-				 question.ID, collegeID}
+		question.ID, collegeID}
 
 	cmdTag, err := r.DB.Pool.Exec(ctx, sql, args...)
 	if err != nil {
@@ -160,7 +178,11 @@ func (r *questionRepository) DeleteQuestion(ctx context.Context, collegeID int, 
 func (r *questionRepository) FindQuestionsByQuiz(ctx context.Context, collegeID int, quizID int, limit, offset uint64) ([]*models.Question, error) {
 	questions := []*models.Question{}
 
-	sql := `SELECT q.id, q.quiz_id, q.text, q.type, q.points, q.correct_answer, q.created_at, q.updated_at
+	sql := `SELECT q.id, q.quiz_id,
+			COALESCE(q.text, q.question_text) AS text,
+			COALESCE(q.type, q.question_type) AS type,
+			COALESCE(q.points, q.marks) AS points,
+			q.correct_answer, q.created_at, q.updated_at
 			FROM questions q
 			JOIN quizzes qu ON q.quiz_id = qu.id
 			WHERE q.quiz_id = $1 AND qu.college_id = $2

@@ -28,7 +28,7 @@ func setupIntegrationDB(t *testing.T, requiredTables ...string) (context.Context
 	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL not set, skipping integration test")
+		t.Fatalf("TEST_DATABASE_URL is required for integration tests. Set it to point at a migrated database before running go test -tags=integration (example: task TEST_DATABASE_URL=postgres://testuser:testpass@localhost:5433/testdb?sslmode=disable test:integration:bootstrap)")
 	}
 
 	pool, err := pgxpool.New(context.Background(), databaseURL)
@@ -50,7 +50,11 @@ func setupIntegrationDB(t *testing.T, requiredTables ...string) (context.Context
 			t.Fatalf("failed checking table %s: %v", table, err)
 		}
 		if !exists {
-			t.Skipf("table %s not found, skipping integration test", table)
+			t.Fatalf(
+				"required table %s was not found in %s; run task db:migrate before integration tests (or task test:integration:bootstrap)",
+				table,
+				databaseURL,
+			)
 		}
 	}
 

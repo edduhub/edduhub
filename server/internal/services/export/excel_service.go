@@ -33,7 +33,9 @@ func (s *csvExportService) ExportStudentsToExcel(ctx context.Context, students [
 	writer := csv.NewWriter(&byteWriter{&buf})
 
 	headers := []string{"Student ID", "User ID", "College ID", "Roll No", "Enrollment Year", "Active", "Created At", "Updated At"}
-	writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("failed to write student headers: %w", err)
+	}
 
 	for _, student := range students {
 		record := []string{
@@ -46,7 +48,9 @@ func (s *csvExportService) ExportStudentsToExcel(ctx context.Context, students [
 			student.CreatedAt.Format("2006-01-02 15:04:05"),
 			student.UpdatedAt.Format("2006-01-02 15:04:05"),
 		}
-		writer.Write(record)
+		if err := writer.Write(record); err != nil {
+			return nil, fmt.Errorf("failed to write student record: %w", err)
+		}
 	}
 
 	writer.Flush()
@@ -63,7 +67,9 @@ func (s *csvExportService) ExportGradesToExcel(ctx context.Context, grades []*mo
 	writer := csv.NewWriter(&byteWriter{&buf})
 
 	headers := []string{"Grade ID", "Student ID", "Course ID", "Assessment Type", "Assessment Name", "Obtained Marks", "Total Marks", "Percentage", "Grade", "Graded At"}
-	writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("failed to write grade headers: %w", err)
+	}
 
 	for _, grade := range grades {
 		gradedAt := ""
@@ -87,7 +93,9 @@ func (s *csvExportService) ExportGradesToExcel(ctx context.Context, grades []*mo
 			gradeValue,
 			gradedAt,
 		}
-		writer.Write(record)
+		if err := writer.Write(record); err != nil {
+			return nil, fmt.Errorf("failed to write grade record: %w", err)
+		}
 	}
 
 	writer.Flush()
@@ -104,7 +112,9 @@ func (s *csvExportService) ExportAttendanceToExcel(ctx context.Context, attendan
 	writer := csv.NewWriter(&byteWriter{&buf})
 
 	headers := []string{"Attendance ID", "Student ID", "Course ID", "Lecture ID", "Date", "Status", "Scanned At"}
-	writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("failed to write attendance headers: %w", err)
+	}
 
 	for _, record := range attendance {
 		csvRecord := []string{
@@ -116,7 +126,9 @@ func (s *csvExportService) ExportAttendanceToExcel(ctx context.Context, attendan
 			record.Status,
 			record.ScannedAt.Format("2006-01-02 15:04:05"),
 		}
-		writer.Write(csvRecord)
+		if err := writer.Write(csvRecord); err != nil {
+			return nil, fmt.Errorf("failed to write attendance record: %w", err)
+		}
 	}
 
 	writer.Flush()
@@ -133,7 +145,9 @@ func (s *csvExportService) ExportCoursesToExcel(ctx context.Context, courses []*
 	writer := csv.NewWriter(&byteWriter{&buf})
 
 	headers := []string{"Course ID", "Name", "College ID", "Description", "Credits", "Instructor ID", "Created At", "Updated At"}
-	writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("failed to write course headers: %w", err)
+	}
 
 	for _, course := range courses {
 		record := []string{
@@ -146,7 +160,9 @@ func (s *csvExportService) ExportCoursesToExcel(ctx context.Context, courses []*
 			course.CreatedAt.Format("2006-01-02"),
 			course.UpdatedAt.Format("2006-01-02"),
 		}
-		writer.Write(record)
+		if err := writer.Write(record); err != nil {
+			return nil, fmt.Errorf("failed to write course record: %w", err)
+		}
 	}
 
 	writer.Flush()
@@ -163,7 +179,9 @@ func (s *csvExportService) ExportFeePaymentsToExcel(ctx context.Context, payment
 	writer := csv.NewWriter(&byteWriter{&buf})
 
 	headers := []string{"Payment ID", "Student ID", "Amount", "Payment Date", "Status", "Payment Method", "Transaction ID"}
-	writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("failed to write fee payment headers: %w", err)
+	}
 
 	for _, payment := range payments {
 		record := []string{
@@ -175,7 +193,9 @@ func (s *csvExportService) ExportFeePaymentsToExcel(ctx context.Context, payment
 			fmt.Sprintf("%v", payment["payment_method"]),
 			fmt.Sprintf("%v", payment["transaction_id"]),
 		}
-		writer.Write(record)
+		if err := writer.Write(record); err != nil {
+			return nil, fmt.Errorf("failed to write fee payment record: %w", err)
+		}
 	}
 
 	writer.Flush()
@@ -192,7 +212,9 @@ func (s *csvExportService) ExportEnrollmentToExcel(ctx context.Context, enrollme
 	writer := csv.NewWriter(&byteWriter{&buf})
 
 	headers := []string{"Enrollment ID", "Student ID", "Course ID", "College ID", "Enrollment Date", "Status", "Grade"}
-	writer.Write(headers)
+	if err := writer.Write(headers); err != nil {
+		return nil, fmt.Errorf("failed to write enrollment headers: %w", err)
+	}
 
 	for _, enrollment := range enrollments {
 		record := []string{
@@ -204,7 +226,9 @@ func (s *csvExportService) ExportEnrollmentToExcel(ctx context.Context, enrollme
 			enrollment.Status,
 			enrollment.Grade,
 		}
-		writer.Write(record)
+		if err := writer.Write(record); err != nil {
+			return nil, fmt.Errorf("failed to write enrollment record: %w", err)
+		}
 	}
 
 	writer.Flush()

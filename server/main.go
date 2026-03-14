@@ -33,13 +33,8 @@ import (
 // @name Authorization
 
 func main() {
-	// Load .env file FIRST
-	err := godotenv.Load()
 	log := logger.NewZeroLogger(true)
-
-	if err != nil {
-		log.Logger.Warn().Msg("unable to load  env variables")
-	}
+	loadEnvFiles(log)
 
 	// Create the app instance (which loads config, logger, db, etc.)
 	setup, err := app.New()
@@ -78,5 +73,24 @@ func main() {
 		log.Logger.Error().Err(err).Msg("error during shutdown")
 	} else {
 		log.Logger.Info().Msg("server stopped successfully")
+	}
+}
+
+func loadEnvFiles(log *logger.ZeroLogger) {
+	envFiles := []string{".env", "server/.env.local"}
+	loadedAny := false
+
+	for _, path := range envFiles {
+		if err := godotenv.Load(path); err != nil {
+			if !os.IsNotExist(err) {
+				log.Logger.Warn().Err(err).Str("path", path).Msg("unable to load env file")
+			}
+			continue
+		}
+		loadedAny = true
+	}
+
+	if !loadedAny {
+		log.Logger.Warn().Msg("no env files loaded; relying on process environment only")
 	}
 }

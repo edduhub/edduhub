@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
+	"os"
 	"sync"
 	"time"
 
@@ -82,7 +82,7 @@ func NewWebSocketService(notificationRepo repository.NotificationRepository, all
 	}
 
 	logger := zerolog.New(zerolog.ConsoleWriter{
-		Out:        zerolog.ConsoleWriter{Out: nil}.Out,
+		Out:        os.Stdout,
 		TimeFormat: time.RFC3339,
 	}).With().Timestamp().Logger()
 
@@ -124,21 +124,20 @@ func (s *websocketService) HandleWebSocket(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized: identity not found"})
 	}
 
-	studentID := c.Get("student_id")
-	if studentID == nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized: student ID not found"})
+	userID := identity.UserID
+	if userID == 0 {
+		if contextUserID, ok := c.Get("user_id").(int); ok {
+			userID = contextUserID
+		}
+	}
+	if userID == 0 {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized: user ID not found"})
 	}
 
-	userID, ok := studentID.(int)
-	if !ok {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized: invalid student ID type"})
-	}
-
-	collegeIDStr := identity.Traits.College.ID
-	collegeID, err := strconv.Atoi(collegeIDStr)
+	collegeID, err := extractCollegeIDFromContext(c)
 	if err != nil {
-		s.logger.Error().Str("college_id", collegeIDStr).Err(err).Msg("Invalid college ID format")
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid college ID format"})
+		s.logger.Error().Err(err).Msg("Missing resolved college ID in websocket context")
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid college context"})
 	}
 
 	conn, err := s.upgrader.Upgrade(c.Response(), c.Request(), nil)
@@ -174,11 +173,7 @@ func (s *websocketService) HandleWebSocket(c echo.Context) error {
 		s.logger.Info().Int("user_id", userID).Int("college_id", collegeID).Msg("WebSocket connection closed")
 	}()
 
-	welcomeMsg := WebSocketMessage{
-		Type:      "connected",
-		Data:      map[string]string{"message": "Connected to EduHub notifications"},
-		Timestamp: time.Now(),
-	}
+	welcomeMsg := newWebSocketMessage("connected", collegeID, userID, nil, map[string]string{"message": "Connected to EduHub notifications"})
 	if err := conn.WriteJSON(welcomeMsg); err != nil {
 		log.Printf("Failed to send welcome message: %v", err)
 		return err
@@ -195,10 +190,7 @@ func (s *websocketService) HandleWebSocket(c echo.Context) error {
 		}
 
 		if msg.Type == "ping" {
-			pongMsg := WebSocketMessage{
-				Type:      "pong",
-				Timestamp: time.Now(),
-			}
+			pongMsg := newWebSocketMessage("pong", collegeID, userID, nil, nil)
 			if err := conn.WriteJSON(pongMsg); err != nil {
 				log.Printf("Failed to send pong: %v", err)
 				break
@@ -222,11 +214,7 @@ func (s *websocketService) BroadcastNotification(ctx context.Context, collegeID 
 		return nil
 	}
 
-	message := WebSocketMessage{
-		Type:         "notification",
-		Notification: notification,
-		Timestamp:    time.Now(),
-	}
+	message := newWebSocketMessage("notification", collegeID, 0, notification, nil)
 
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
@@ -250,11 +238,7 @@ func (s *websocketService) BroadcastToUser(ctx context.Context, collegeID, userI
 
 	if collegeClients, exists := s.clients[collegeID]; exists {
 		if conn, userExists := collegeClients[userID]; userExists {
-			message := WebSocketMessage{
-				Type:         "notification",
-				Notification: notification,
-				Timestamp:    time.Now(),
-			}
+			message := newWebSocketMessage("notification", collegeID, userID, notification, nil)
 
 			if err := conn.WriteJSON(message); err != nil {
 				log.Printf("Failed to send notification to user %d: %v", userID, err)
@@ -279,11 +263,7 @@ func (s *websocketService) BroadcastToUsers(ctx context.Context, collegeID int, 
 		return nil
 	}
 
-	message := WebSocketMessage{
-		Type:         "notification",
-		Notification: notification,
-		Timestamp:    time.Now(),
-	}
+	message := newWebSocketMessage("notification", collegeID, 0, notification, nil)
 
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
@@ -322,12 +302,7 @@ func (s *websocketService) BroadcastTypingIndicator(ctx context.Context, college
 		return fmt.Errorf("websocket service is stopped")
 	}
 
-	message := WebSocketMessage{
-		Type:      "typing",
-		UserID:    userID,
-		Data:      map[string]bool{"is_typing": isTyping},
-		Timestamp: time.Now(),
-	}
+	message := newWebSocketMessage("typing", collegeID, userID, nil, map[string]bool{"is_typing": isTyping})
 
 	s.clientsMutex.RLock()
 	collegeClients, exists := s.clients[collegeID]
@@ -360,12 +335,7 @@ func (s *websocketService) BroadcastPresence(ctx context.Context, collegeID, use
 		return fmt.Errorf("websocket service is stopped")
 	}
 
-	message := WebSocketMessage{
-		Type:      "presence",
-		UserID:    userID,
-		Data:      map[string]string{"status": status},
-		Timestamp: time.Now(),
-	}
+	message := newWebSocketMessage("presence", collegeID, userID, nil, map[string]string{"status": status})
 
 	s.clientsMutex.RLock()
 	collegeClients, exists := s.clients[collegeID]
@@ -467,10 +437,7 @@ func (s *websocketService) heartbeatMonitor() {
 			for collegeID, clients := range s.clients {
 				for userID, conn := range clients {
 					go func(conn *websocket.Conn, cID, uID int) {
-						pingMsg := WebSocketMessage{
-							Type:      "ping",
-							Timestamp: time.Now(),
-						}
+						pingMsg := newWebSocketMessage("ping", cID, uID, nil, nil)
 						if err := conn.WriteJSON(pingMsg); err != nil {
 							s.logger.Debug().Int("user_id", uID).Int("college_id", cID).Err(err).Msg("Heartbeat failed")
 						}
@@ -479,5 +446,39 @@ func (s *websocketService) heartbeatMonitor() {
 			}
 			s.clientsMutex.RUnlock()
 		}
+	}
+}
+
+func extractCollegeIDFromContext(c echo.Context) (int, error) {
+	switch value := c.Get("college_id").(type) {
+	case int:
+		if value > 0 {
+			return value, nil
+		}
+	case int32:
+		if value > 0 {
+			return int(value), nil
+		}
+	case int64:
+		if value > 0 {
+			return int(value), nil
+		}
+	case float64:
+		if value > 0 {
+			return int(value), nil
+		}
+	}
+
+	return 0, fmt.Errorf("college_id not found in context")
+}
+
+func newWebSocketMessage(messageType string, collegeID, userID int, notification *models.Notification, data any) WebSocketMessage {
+	return WebSocketMessage{
+		Type:         messageType,
+		Notification: notification,
+		Data:         data,
+		Timestamp:    time.Now(),
+		UserID:       userID,
+		CollegeID:    collegeID,
 	}
 }

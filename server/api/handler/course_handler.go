@@ -333,11 +333,6 @@ func (h *CourseHandler) ListEnrolledStudents(c echo.Context) error {
 		return helpers.Error(c, err.Error(), 500)
 	}
 
-	studentIDs := make([]int, 0, len(enrollments))
-	for _, enrollment := range enrollments {
-		studentIDs = append(studentIDs, enrollment.StudentID)
-	}
-
 	students := []map[string]any{}
 	for _, enrollment := range enrollments {
 		profile, err := h.studentService.GetStudentDetailedProfile(c.Request().Context(), collegeID, enrollment.StudentID)

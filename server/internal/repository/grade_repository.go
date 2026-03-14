@@ -297,7 +297,6 @@ func (r *gradeRepository) GetGrades(ctx context.Context, filter models.GradeFilt
 	if filter.Offset > 0 {
 		sql += fmt.Sprintf(" OFFSET $%d", idx)
 		args = append(args, filter.Offset)
-		idx++
 	}
 
 	grades := []*models.Grade{}

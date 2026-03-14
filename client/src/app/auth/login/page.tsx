@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from 'react';
+import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { getDashboardPathForRole } from '@/lib/types';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,11 +27,8 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      // Use role-based redirect for better UX
-      // The login function updates the user state, so we need to get it from the response
-      // For now, redirect to home and let the home page handle role-based routing
-      router.push('/');
+      const session = await login(email, password);
+      router.push(getDashboardPathForRole(session.user.role) as Route);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to login. Please check your credentials.');
     } finally {

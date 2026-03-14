@@ -31,16 +31,19 @@ func (r *webhookRepository) CreateWebhook(ctx context.Context, webhook *models.W
 	webhook.CreatedAt = now
 	webhook.UpdatedAt = now
 
-	sql := `INSERT INTO webhooks (college_id, url, event, secret, active, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	sql := `INSERT INTO webhooks (college_id, name, description, url, secret, event_types, is_active, created_by, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`
 
 	var id int
 	err := r.DB.Pool.QueryRow(ctx, sql,
 		webhook.CollegeID,
+		webhook.Name,
+		webhook.Description,
 		webhook.URL,
-		webhook.Event,
 		webhook.Secret,
+		webhook.EventTypes,
 		webhook.Active,
+		webhook.CreatedBy,
 		webhook.CreatedAt,
 		webhook.UpdatedAt,
 	).Scan(&id)
@@ -54,7 +57,7 @@ func (r *webhookRepository) CreateWebhook(ctx context.Context, webhook *models.W
 }
 
 func (r *webhookRepository) GetWebhooksByCollege(ctx context.Context, collegeID int) ([]*models.Webhook, error) {
-	sql := `SELECT id, college_id, url, event, secret, active, created_at, updated_at
+	sql := `SELECT id, college_id, name, description, url, secret, event_types, is_active, created_by, created_at, updated_at
 			FROM webhooks WHERE college_id = $1 ORDER BY created_at DESC`
 
 	var webhooks []*models.Webhook
@@ -63,8 +66,8 @@ func (r *webhookRepository) GetWebhooksByCollege(ctx context.Context, collegeID 
 }
 
 func (r *webhookRepository) GetWebhooksByEvent(ctx context.Context, collegeID int, event string) ([]*models.Webhook, error) {
-	sql := `SELECT id, college_id, url, event, secret, active, created_at, updated_at
-			FROM webhooks WHERE college_id = $1 AND event = $2 AND active = true`
+	sql := `SELECT id, college_id, name, description, url, secret, event_types, is_active, created_by, created_at, updated_at
+			FROM webhooks WHERE college_id = $1 AND event_types @> ARRAY[$2]::varchar[] AND is_active = true`
 
 	var webhooks []*models.Webhook
 	err := pgxscan.Select(ctx, r.DB.Pool, &webhooks, sql, collegeID, event)
@@ -72,7 +75,7 @@ func (r *webhookRepository) GetWebhooksByEvent(ctx context.Context, collegeID in
 }
 
 func (r *webhookRepository) GetWebhookByID(ctx context.Context, collegeID, webhookID int) (*models.Webhook, error) {
-	sql := `SELECT id, college_id, url, event, secret, active, created_at, updated_at
+	sql := `SELECT id, college_id, name, description, url, secret, event_types, is_active, created_by, created_at, updated_at
 			FROM webhooks WHERE id = $1 AND college_id = $2`
 
 	var webhook models.Webhook
@@ -83,13 +86,16 @@ func (r *webhookRepository) GetWebhookByID(ctx context.Context, collegeID, webho
 func (r *webhookRepository) UpdateWebhook(ctx context.Context, webhook *models.Webhook) error {
 	webhook.UpdatedAt = time.Now()
 
-	sql := `UPDATE webhooks SET url = $1, event = $2, secret = $3, active = $4, updated_at = $5
-			WHERE id = $6 AND college_id = $7`
+	sql := `UPDATE webhooks
+			SET name = $1, description = $2, url = $3, secret = $4, event_types = $5, is_active = $6, updated_at = $7
+			WHERE id = $8 AND college_id = $9`
 
 	_, err := r.DB.Pool.Exec(ctx, sql,
+		webhook.Name,
+		webhook.Description,
 		webhook.URL,
-		webhook.Event,
 		webhook.Secret,
+		webhook.EventTypes,
 		webhook.Active,
 		webhook.UpdatedAt,
 		webhook.ID,

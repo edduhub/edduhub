@@ -47,11 +47,6 @@ func NewAnswerOptionRepository(db *DB) AnswerOptionRepository {
 	return &answerOptionRepository{DB: db}
 }
 
-// Table constants for answer option operations
-const (
-	answerOptionTable = "answer_options"
-)
-
 // CreateAnswerOption creates a new answer option in the database.
 // It automatically sets CreatedAt and UpdatedAt timestamps.
 // Uses parameterized queries to prevent SQL injection.
@@ -62,12 +57,12 @@ func (r *answerOptionRepository) CreateAnswerOption(ctx context.Context, option 
 	option.UpdatedAt = now
 
 	// SQL query with parameterized placeholders
-	sql := `INSERT INTO answer_options (question_id, text, is_correct, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	sql := `INSERT INTO answer_options (question_id, option_text, text, is_correct, created_at, updated_at)
+			VALUES ($1, $2, $2, $3, $4, $5) RETURNING id`
 
 	// Prepare arguments in correct order
 	args := []any{option.QuestionID, option.Text, option.IsCorrect,
-				 option.CreatedAt, option.UpdatedAt}
+		option.CreatedAt, option.UpdatedAt}
 
 	// Execute query and scan the returned ID
 	temp := struct {
@@ -89,7 +84,7 @@ func (r *answerOptionRepository) GetAnswerOptionByID(ctx context.Context, colleg
 	option := &models.AnswerOption{}
 
 	// Query with college isolation through multiple JOINs
-	sql := `SELECT ao.id, ao.question_id, ao.text, ao.is_correct, ao.created_at, ao.updated_at
+	sql := `SELECT ao.id, ao.question_id, COALESCE(ao.text, ao.option_text) AS text, ao.is_correct, ao.created_at, ao.updated_at
 			FROM answer_options ao
 			JOIN questions q ON ao.question_id = q.id
 			JOIN quizzes qu ON q.quiz_id = qu.id
@@ -115,7 +110,7 @@ func (r *answerOptionRepository) UpdateAnswerOption(ctx context.Context, college
 	option.UpdatedAt = time.Now()
 
 	// Update query with college isolation through subquery
-	sql := `UPDATE answer_options SET text = $1, is_correct = $2, updated_at = $3
+	sql := `UPDATE answer_options SET option_text = $1, text = $1, is_correct = $2, updated_at = $3
 			WHERE id = $4 AND question_id IN (
 				SELECT q.id FROM questions q
 				JOIN quizzes qu ON q.quiz_id = qu.id
@@ -166,7 +161,7 @@ func (r *answerOptionRepository) DeleteAnswerOption(ctx context.Context, college
 func (r *answerOptionRepository) FindAnswerOptionsByQuestion(ctx context.Context, questionID int) ([]*models.AnswerOption, error) {
 	options := []*models.AnswerOption{}
 
-	sql := `SELECT id, question_id, text, is_correct, created_at, updated_at
+	sql := `SELECT id, question_id, COALESCE(text, option_text) AS text, is_correct, created_at, updated_at
 			FROM answer_options
 			WHERE question_id = $1
 			ORDER BY created_at ASC`

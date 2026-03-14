@@ -3,138 +3,87 @@ package config
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadAuthConfig(t *testing.T) {
-	tests := []struct {
-		name          string
-		envVars       map[string]string
-		expectError   bool
-		expectedValue *AuthConfig
-	}{
-		{
-			name: "valid configuration",
-			envVars: map[string]string{
-				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
-				"KRATOS_PUBLIC_URL": "http://public.example.com",
-				"KRATOS_ADMIN_URL":  "http://admin.example.com",
-				"KRATOS_DOMAIN":     "example.com",
-				"PORT":              "8080",
-			},
-			expectError: false,
-			expectedValue: &AuthConfig{
-				PublicURL: "http://public.example.com",
-				AdminURL:  "http://admin.example.com",
-				Domain:    "example.com",
-				Port:      "8080",
-				JWTSecret: "this-is-a-test-secret-key-at-least-32-chars-long",
-				College: CollegeConfig{
-					RequireVerification: true,
-					AllowedRoles:        []string{"admin", "faculty", "student"},
-				},
-			},
-		},
-		{
-			name: "missing JWT_SECRET",
-			envVars: map[string]string{
-				"KRATOS_PUBLIC_URL": "http://public.example.com",
-				"KRATOS_ADMIN_URL":  "http://admin.example.com",
-				"KRATOS_DOMAIN":     "example.com",
-				"PORT":              "8080",
-			},
-			expectError: true,
-		},
-		{
-			name: "JWT_SECRET too short",
-			envVars: map[string]string{
-				"JWT_SECRET":        "short-secret",
-				"KRATOS_PUBLIC_URL": "http://public.example.com",
-				"KRATOS_ADMIN_URL":  "http://admin.example.com",
-				"KRATOS_DOMAIN":     "example.com",
-				"PORT":              "8080",
-			},
-			expectError: true,
-		},
-		{
-			name: "missing public URL",
-			envVars: map[string]string{
-				"JWT_SECRET":       "this-is-a-test-secret-key-at-least-32-chars-long",
-				"KRATOS_ADMIN_URL": "http://admin.example.com",
-				"KRATOS_DOMAIN":    "example.com",
-				"PORT":             "8080",
-			},
-			expectError: true,
-		},
-		{
-			name: "missing admin URL",
-			envVars: map[string]string{
-				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
-				"KRATOS_PUBLIC_URL": "http://public.example.com",
-				"KRATOS_DOMAIN":     "example.com",
-				"PORT":              "8080",
-			},
-			expectError: true,
-		},
-		{
-			name: "optional fields can be empty",
-			envVars: map[string]string{
-				"JWT_SECRET":        "this-is-a-test-secret-key-at-least-32-chars-long",
-				"KRATOS_PUBLIC_URL": "http://public.example.com",
-				"KRATOS_ADMIN_URL":  "http://admin.example.com",
-			},
-			expectError: false,
-			expectedValue: &AuthConfig{
-				PublicURL: "http://public.example.com",
-				AdminURL:  "http://admin.example.com",
-				JWTSecret: "this-is-a-test-secret-key-at-least-32-chars-long",
-				College: CollegeConfig{
-					RequireVerification: true,
-					AllowedRoles:        []string{"admin", "faculty", "student"},
-				},
-			},
-		},
+	t.Setenv("KRATOS_PUBLIC_URL", "http://localhost:4433")
+	t.Setenv("KRATOS_ADMIN_URL", "http://localhost:4434")
+	t.Setenv("KRATOS_DOMAIN", "example.com")
+	t.Setenv("PORT", "8080")
+	t.Setenv("HYDRA_PUBLIC_URL", "http://localhost:4444")
+	t.Setenv("HYDRA_ADMIN_URL", "http://localhost:4445")
+	t.Setenv("HYDRA_CLIENT_ID", "client-id")
+	t.Setenv("HYDRA_CLIENT_SECRET", "client-secret")
+	t.Setenv("KETO_READ_URL", "http://localhost:4467")
+	t.Setenv("KETO_WRITE_URL", "http://localhost:4466")
+
+	cfg, err := LoadAuthConfig()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.Equal(t, "http://localhost:4433", cfg.PublicURL)
+	assert.Equal(t, "http://localhost:4434", cfg.AdminURL)
+	assert.Equal(t, "example.com", cfg.Domain)
+	assert.Equal(t, "8080", cfg.Port)
+	assert.Equal(t, "http://localhost:4444", cfg.HydraPublicURL)
+	assert.Equal(t, "http://localhost:4445", cfg.HydraAdminURL)
+	assert.Equal(t, "client-id", cfg.HydraClientID)
+	assert.Equal(t, "client-secret", cfg.HydraClientSecret)
+	assert.Equal(t, "http://localhost:4467", cfg.KetoReadURL)
+	assert.Equal(t, "http://localhost:4466", cfg.KetoWriteURL)
+	assert.True(t, cfg.College.RequireVerification)
+	assert.Equal(t, []string{"admin", "faculty", "student"}, cfg.College.AllowedRoles)
+}
+
+func TestLoadAuthConfig_RequiresKratosURLs(t *testing.T) {
+	os.Clearenv()
+
+	cfg, err := LoadAuthConfig()
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "missing required Kratos configuration")
+}
+
+func TestAuthConfigValidate(t *testing.T) {
+	valid := &AuthConfig{
+		PublicURL: "http://localhost:4433",
+		AdminURL:  "http://localhost:4434",
+		Domain:    "example.com",
+		Port:      "8080",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Clear environment before each test
-			os.Clearenv()
+	t.Run("valid", func(t *testing.T) {
+		assert.NoError(t, valid.Validate())
+	})
 
-			// Set environment variables for test
-			for k, v := range tt.envVars {
-				os.Setenv(k, v)
-			}
+	t.Run("missing public url", func(t *testing.T) {
+		cfg := *valid
+		cfg.PublicURL = ""
+		require.Error(t, cfg.Validate())
+		assert.Contains(t, cfg.Validate().Error(), "PublicURL")
+	})
 
-			config, err := LoadAuthConfig()
+	t.Run("missing admin url", func(t *testing.T) {
+		cfg := *valid
+		cfg.AdminURL = ""
+		require.Error(t, cfg.Validate())
+		assert.Contains(t, cfg.Validate().Error(), "AdminURL")
+	})
 
-			if tt.expectError && err == nil {
-				t.Error("expected error but got none")
-			}
+	t.Run("missing domain", func(t *testing.T) {
+		cfg := *valid
+		cfg.Domain = ""
+		require.Error(t, cfg.Validate())
+		assert.Contains(t, cfg.Validate().Error(), "Domain")
+	})
 
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-
-			if !tt.expectError && tt.expectedValue != nil {
-				if config.PublicURL != tt.expectedValue.PublicURL {
-					t.Errorf("expected PublicURL %s, got %s", tt.expectedValue.PublicURL, config.PublicURL)
-				}
-				if config.AdminURL != tt.expectedValue.AdminURL {
-					t.Errorf("expected AdminURL %s, got %s", tt.expectedValue.AdminURL, config.AdminURL)
-				}
-				if config.Domain != tt.expectedValue.Domain {
-					t.Errorf("expected Domain %s, got %s", tt.expectedValue.Domain, config.Domain)
-				}
-				if config.Port != tt.expectedValue.Port {
-					t.Errorf("expected Port %s, got %s", tt.expectedValue.Port, config.Port)
-				}
-				if config.College.RequireVerification != tt.expectedValue.College.RequireVerification {
-					t.Errorf("expected RequireVerification %v, got %v", tt.expectedValue.College.RequireVerification, config.College.RequireVerification)
-				}
-				if len(config.College.AllowedRoles) != len(tt.expectedValue.College.AllowedRoles) {
-					t.Errorf("expected AllowedRoles length %d, got %d", len(tt.expectedValue.College.AllowedRoles), len(config.College.AllowedRoles))
-				}
-			}
-		})
-	}
+	t.Run("missing port", func(t *testing.T) {
+		cfg := *valid
+		cfg.Port = ""
+		require.Error(t, cfg.Validate())
+		assert.Contains(t, cfg.Validate().Error(), "Port")
+	})
 }

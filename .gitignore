@@ -26,3 +26,21 @@ node_modules/
 
 # Logs
 *.log
+.ant-colony/
+
+# Next.js builds (root level)
+.next/
+.next-*/
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+
+# Demo/test artifacts
+demo_seed
+
+# Editor/automation tool directories
+.sisyphus/
+.zenflow/
+.zencoder/
+.cursor/

@@ -126,16 +126,16 @@ func (m *ErrorSanitizationMiddleware) RecoverMiddleware(next echo.HandlerFunc) e
 					Str("method", c.Request().Method).
 					Msg("Panic recovered")
 
-				// Send sanitized error response
-				if m.IsProduction {
-					c.JSON(http.StatusInternalServerError, map[string]string{
-						"error": "An internal error occurred",
-					})
-				} else {
-					c.JSON(http.StatusInternalServerError, map[string]any{
-						"error": "Internal server error",
-						"panic": r,
-					})
+					// Send sanitized error response
+					if m.IsProduction {
+						_ = c.JSON(http.StatusInternalServerError, map[string]string{
+							"error": "An internal error occurred",
+						})
+					} else {
+						_ = c.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "Internal server error",
+							"panic": r,
+						})
 				}
 			}
 		}()

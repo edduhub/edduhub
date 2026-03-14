@@ -35,6 +35,7 @@ describe("LayoutContent auth guard", () => {
     jest.clearAllMocks();
     mockPathname.mockReturnValue("/");
     mockUseAuth.mockReturnValue({
+      user: null,
       isAuthenticated: false,
       isLoading: false,
     });
@@ -56,6 +57,7 @@ describe("LayoutContent auth guard", () => {
   it("redirects unauthenticated users on protected routes", async () => {
     mockPathname.mockReturnValue("/dashboard");
     mockUseAuth.mockReturnValue({
+      user: null,
       isAuthenticated: false,
       isLoading: false,
     });
@@ -76,6 +78,7 @@ describe("LayoutContent auth guard", () => {
   it("shows loading state while auth is initializing", () => {
     mockPathname.mockReturnValue("/dashboard");
     mockUseAuth.mockReturnValue({
+      user: null,
       isAuthenticated: false,
       isLoading: true,
     });
@@ -92,8 +95,11 @@ describe("LayoutContent auth guard", () => {
   });
 
   it("renders app shell for authenticated users", () => {
-    mockPathname.mockReturnValue("/dashboard");
+    mockPathname.mockReturnValue("/users");
     mockUseAuth.mockReturnValue({
+      user: {
+        role: "admin",
+      },
       isAuthenticated: true,
       isLoading: false,
     });
@@ -108,5 +114,51 @@ describe("LayoutContent auth guard", () => {
     expect(screen.getByTestId("topbar")).toBeInTheDocument();
     expect(screen.getByTestId("page-content")).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("redirects students away from staff routes before rendering children", async () => {
+    mockPathname.mockReturnValue("/users");
+    mockUseAuth.mockReturnValue({
+      user: {
+        role: "student",
+      },
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(
+      <LayoutContent>
+        <div data-testid="page-content">Users</div>
+      </LayoutContent>
+    );
+
+    expect(screen.queryByTestId("page-content")).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/student-dashboard");
+    });
+  });
+
+  it("redirects parents from the root dashboard to the parent portal", async () => {
+    mockPathname.mockReturnValue("/");
+    mockUseAuth.mockReturnValue({
+      user: {
+        role: "parent",
+      },
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(
+      <LayoutContent>
+        <div data-testid="page-content">Dashboard</div>
+      </LayoutContent>
+    );
+
+    expect(screen.queryByTestId("page-content")).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/parent-portal");
+    });
   });
 });
