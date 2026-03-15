@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api-client";
@@ -121,6 +122,7 @@ declare global {
 
 export default function FeesPage() {
     const { user } = useAuth();
+    const queryClient = useQueryClient();
     const [assignments, setAssignments] = useState<FeeAssignment[]>([]);
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
@@ -208,8 +210,8 @@ export default function FeesPage() {
                         });
 
                         setSuccess("Payment successful! Refreshing...");
-                        // Refresh data after short delay
-                        setTimeout(() => window.location.reload(), 1500);
+                        // Invalidate fees queries to refetch data instead of reloading the page
+                        queryClient.invalidateQueries({ queryKey: ['fees'] });
                     } catch (err) {
                         logger.error("Payment verification failed:", err as Error);
                         setError("Payment verification failed. Please contact support if money was deducted.");

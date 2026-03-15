@@ -31,7 +31,7 @@ func (h *CollegeHandler) UpdateCollegeDetails(c echo.Context) error {
 
 	err = h.collegeService.UpdateCollegePartial(c.Request().Context(), collegeID, &req)
 	if err != nil {
-		return helpers.Error(c, err.Error(), 500)
+		return helpers.Error(c, "Failed to process college request", 500)
 	}
 
 	return helpers.Success(c, "Success", 204)

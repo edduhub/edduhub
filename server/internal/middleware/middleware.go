@@ -11,6 +11,9 @@ type Middleware struct {
 	// handles Hydra token validation, Keto permission checks, college
 	// isolation and student profile loading.
 	Auth *AuthMiddleware
+
+	// ParamValidator validates route parameters (IDs)
+	ParamValidator *ParamValidator
 }
 
 // NewMiddleware creates a Middleware bundle wired to the given services.
@@ -18,7 +21,7 @@ type Middleware struct {
 // which is convenient in tests.
 func NewMiddleware(svc *services.Services) *Middleware {
 	if svc == nil {
-		return &Middleware{Auth: &AuthMiddleware{}}
+		return &Middleware{Auth: &AuthMiddleware{}, ParamValidator: &ParamValidator{}}
 	}
 
 	authMiddleware := NewAuthMiddleware(
@@ -27,5 +30,8 @@ func NewMiddleware(svc *services.Services) *Middleware {
 		nil,                 // hydra: already embedded inside svc.Auth
 	)
 
-	return &Middleware{Auth: authMiddleware}
+	return &Middleware{
+		Auth:           authMiddleware,
+		ParamValidator: &ParamValidator{},
+	}
 }

@@ -7,7 +7,7 @@ import (
 	echoSwagger "github.com/swaggo/echo-swagger"
 )
 
-func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
+func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware, pv *middleware.ParamValidator) {
 	// Initialize rate limiters
 	authRateLimiter := middleware.StrictRateLimiter()     // 5 requests per minute for auth
 	passwordRateLimiter := middleware.StrictRateLimiter() // 5 requests per minute for password ops
@@ -78,33 +78,33 @@ func SetupRoutes(e *echo.Echo, a *Handlers, m *middleware.AuthMiddleware) {
 	users := apiGroup.Group("/users", m.RequireRole(middleware.RoleAdmin))
 	users.GET("", a.User.ListUsers)
 	users.POST("", a.User.CreateUser)
-	users.GET("/:userID", a.User.GetUser)
-	users.PATCH("/:userID", a.User.UpdateUser)
-	users.DELETE("/:userID", a.User.DeleteUser)
-	users.PATCH("/:userID/role", a.User.UpdateUserRole)
-	users.PATCH("/:userID/status", a.User.UpdateUserStatus)
+	users.GET("/:userID", a.User.GetUser, pv.ValidateIDParam("userID"))
+	users.PATCH("/:userID", a.User.UpdateUser, pv.ValidateIDParam("userID"))
+	users.DELETE("/:userID", a.User.DeleteUser, pv.ValidateIDParam("userID"))
+	users.PATCH("/:userID/role", a.User.UpdateUserRole, pv.ValidateIDParam("userID"))
+	users.PATCH("/:userID/status", a.User.UpdateUserStatus, pv.ValidateIDParam("userID"))
 
 	// Student management
 	students := apiGroup.Group("/students", m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
 	students.GET("", a.Student.ListStudents)
 	students.POST("", a.Student.CreateStudent, m.RequireRole(middleware.RoleAdmin))
-	students.GET("/:studentID", a.Student.GetStudent)
-	students.PATCH("/:studentID", a.Student.UpdateStudent, m.RequireRole(middleware.RoleAdmin)) // PATCH: Allows partial updates to student details
-	students.DELETE("/:studentID", a.Student.DeleteStudent, m.RequireRole(middleware.RoleAdmin))
-	students.PUT("/:studentID/freeze", a.Student.FreezeStudent, m.RequireRole(middleware.RoleAdmin))
+	students.GET("/:studentID", a.Student.GetStudent, pv.ValidateIDParam("studentID"))
+	students.PATCH("/:studentID", a.Student.UpdateStudent, m.RequireRole(middleware.RoleAdmin), pv.ValidateIDParam("studentID")) // PATCH: Allows partial updates to student details
+	students.DELETE("/:studentID", a.Student.DeleteStudent, m.RequireRole(middleware.RoleAdmin), pv.ValidateIDParam("studentID"))
+	students.PUT("/:studentID/freeze", a.Student.FreezeStudent, m.RequireRole(middleware.RoleAdmin), pv.ValidateIDParam("studentID"))
 
 	// Course management
 	courses := apiGroup.Group("/courses")
 	courses.GET("", a.Course.ListCourses)
 	courses.POST("", a.Course.CreateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	courses.GET("/:courseID", a.Course.GetCourse)
-	courses.PATCH("/:courseID", a.Course.UpdateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	courses.DELETE("/:courseID", a.Course.DeleteCourse, m.RequireRole(middleware.RoleAdmin))
+	courses.GET("/:courseID", a.Course.GetCourse, pv.ValidateIDParam("courseID"))
+	courses.PATCH("/:courseID", a.Course.UpdateCourse, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty), pv.ValidateIDParam("courseID"))
+	courses.DELETE("/:courseID", a.Course.DeleteCourse, m.RequireRole(middleware.RoleAdmin), pv.ValidateIDParam("courseID"))
 
 	// Course enrollment
-	courses.POST("/:courseID/enroll", a.Course.EnrollStudents, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	courses.DELETE("/:courseID/students/:studentID", a.Course.RemoveStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty))
-	courses.GET("/:courseID/students", a.Course.ListEnrolledStudents)
+	courses.POST("/:courseID/enroll", a.Course.EnrollStudents, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty), pv.ValidateIDParam("courseID"))
+	courses.DELETE("/:courseID/students/:studentID", a.Course.RemoveStudent, m.RequireRole(middleware.RoleAdmin, middleware.RoleFaculty), pv.ValidateMultipleIDParams("courseID", "studentID"))
+	courses.GET("/:courseID/students", a.Course.ListEnrolledStudents, pv.ValidateIDParam("courseID"))
 
 	// Course Materials & Modules
 	// Module management (nested under courses)

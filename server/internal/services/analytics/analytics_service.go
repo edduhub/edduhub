@@ -98,29 +98,16 @@ func NewAnalyticsService(
 func (s *analyticsService) GetStudentPerformance(ctx context.Context, collegeID, studentID int, courseID *int) (*StudentPerformanceMetrics, error) {
 	metrics := &StudentPerformanceMetrics{StudentID: studentID}
 
-	avgPercentage, err := s.averageGradePercentage(ctx, collegeID, studentID, courseID)
+	// Combine all sequential queries into a single optimized query
+	avgPercentage, attendanceRate, submittedAssignments, totalAssignments, quizzesCompleted, averageQuizScore, err := s.getAllPerformanceMetrics(ctx, collegeID, studentID, courseID)
 	if err != nil {
 		return nil, err
 	}
+
 	metrics.OverallGPA = PercentageToGPA(avgPercentage)
-
-	attendanceRate, err := s.attendanceRate(ctx, collegeID, studentID, courseID)
-	if err != nil {
-		return nil, err
-	}
 	metrics.AttendanceRate = attendanceRate
-
-	submitted, totalAssignments, err := s.assignmentStats(ctx, collegeID, studentID, courseID)
-	if err != nil {
-		return nil, err
-	}
-	metrics.AssignmentsSubmitted = submitted
+	metrics.AssignmentsSubmitted = submittedAssignments
 	metrics.AssignmentsTotal = totalAssignments
-
-	quizzesCompleted, averageQuizScore, err := s.quizStats(ctx, collegeID, studentID, courseID)
-	if err != nil {
-		return nil, err
-	}
 	metrics.QuizzesCompleted = quizzesCompleted
 	metrics.AverageQuizScore = averageQuizScore
 
@@ -134,6 +121,97 @@ func (s *analyticsService) GetStudentPerformance(ctx context.Context, collegeID,
 	}
 
 	return metrics, nil
+}
+
+// getAllPerformanceMetrics retrieves all performance metrics in a single query
+func (s *analyticsService) getAllPerformanceMetrics(ctx context.Context, collegeID, studentID int, courseID *int) (float64, float64, int, int, int, float64, error) {
+	filterArgs := []any{collegeID, studentID}
+	
+	// Build filters based on courseID
+	gradeFilter := ""
+	attendanceFilter := ""
+	assignmentFilter := ""
+	quizFilter := ""
+	
+	if courseID != nil {
+		gradeFilter = fmt.Sprintf(" AND g.course_id = $%d", len(filterArgs)+1)
+		filterArgs = append(filterArgs, *courseID)
+		
+		attendanceFilter = fmt.Sprintf(" AND a.course_id = $%d", len(filterArgs)+1)
+		filterArgs = append(filterArgs, *courseID)
+		
+		assignmentFilter = fmt.Sprintf(" AND a.course_id = $%d", len(filterArgs)+1)
+		filterArgs = append(filterArgs, *courseID)
+		
+		quizFilter = fmt.Sprintf(" AND q.course_id = $%d", len(filterArgs)+1)
+		filterArgs = append(filterArgs, *courseID)
+	}
+
+	query := fmt.Sprintf(`
+		WITH 
+			grade_stats AS (
+				SELECT COALESCE(AVG(percentage), 0) as avg_grade
+				FROM grades g
+				WHERE g.college_id = $1 AND g.student_id = $2%[1]s
+			),
+			attendance_stats AS (
+				SELECT 
+					COALESCE(SUM(CASE WHEN a.status = 'Present' THEN 1 ELSE 0 END), 0) as present,
+					COUNT(*) as total
+				FROM attendance a
+				WHERE a.college_id = $1 AND a.student_id = $2%[2]s
+			),
+			assignment_stats AS (
+				SELECT 
+					(SELECT COUNT(*) FROM assignment_submissions s
+						JOIN assignments a ON a.id = s.assignment_id
+						WHERE s.student_id = $2 AND a.college_id = $1%[3]s
+					) as submitted,
+					(SELECT COUNT(DISTINCT a.id) FROM assignments a
+						JOIN enrollments e ON e.course_id = a.course_id AND e.college_id = a.college_id
+						WHERE e.student_id = $2 AND a.college_id = $1%[3]s
+					) as total_assignments
+			),
+			quiz_stats AS (
+				SELECT COUNT(*) as quiz_count, COALESCE(AVG(score), 0) as avg_quiz_score
+				FROM quiz_attempts qa
+				JOIN quizzes q ON q.id = qa.quiz_id
+				WHERE qa.college_id = $1 AND qa.student_id = $2 AND qa.status IN ('submitted', 'graded')%[4]s
+			)
+		SELECT 
+			COALESCE(gs.avg_grade, 0),
+			CASE WHEN ast.total > 0 THEN ROUND(ast.present::numeric / ast.total * 100, 2) ELSE 0 END,
+			asst.submitted,
+			asst.total_assignments,
+			qs.quiz_count,
+			COALESCE(qs.avg_quiz_score, 0)
+		FROM grade_stats gs, attendance_stats ast, assignment_stats asst, quiz_stats qs`, 
+		gradeFilter, attendanceFilter, assignmentFilter, quizFilter)
+
+	var avgGrade, attendanceRate, avgQuizScore sql.NullFloat64
+	var submitted, totalAssignments, quizzesCompleted int
+
+	err := s.db.Pool.QueryRow(ctx, query, filterArgs...).Scan(
+		&avgGrade, &attendanceRate, &submitted, &totalAssignments, &quizzesCompleted, &avgQuizScore,
+	)
+	if err != nil {
+		return 0, 0, 0, 0, 0, 0, fmt.Errorf("getAllPerformanceMetrics: query failed: %w", err)
+	}
+
+	avgGradeVal := float64(0)
+	if avgGrade.Valid {
+		avgGradeVal = roundFloat(avgGrade.Float64, 2)
+	}
+	attendanceRateVal := float64(0)
+	if attendanceRate.Valid {
+		attendanceRateVal = roundFloat(attendanceRate.Float64, 2)
+	}
+	avgQuizScoreVal := float64(0)
+	if avgQuizScore.Valid {
+		avgQuizScoreVal = roundFloat(avgQuizScore.Float64, 2)
+	}
+
+	return avgGradeVal, attendanceRateVal, submitted, totalAssignments, quizzesCompleted, avgQuizScoreVal, nil
 }
 
 func (s *analyticsService) GetCourseAnalytics(ctx context.Context, collegeID, courseID int) (*CourseAnalytics, error) {

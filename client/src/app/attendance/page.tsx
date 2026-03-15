@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { api, buildAuthHeaders, endpoints, getAPIBase } from "@/lib/api-client";
@@ -59,6 +60,7 @@ const normalizeStatus = (status?: string): AttendanceRecord['status'] => {
 
 export default function AttendancePage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>('all');
   const [showQRForm, setShowQRForm] = useState(false);
   const [courseId, setCourseId] = useState("");
@@ -240,9 +242,8 @@ export default function AttendancePage() {
 
       setMarkingSuccess(true);
       
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Invalidate attendance queries to refetch data instead of reloading the page
+      queryClient.invalidateQueries({ queryKey: ['attendance'] });
     } catch (err) {
       logger.error('Attendance marking error:', err instanceof Error ? err : new Error(String(err)));
       setError(err instanceof Error ? err.message : 'Failed to mark attendance');

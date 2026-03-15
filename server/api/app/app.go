@@ -110,7 +110,7 @@ func (a *App) Start() error {
 
 	a.e.Use(audit.AuditMiddleware(a.services.AuditService))
 
-	handler.SetupRoutes(a.e, a.handlers, a.middleware.Auth)
+	handler.SetupRoutes(a.e, a.handlers, a.middleware.Auth, a.middleware.ParamValidator)
 
 	a.e.Server.ReadTimeout = 10 * time.Second
 	a.e.Server.WriteTimeout = 30 * time.Second

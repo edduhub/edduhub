@@ -31,6 +31,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const DEFAULT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const VALID_USER_ROLES = new Set<User['role']>(['student', 'faculty', 'admin', 'super_admin', 'parent']);
+const STORAGE_KEY = 'edduhub_auth_session';
+
+function saveSessionToStorage(session: AuthSession): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem('auth_token', session.token);
+  } catch (error) {
+    logger.error('Failed to save session to localStorage', error as Error);
+  }
+}
+
+function loadSessionFromStorage(): AuthSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
+    const session = JSON.parse(stored) as AuthSession;
+    // Check if session is expired
+    if (session.expiresAt && new Date(session.expiresAt) < new Date()) {
+      clearSessionFromStorage();
+      return null;
+    }
+    return session;
+  } catch (error) {
+    logger.error('Failed to load session from localStorage', error as Error);
+    return null;
+  }
+}
+
+function clearSessionFromStorage(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('auth_token');
+  } catch (error) {
+    logger.error('Failed to clear session from localStorage', error as Error);
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -177,6 +216,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const abortController = new AbortController();
 
     const bootstrap = async () => {
+      // First, try to restore session from localStorage
+      const storedSession = loadSessionFromStorage();
+      if (storedSession && storedSession.user) {
+        setSession(storedSession);
+        setUser(storedSession.user);
+        setIsLoading(false);
+        return;
+      }
+
+      // If no stored session, try to fetch from server
       try {
         const resp = await fetch(`${API_BASE}/auth/session`, {
           method: 'GET',
@@ -195,13 +244,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const token = extractToken(payload) || '';
           const expiresAt = extractExpiresAt(payload);
           if (userData) {
-            setUser(userData);
-            setSession({
+            const newSession: AuthSession = {
               token,
               refreshToken: extractRefreshToken(payload),
               user: userData,
               expiresAt,
-            });
+            };
+            setUser(userData);
+            setSession(newSession);
+            saveSessionToStorage(newSession);
             setIsLoading(false);
             return;
           }
@@ -232,11 +283,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const saveSession = (authSession: AuthSession) => {
     setSession(authSession);
     setUser(authSession.user);
+    saveSessionToStorage(authSession);
   };
 
   const clearSession = () => {
     setSession(null);
     setUser(null);
+    clearSessionFromStorage();
   };
 
   const login = async (email: string, password: string): Promise<AuthSession> => {

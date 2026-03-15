@@ -124,7 +124,9 @@ func NewServices(cfg *config.Config) *Services {
 	storageUseSSL := false
 	storageRegion := ""
 
-	if cfg.StorageConfig != nil {
+	if cfg.StorageConfig == nil {
+		log.Printf("WARNING: Using default storage configuration. Set STORAGE_BUCKET, STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_ACCESS_KEY, and STORAGE_SECRET_KEY environment variables for production")
+	} else {
 		if cfg.StorageConfig.Bucket != "" {
 			storageBucket = cfg.StorageConfig.Bucket
 		}

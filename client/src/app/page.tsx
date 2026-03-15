@@ -41,6 +41,7 @@ export default function DashboardPage() {
     data: studentDashboardData,
     isLoading: studentLoading,
     error: studentError,
+    refetch: refetchStudentDashboard,
   } = useStudentDashboard({
     enabled: !!user && user.role === 'student',
   });
@@ -135,7 +136,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-sm text-destructive mb-4">{studentError.message}</div>
-            <Button onClick={() => window.location.reload()} size="sm">Retry</Button>
+            <Button onClick={() => refetchStudentDashboard()} size="sm">Retry</Button>
           </CardContent>
         </Card>
       </div>

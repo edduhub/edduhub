@@ -13,10 +13,12 @@ func SecurityHeaders() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			// Content Security Policy (CSP)
 			// Helps prevent XSS attacks by controlling which resources can be loaded
+			// Note: Removed 'unsafe-inline' and 'unsafe-eval' for better security
+			// If inline scripts/styles are needed, use nonces or hashes instead
 			c.Response().Header().Set("Content-Security-Policy",
 				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
-					"style-src 'self' 'unsafe-inline'; "+
+					"script-src 'self'; "+
+					"style-src 'self'; "+
 					"img-src 'self' data: https:; "+
 					"font-src 'self' data:; "+
 					"connect-src 'self'; "+

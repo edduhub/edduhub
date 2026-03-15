@@ -64,7 +64,7 @@ func (c *collegeRepository) CreateCollege(ctx context.Context, college *models.C
 }
 
 func (c *collegeRepository) GetCollegeByID(ctx context.Context, id int) (*models.College, error) {
-	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM colleges WHERE id = $1`
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college WHERE id = $1`
 	college := &models.College{}
 	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, id)
 	if findErr != nil {
@@ -77,7 +77,7 @@ func (c *collegeRepository) GetCollegeByID(ctx context.Context, id int) (*models
 }
 
 func (c *collegeRepository) GetCollegeByName(ctx context.Context, name string) (*models.College, error) {
-	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM colleges WHERE name = $1`
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college WHERE name = $1`
 	college := &models.College{}
 	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, name)
 	if findErr != nil {
@@ -90,7 +90,7 @@ func (c *collegeRepository) GetCollegeByName(ctx context.Context, name string) (
 }
 
 func (c *collegeRepository) GetCollegeByExternalID(ctx context.Context, externalID string) (*models.College, error) {
-	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM colleges WHERE external_id = $1`
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college WHERE external_id = $1`
 	college := &models.College{}
 	findErr := pgxscan.Get(ctx, c.DB.Pool, college, sql, externalID)
 	if findErr != nil {
@@ -131,7 +131,7 @@ func (c *collegeRepository) UpdateCollege(ctx context.Context, college *models.C
 }
 
 func (c *collegeRepository) DeleteCollege(ctx context.Context, id int) error {
-	sql := `DELETE FROM colleges WHERE id = $1`
+	sql := `DELETE FROM college WHERE id = $1`
 	commandTag, err := c.DB.Pool.Exec(ctx, sql, id)
 	if err != nil {
 		return fmt.Errorf("DeleteCollege: failed to execute query: %w", err)
@@ -143,7 +143,7 @@ func (c *collegeRepository) DeleteCollege(ctx context.Context, id int) error {
 }
 
 func (c *collegeRepository) ListColleges(ctx context.Context, limit, offset uint64) ([]*models.College, error) {
-	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM colleges ORDER BY name ASC LIMIT $1 OFFSET $2`
+	sql := `SELECT id, name, address, city, state, country, created_at, updated_at FROM college ORDER BY name ASC LIMIT $1 OFFSET $2`
 	colleges := []*models.College{}
 	err := pgxscan.Select(ctx, c.DB.Pool, &colleges, sql, int32(limit), int32(offset))
 	if err != nil {
@@ -208,65 +208,64 @@ func (c *collegeRepository) GetCollegeStats(ctx context.Context, collegeID int) 
 		CreatedAt: time.Now().Format(time.RFC3339),
 	}
 
-	var err error
-
-	err = c.DB.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM students WHERE college_id = $1`, collegeID).Scan(&stats.TotalStudents)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to count students: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM students WHERE college_id = $1 AND is_active = true`, collegeID).Scan(&stats.ActiveStudents)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to count active students: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM courses WHERE college_id = $1`, collegeID).Scan(&stats.TotalCourses)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to count courses: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM departments WHERE college_id = $1`, collegeID).Scan(&stats.TotalDepartments)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to count departments: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM enrollments WHERE college_id = $1`, collegeID).Scan(&stats.TotalEnrollments)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to count enrollments: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `
-		SELECT COALESCE(AVG(percentage), 0) FROM grades WHERE college_id = $1`, collegeID).Scan(&stats.AverageGrade)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to calculate average grade: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `
-		SELECT COALESCE(AVG(percentage), 0) FROM grades g
-		JOIN enrollments e ON g.student_id = e.student_id AND g.course_id = e.course_id
-		WHERE e.college_id = $1`, collegeID).Scan(&stats.AverageGrade)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to calculate average grade: %w", err)
-	}
-
-	err = c.DB.Pool.QueryRow(ctx, `
-		SELECT COALESCE(
-			(SELECT COUNT(*) FROM users u 
+	// Combined query using CTE to get all counts in a single database round trip
+	query := `
+		WITH student_counts AS (
+			SELECT 
+				COUNT(*) as total_students,
+				COUNT(*) FILTER (WHERE is_active = true) as active_students
+			FROM students WHERE college_id = $1
+		),
+		entity_counts AS (
+			SELECT 
+				(SELECT COUNT(*) FROM courses WHERE college_id = $1) as total_courses,
+				(SELECT COUNT(*) FROM departments WHERE college_id = $1) as total_departments,
+				(SELECT COUNT(*) FROM enrollments WHERE college_id = $1) as total_enrollments
+		),
+		grade_stats AS (
+			SELECT COALESCE(AVG(percentage), 0) as average_grade
+			FROM grades WHERE college_id = $1
+		),
+		faculty_count AS (
+			SELECT COUNT(*) as total_faculties
+			FROM users u 
 			JOIN user_roles ur ON u.id = ur.user_id 
 			JOIN roles r ON ur.role_id = r.id 
-			WHERE u.college_id = $1 AND r.name = 'faculty'), 0)`, collegeID).Scan(&stats.TotalFaculties)
-	if err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to count faculties: %w", err)
-	}
+			WHERE u.college_id = $1 AND r.name = 'faculty'
+		),
+		fee_stats AS (
+			SELECT 
+				COALESCE(SUM(fa.amount), 0) as total_fee,
+				COALESCE((SELECT SUM(fp.amount) FROM fee_payments fp 
+					JOIN fee_assignments fa ON fp.fee_assignment_id = fa.id 
+					WHERE fa.college_id = $1 AND fp.payment_status = 'completed'), 0) as paid_fee
+			FROM fee_assignments fa
+			WHERE fa.college_id = $1
+		)
+		SELECT 
+			sc.total_students,
+			sc.active_students,
+			ec.total_courses,
+			ec.total_departments,
+			ec.total_enrollments,
+			gs.average_grade,
+			fc.total_faculties,
+			fs.total_fee - fs.paid_fee as pending_fees
+		FROM student_counts sc, entity_counts ec, grade_stats gs, faculty_count fc, fee_stats fs`
 
-	var totalFee, paidFee float64
-	if err := c.DB.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(fa.amount), 0) FROM fee_assignments fa WHERE fa.status != 'paid'`, collegeID).Scan(&totalFee); err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to calculate total fees: %w", err)
+	err := c.DB.Pool.QueryRow(ctx, query, collegeID).Scan(
+		&stats.TotalStudents,
+		&stats.ActiveStudents,
+		&stats.TotalCourses,
+		&stats.TotalDepartments,
+		&stats.TotalEnrollments,
+		&stats.AverageGrade,
+		&stats.TotalFaculties,
+		&stats.PendingFees,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetCollegeStats: failed to get college stats: %w", err)
 	}
-	if err := c.DB.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(fp.amount), 0) FROM fee_payments fp JOIN fee_assignments fa ON fp.fee_assignment_id = fa.id WHERE fp.payment_status = 'completed'`, collegeID).Scan(&paidFee); err != nil {
-		return nil, fmt.Errorf("GetCollegeStats: failed to calculate paid fees: %w", err)
-	}
-	stats.PendingFees = totalFee - paidFee
 
 	return stats, nil
 }

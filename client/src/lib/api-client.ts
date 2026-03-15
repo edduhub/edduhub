@@ -13,11 +13,16 @@ export function getAPIBase(): string {
 }
 
 export function getAuthToken(): string | null {
-  return null;
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('auth_token');
 }
 
 export function buildAuthHeaders(headers?: HeadersInit): Headers {
   const resolvedHeaders = new Headers(headers);
+  const token = getAuthToken();
+  if (token) {
+    resolvedHeaders.set('Authorization', `Bearer ${token}`);
+  }
   return resolvedHeaders;
 }
 
