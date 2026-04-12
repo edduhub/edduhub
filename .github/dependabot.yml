@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # Go Backend (Root)
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    groups:
+      go-updates:
+        patterns:
+          - "*"
+
+  # NPM Frontend
+  - package-ecosystem: "npm"
+    directory: "/" # Update this to "/frontend" if your package.json is in a subfolder
+    schedule:
+      interval: "daily"
+    groups:
+      npm-updates:
+        patterns:
+          - "*"
